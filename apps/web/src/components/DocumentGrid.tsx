@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, FieldDefinition, OutlineRow } from "../lib/api";
-import { BUILTIN_COLUMNS, cellValue, customColumns, GridColumn, isCellEditable } from "../lib/columns";
+import { BUILTIN_COLUMNS, cellValue, customColumns, GridColumn, isCellEditable, totalWidth } from "../lib/columns";
 import { useColumnStore } from "../stores/columns";
 import { useSelectionStore } from "../stores/selection";
 import { useToastStore } from "../stores/toasts";
@@ -91,6 +91,7 @@ export function DocumentGrid({ documentId }: GridProps) {
     [fields, isHidden, documentId],
   );
   const template = columns.map((c) => c.width).join(" ");
+  const gridWidth = totalWidth(columns);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -202,16 +203,6 @@ export function DocumentGrid({ documentId }: GridProps) {
   return (
     <div className="flex h-full flex-col bg-editorBackground">
       <div
-        className="grid gap-2 border-b border-border px-4 py-2 text-xs font-medium uppercase tracking-wide text-mutedForeground"
-        style={{ gridTemplateColumns: template }}
-      >
-        {columns.map((column) => (
-          <span key={column.key} className="truncate">
-            {column.kind === "custom" ? column.labelKey : t(column.labelKey)}
-          </span>
-        ))}
-      </div>
-      <div
         ref={scrollRef}
         className="flex-1 overflow-auto"
         onContextMenu={(event) => {
@@ -219,12 +210,22 @@ export function DocumentGrid({ documentId }: GridProps) {
           setMenu({ x: event.clientX, y: event.clientY, row: null });
         }}
       >
+        <div
+          className="sticky top-0 z-10 grid gap-2 border-b border-border bg-editorBackground px-4 py-2 text-xs font-medium uppercase tracking-wide text-mutedForeground"
+          style={{ gridTemplateColumns: template, width: gridWidth }}
+        >
+          {columns.map((column) => (
+            <span key={column.key} className="truncate">
+              {column.kind === "custom" ? column.labelKey : t(column.labelKey)}
+            </span>
+          ))}
+        </div>
         {rows.length === 0 ? (
           <div data-testid="grid-empty" className="p-6 text-sm text-mutedForeground">
             {t("emptyDocument")}
           </div>
         ) : (
-          <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+          <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: gridWidth }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const row = rows[virtualRow.index];
               if (!row) return null;
@@ -232,10 +233,10 @@ export function DocumentGrid({ documentId }: GridProps) {
                 <div
                   key={row.id}
                   data-testid={`grid-row-${row.displayNumber}`}
-                  className={`absolute left-0 grid w-full items-center gap-2 border-b border-border px-4 text-sm hover:bg-muted ${
+                  className={`absolute left-0 grid items-center gap-2 border-b border-border px-4 text-sm hover:bg-muted ${
                     selectedRowId === row.id ? "bg-selection" : ""
                   }`}
-                  style={{ top: virtualRow.start, height: virtualRow.size, gridTemplateColumns: template }}
+                  style={{ top: virtualRow.start, height: virtualRow.size, gridTemplateColumns: template, width: gridWidth }}
                   onClick={() => setSelectedRow(row.id)}
                   onContextMenu={(event) => {
                     event.preventDefault();

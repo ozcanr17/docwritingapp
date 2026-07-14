@@ -16,32 +16,11 @@ export interface GridColumn {
 export const BUILTIN_COLUMNS: GridColumn[] = [
   { key: "number", labelKey: "rowNumber", kind: "number", width: "6rem", editable: false },
   { key: "type", labelKey: "rowType", kind: "type", width: "8rem", editable: false },
-  { key: "title", labelKey: "title", kind: "title", width: "minmax(16rem, 2fr)", editable: true },
-  { key: "description", labelKey: "description", kind: "description", width: "minmax(14rem, 1.5fr)", editable: true },
-  {
-    key: "status",
-    labelKey: "status",
-    kind: "status",
-    width: "9rem",
-    editable: true,
-    appliesTo: ["requirement", "test_case"],
-  },
-  {
-    key: "action",
-    labelKey: "testStep",
-    kind: "action",
-    width: "minmax(12rem, 1.5fr)",
-    editable: true,
-    appliesTo: ["test_step"],
-  },
-  {
-    key: "expectedResult",
-    labelKey: "expectedResult",
-    kind: "expectedResult",
-    width: "minmax(12rem, 1.5fr)",
-    editable: true,
-    appliesTo: ["test_step"],
-  },
+  { key: "title", labelKey: "title", kind: "title", width: "22rem", editable: true },
+  { key: "description", labelKey: "description", kind: "description", width: "20rem", editable: true },
+  { key: "status", labelKey: "status", kind: "status", width: "9rem", editable: true, appliesTo: ["requirement", "test_case"] },
+  { key: "action", labelKey: "testStep", kind: "action", width: "18rem", editable: true, appliesTo: ["test_step"] },
+  { key: "expectedResult", labelKey: "expectedResult", kind: "expectedResult", width: "18rem", editable: true, appliesTo: ["test_step"] },
 ];
 
 export function customColumns(fields: FieldDefinition[]): GridColumn[] {
@@ -51,11 +30,16 @@ export function customColumns(fields: FieldDefinition[]): GridColumn[] {
       key: `custom:${field.fieldKey}`,
       labelKey: field.displayName,
       kind: "custom" as const,
-      width: "minmax(10rem, 1fr)",
+      width: "14rem",
       editable: true,
       fieldKey: field.fieldKey,
       field,
     }));
+}
+
+export function totalWidth(columns: GridColumn[]): string {
+  const rems = columns.reduce((sum, column) => sum + (parseFloat(column.width) || 0), 0);
+  return `${rems + 2}rem`;
 }
 
 export function cellValue(column: GridColumn, row: OutlineRow): string {
