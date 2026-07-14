@@ -50,7 +50,15 @@ Remaining work, roughly by value (pick from here for "next"):
 
 ## 5. How to run and verify locally (this machine)
 
-Dev uses **Homebrew** Postgres + Redis (no Docker needed for those); **MinIO runs via Colima/Docker** only when you touch exports.
+**Fastest path — one command launcher (tested, works):**
+```
+pnpm dev            # infra/scripts/dev-up.sh — starts infra + all 4 apps + seeds an admin, prints URLs+creds
+pnpm dev:down       # stops the app processes (STOP_INFRA=1 also stops docker infra)
+pnpm seed           # re-create the admin account only (while the app is running)
+```
+The launcher auto-detects local Postgres/Redis (uses them if reachable, else `docker compose up -d`), starts MinIO via Docker if needed, runs migrations, starts api/collab/worker/web, and seeds a login. **Admin credentials: `admin@docsys.local` / `Admin1234!`** (override with `ADMIN_EMAIL`/`ADMIN_PASSWORD` env). Windows equivalents: `infra/scripts/dev-up.ps1` / `dev-down.ps1` (Docker-based; NOT tested on Windows from here). Full per-OS guide (Turkish): `docs/CALISTIRMA.md`. Seed logic is `infra/scripts/seed-admin.mjs` (registers-or-logs-in over HTTP, then creates a demo org/workspace/document — idempotent).
+
+The manual path below still works if you want to run pieces individually. Dev uses **Homebrew** Postgres + Redis (no Docker needed for those); **MinIO runs via Colima/Docker** only when you touch exports.
 
 ```
 export LC_ALL=C                                   # MANDATORY before ANY postgres command (see pitfall 1)
@@ -121,10 +129,11 @@ apps/web            React/Vite SPA (src/{pages,components,hooks,stores,lib,local
 packages/database   Prisma schema, migrations, generated-client re-export
 packages/config     zod env schema
 infra/docker        docker-compose.dev.yml (pg/redis/minio), docker-compose.full.yml, Dockerfile.{api,collaboration,worker}
-infra/scripts       scan-forbidden-chars.sh (excludes locales/)
+infra/scripts       scan-forbidden-chars.sh; dev-up/dev-down (.sh + .ps1); seed-admin.mjs
 infra/github-ci.yml parked CI (move to .github/workflows/ci.yml after `gh auth refresh -s workflow`)
 docs/adr, docs/architecture   decisions — read before changing architecture
 docs/DURUM-RAPORU.md          Turkish status report (proper Turkish characters)
+docs/CALISTIRMA.md            Turkish per-OS run/test guide (macOS/Linux/Windows) + admin creds
 tests/e2e           Playwright (data-testid selectors, workers:1, self-starts all 4 apps)
 tests/performance   collab-load.mjs (50-client Yjs test)
 ```

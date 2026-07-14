@@ -7,6 +7,9 @@
     "node": ">=22"
   },
   "scripts": {
+    "dev": "bash infra/scripts/dev-up.sh",
+    "dev:down": "bash infra/scripts/dev-down.sh",
+    "seed": "node infra/scripts/seed-admin.mjs",
     "build": "turbo run build",
     "lint": "eslint apps packages --ext .ts,.tsx",
     "test": "turbo run test",
