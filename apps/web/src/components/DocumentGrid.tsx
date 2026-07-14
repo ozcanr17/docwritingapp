@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ApiError, OutlineRow } from "../lib/api";
+import { api, ApiError, FieldDefinition, OutlineRow } from "../lib/api";
+import { BUILTIN_COLUMNS, cellValue, customColumns, GridColumn, isCellEditable } from "../lib/columns";
+import { useColumnStore } from "../stores/columns";
 import { useSelectionStore } from "../stores/selection";
 import { useToastStore } from "../stores/toasts";
 import { ContextMenu, MenuItem } from "./ContextMenu";
@@ -17,6 +19,12 @@ interface MenuState {
   row: OutlineRow | null;
 }
 
+interface EditState {
+  rowId: string;
+  columnKey: string;
+  value: string;
+}
+
 const rowTypeLabelKeys: Record<OutlineRow["rowType"], string> = {
   heading: "typeHeading",
   requirement: "typeRequirement",
@@ -25,38 +33,77 @@ const rowTypeLabelKeys: Record<OutlineRow["rowType"], string> = {
   note: "typeNote",
 };
 
+function buildPatchPayload(column: GridColumn, row: OutlineRow, value: string): Record<string, unknown> {
+  const base = { expectedVersion: row.version };
+  switch (column.kind) {
+    case "title":
+      return { ...base, title: value };
+    case "description":
+      return { ...base, description: value };
+    case "status":
+      return row.rowType === "test_case"
+        ? { ...base, testCaseDetail: { status: value } }
+        : { ...base, requirementDetail: { status: value } };
+    case "action":
+      return { ...base, testStepDetail: { action: value } };
+    case "expectedResult":
+      return { ...base, testStepDetail: { expectedResult: value } };
+    case "custom":
+      return { ...base, customFields: { [column.fieldKey as string]: coerceCustom(column, value) } };
+    default:
+      return base;
+  }
+}
+
+function coerceCustom(column: GridColumn, value: string): unknown {
+  const type = column.field?.fieldType;
+  if (value === "") return null;
+  if (type === "integer") return parseInt(value, 10);
+  if (type === "decimal") return Number(value);
+  if (type === "boolean") return value === "true";
+  if (type === "multi_select") return value.split(",").map((v) => v.trim()).filter(Boolean);
+  return value;
+}
+
 export function DocumentGrid({ documentId }: GridProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
   const setSelectedRow = useSelectionStore((s) => s.setRow);
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);
+  const isHidden = useColumnStore((s) => s.isHidden);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [editing, setEditing] = useState<{ rowId: string; value: string } | null>(null);
+  const [editing, setEditing] = useState<EditState | null>(null);
 
   const outlineKey = ["outline", documentId];
   const { data: rows = [], isLoading } = useQuery({
     queryKey: outlineKey,
     queryFn: () => api<OutlineRow[]>(`/documents/${documentId}/outline`),
   });
+  const { data: fields = [] } = useQuery({
+    queryKey: ["fields", documentId],
+    queryFn: () => api<FieldDefinition[]>(`/documents/${documentId}/fields`),
+  });
+
+  const columns = useMemo(
+    () => [...BUILTIN_COLUMNS, ...customColumns(fields)].filter((c) => !isHidden(documentId, c.key)),
+    [fields, isHidden, documentId],
+  );
+  const template = columns.map((c) => c.width).join(" ");
 
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 36,
     overscan: 20,
-    initialRect: { width: 800, height: 600 },
+    initialRect: { width: 1000, height: 600 },
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: outlineKey });
 
   const handleMutationError = (error: unknown) => {
-    if (error instanceof ApiError && error.status === 409) {
-      pushToast("error", t("conflictError"));
-    } else {
-      pushToast("error", t("genericError"));
-    }
+    pushToast("error", error instanceof ApiError && error.status === 409 ? t("conflictError") : t("genericError"));
     void invalidate();
   };
 
@@ -71,25 +118,14 @@ export function DocumentGrid({ documentId }: GridProps) {
     onError: handleMutationError,
   });
 
-  const updateTitle = useMutation({
-    mutationFn: (input: { row: OutlineRow; title: string }) =>
+  const saveCell = useMutation({
+    mutationFn: (input: { column: GridColumn; row: OutlineRow; value: string }) =>
       api<OutlineRow>(`/rows/${input.row.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ expectedVersion: input.row.version, title: input.title }),
+        body: JSON.stringify(buildPatchPayload(input.column, input.row, input.value)),
       }),
-    onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: outlineKey });
-      const previous = queryClient.getQueryData<OutlineRow[]>(outlineKey);
-      queryClient.setQueryData<OutlineRow[]>(outlineKey, (current = []) =>
-        current.map((r) => (r.id === input.row.id ? { ...r, title: input.title } : r)),
-      );
-      return { previous };
-    },
-    onError: (error, _input, context) => {
-      if (context?.previous) queryClient.setQueryData(outlineKey, context.previous);
-      handleMutationError(error);
-    },
     onSettled: invalidate,
+    onError: handleMutationError,
   });
 
   const moveRow = useMutation({
@@ -109,34 +145,21 @@ export function DocumentGrid({ documentId }: GridProps) {
 
   const deleteRow = useMutation({
     mutationFn: (row: OutlineRow) => api(`/rows/${row.id}`, { method: "DELETE", body: JSON.stringify({}) }),
-    onMutate: async (row) => {
-      await queryClient.cancelQueries({ queryKey: outlineKey });
-      const previous = queryClient.getQueryData<OutlineRow[]>(outlineKey);
-      queryClient.setQueryData<OutlineRow[]>(outlineKey, (current = []) =>
-        current.filter((r) => r.id !== row.id && !isDescendant(current, row.id, r)),
-      );
-      return { previous };
-    },
-    onError: (error, _row, context) => {
-      if (context?.previous) queryClient.setQueryData(outlineKey, context.previous);
-      handleMutationError(error);
-    },
     onSettled: invalidate,
+    onError: handleMutationError,
   });
 
   const indent = (row: OutlineRow) => {
     const siblings = rows.filter((r) => r.parentId === row.parentId);
     const index = siblings.findIndex((r) => r.id === row.id);
     const previousSibling = index > 0 ? siblings[index - 1] : undefined;
-    if (!previousSibling) return;
-    moveRow.mutate({ row, newParentId: previousSibling.id });
+    if (previousSibling) moveRow.mutate({ row, newParentId: previousSibling.id });
   };
 
   const outdent = (row: OutlineRow) => {
     if (!row.parentId) return;
     const parent = rows.find((r) => r.id === row.parentId);
-    if (!parent) return;
-    moveRow.mutate({ row, newParentId: parent.parentId, afterRowId: parent.id });
+    if (parent) moveRow.mutate({ row, newParentId: parent.parentId, afterRowId: parent.id });
   };
 
   const menuItems = (row: OutlineRow | null): MenuItem[] => {
@@ -157,15 +180,17 @@ export function DocumentGrid({ documentId }: GridProps) {
         onSelect: () => addUnder(row.rowType === "heading" ? "requirement" : row.rowType, row.parentId, row.id),
       },
       { key: "heading", label: t("addHeading"), onSelect: () => addUnder("heading", row.parentId, row.id) },
+      { key: "testCase", label: t("addTestCase"), onSelect: () => addUnder("test_case", row.parentId, row.id) },
+      { key: "testStep", label: t("addTestStep"), onSelect: () => addUnder("test_step", row.id) },
       { key: "indent", label: t("indent"), onSelect: () => indent(row) },
       { key: "outdent", label: t("outdent"), onSelect: () => outdent(row) },
       { key: "delete", label: t("deleteAction"), danger: true, onSelect: () => deleteRow.mutate(row) },
     ];
   };
 
-  const commitEdit = (row: OutlineRow) => {
-    if (editing && editing.value !== row.title) {
-      updateTitle.mutate({ row, title: editing.value });
+  const commitEdit = (row: OutlineRow, column: GridColumn) => {
+    if (editing && editing.value !== cellValue(column, row)) {
+      saveCell.mutate({ column, row, value: editing.value });
     }
     setEditing(null);
   };
@@ -176,10 +201,15 @@ export function DocumentGrid({ documentId }: GridProps) {
 
   return (
     <div className="flex h-full flex-col bg-editorBackground">
-      <div className="grid grid-cols-[7rem_9rem_1fr] gap-2 border-b border-border px-4 py-2 text-xs font-medium uppercase tracking-wide text-mutedForeground">
-        <span>{t("rowNumber")}</span>
-        <span>{t("rowType")}</span>
-        <span>{t("title")}</span>
+      <div
+        className="grid gap-2 border-b border-border px-4 py-2 text-xs font-medium uppercase tracking-wide text-mutedForeground"
+        style={{ gridTemplateColumns: template }}
+      >
+        {columns.map((column) => (
+          <span key={column.key} className="truncate">
+            {column.kind === "custom" ? column.labelKey : t(column.labelKey)}
+          </span>
+        ))}
       </div>
       <div
         ref={scrollRef}
@@ -190,7 +220,9 @@ export function DocumentGrid({ documentId }: GridProps) {
         }}
       >
         {rows.length === 0 ? (
-          <div data-testid="grid-empty" className="p-6 text-sm text-mutedForeground">{t("emptyDocument")}</div>
+          <div data-testid="grid-empty" className="p-6 text-sm text-mutedForeground">
+            {t("emptyDocument")}
+          </div>
         ) : (
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -200,10 +232,10 @@ export function DocumentGrid({ documentId }: GridProps) {
                 <div
                   key={row.id}
                   data-testid={`grid-row-${row.displayNumber}`}
-                  className={`absolute left-0 grid w-full grid-cols-[7rem_9rem_1fr] items-center gap-2 border-b border-border px-4 text-sm hover:bg-muted ${
+                  className={`absolute left-0 grid w-full items-center gap-2 border-b border-border px-4 text-sm hover:bg-muted ${
                     selectedRowId === row.id ? "bg-selection" : ""
                   }`}
-                  style={{ top: virtualRow.start, height: virtualRow.size }}
+                  style={{ top: virtualRow.start, height: virtualRow.size, gridTemplateColumns: template }}
                   onClick={() => setSelectedRow(row.id)}
                   onContextMenu={(event) => {
                     event.preventDefault();
@@ -211,34 +243,22 @@ export function DocumentGrid({ documentId }: GridProps) {
                     setMenu({ x: event.clientX, y: event.clientY, row });
                   }}
                 >
-                  <span className="tabular-nums text-mutedForeground">{row.displayNumber}</span>
-                  <span className="text-xs text-mutedForeground">{t(rowTypeLabelKeys[row.rowType])}</span>
-                  {editing?.rowId === row.id ? (
-                    <input
-                      autoFocus
-                      className="rounded border border-border bg-surface px-2 py-1"
-                      value={editing.value}
-                      onChange={(event) => setEditing({ rowId: row.id, value: event.target.value })}
-                      onBlur={() => commitEdit(row)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") commitEdit(row);
-                        if (event.key === "Escape") setEditing(null);
-                      }}
+                  {columns.map((column) => (
+                    <GridCell
+                      key={column.key}
+                      column={column}
+                      row={row}
+                      editing={editing?.rowId === row.id && editing.columnKey === column.key ? editing : null}
+                      onStartEdit={() =>
+                        isCellEditable(column, row) &&
+                        setEditing({ rowId: row.id, columnKey: column.key, value: cellValue(column, row) })
+                      }
+                      onChange={(value) => setEditing({ rowId: row.id, columnKey: column.key, value })}
+                      onCommit={() => commitEdit(row, column)}
+                      onCancel={() => setEditing(null)}
+                      typeLabel={t(rowTypeLabelKeys[row.rowType])}
                     />
-                  ) : (
-                    <button
-                      className={`truncate text-left ${row.rowType === "heading" ? "font-semibold" : ""}`}
-                      style={{ paddingLeft: row.depth * 16 }}
-                      onDoubleClick={() => setEditing({ rowId: row.id, value: row.title })}
-                      onKeyDown={(event) => {
-                        if (event.key === "F2" || event.key === "Enter") {
-                          setEditing({ rowId: row.id, value: row.title });
-                        }
-                      }}
-                    >
-                      {row.title || "—"}
-                    </button>
-                  )}
+                  ))}
                 </div>
               );
             })}
@@ -250,13 +270,66 @@ export function DocumentGrid({ documentId }: GridProps) {
   );
 }
 
-function isDescendant(rows: OutlineRow[], ancestorId: string, candidate: OutlineRow): boolean {
-  let current = candidate;
-  while (current.parentId) {
-    if (current.parentId === ancestorId) return true;
-    const parent = rows.find((r) => r.id === current.parentId);
-    if (!parent) return false;
-    current = parent;
+function GridCell({
+  column,
+  row,
+  editing,
+  onStartEdit,
+  onChange,
+  onCommit,
+  onCancel,
+  typeLabel,
+}: {
+  column: GridColumn;
+  row: OutlineRow;
+  editing: EditState | null;
+  onStartEdit: () => void;
+  onChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  typeLabel: string;
+}) {
+  if (column.kind === "number") {
+    return <span className="tabular-nums text-mutedForeground">{row.displayNumber}</span>;
   }
-  return false;
+  if (column.kind === "type") {
+    return <span className="text-xs text-mutedForeground">{typeLabel}</span>;
+  }
+
+  const editable = isCellEditable(column, row);
+  const display = cellValue(column, row);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        data-testid={`cell-input-${column.key}`}
+        className="w-full rounded border border-border bg-surface px-2 py-1"
+        value={editing.value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onCommit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onCommit();
+          if (e.key === "Escape") onCancel();
+        }}
+      />
+    );
+  }
+
+  const placeholder = column.kind === "title" ? "—" : " ";
+  return (
+    <button
+      data-testid={`cell-value-${column.key}`}
+      className={`block w-full truncate text-left ${
+        column.kind === "title" && row.rowType === "heading" ? "font-semibold" : ""
+      } ${editable ? "" : "cursor-default text-mutedForeground"}`}
+      style={column.kind === "title" ? { paddingLeft: row.depth * 16 } : undefined}
+      onDoubleClick={onStartEdit}
+      onKeyDown={(e) => {
+        if ((e.key === "F2" || e.key === "Enter") && editable) onStartEdit();
+      }}
+    >
+      {display || placeholder}
+    </button>
+  );
 }

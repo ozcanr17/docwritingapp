@@ -73,5 +73,22 @@
   "exportReady": "Export ready",
   "addLink": "Add link",
   "targetRowId": "Target row id",
-  "add": "Add"
+  "add": "Add",
+  "menuFile": "File",
+  "menuEdit": "Edit",
+  "menuView": "View",
+  "menuInsert": "Insert",
+  "menuColumns": "Columns",
+  "menuHelp": "Help",
+  "addColumn": "Add column...",
+  "addTestStep": "Add test step",
+  "columnName": "Column name",
+  "columnType": "Type: text, integer, decimal, boolean, date, single_select, multi_select, url",
+  "columnOptions": "Options (comma separated)",
+  "about": "About",
+  "aboutText": "Requirements, test, and document management system",
+  "testStep": "Test step",
+  "expectedResult": "Expected result",
+  "langTurkish": "Türkçe",
+  "langEnglish": "English"
 }

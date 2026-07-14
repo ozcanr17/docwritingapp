@@ -73,5 +73,22 @@
   "exportReady": "Dışa aktarım hazır",
   "addLink": "Bağlantı ekle",
   "targetRowId": "Hedef satır kimliği",
-  "add": "Ekle"
+  "add": "Ekle",
+  "menuFile": "Dosya",
+  "menuEdit": "Düzen",
+  "menuView": "Görünüm",
+  "menuInsert": "Ekle",
+  "menuColumns": "Sütunlar",
+  "menuHelp": "Yardım",
+  "addColumn": "Sütun ekle...",
+  "addTestStep": "Test adımı ekle",
+  "columnName": "Sütun adı",
+  "columnType": "Tür: text, integer, decimal, boolean, date, single_select, multi_select, url",
+  "columnOptions": "Seçenekler (virgülle ayırın)",
+  "about": "Hakkında",
+  "aboutText": "Gereksinim, test ve doküman yönetim sistemi",
+  "testStep": "Test adımı",
+  "expectedResult": "Beklenen sonuç",
+  "langTurkish": "Türkçe",
+  "langEnglish": "English"
 }

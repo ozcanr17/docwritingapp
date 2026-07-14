@@ -31,13 +31,13 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
   await page.getByTestId("menu-child").click();
   await expect(page.getByTestId("grid-row-1.1")).toBeVisible();
 
-  const childTitle = page.getByTestId("grid-row-1.1").getByRole("button");
+  const childTitle = page.getByTestId("grid-row-1.1").getByTestId("cell-value-title");
   await childTitle.click();
   await expect(page.getByTestId("row-detail-primary")).toBeVisible();
   await expect(page.getByTestId("detail-description")).toBeVisible();
 
   await childTitle.press("Enter");
-  await page.getByTestId("grid-row-1.1").getByRole("textbox").fill("System requirement");
+  await page.getByTestId("cell-input-title").fill("System requirement");
   await page.keyboard.press("Enter");
   await expect(page.getByText("System requirement")).toBeVisible();
 
@@ -47,8 +47,10 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
   await expect(page.getByTestId("trash-panel")).toBeVisible();
   await page.getByTestId("nav-documents").click();
 
-  await page.getByTestId("language-toggle").click();
+  await page.getByTestId("menu-view").click();
+  await page.getByTestId("menuitem-lang-en").click();
   await expect(page.getByRole("button", { name: "Documents" })).toBeVisible();
-  await page.getByTestId("language-toggle").click();
+  await page.getByTestId("menu-view").click();
+  await page.getByTestId("menuitem-lang-tr").click();
   await expect(page.getByRole("button", { name: "Documents" })).toBeHidden();
 });

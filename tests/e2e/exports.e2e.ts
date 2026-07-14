@@ -29,8 +29,7 @@ test("import CSV, verify hierarchy, then export and download", async ({ page }) 
     "0,heading,Scope,",
   ].join("\n");
 
-  await page.getByTestId("import-csv").click();
-  await page.getByTestId("import-csv").locator("xpath=following-sibling::input[@type='file']").setInputFiles({
+  await page.getByTestId("menubar-file-input").setInputFiles({
     name: "spec.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(csv, "utf8"),
@@ -40,6 +39,7 @@ test("import CSV, verify hierarchy, then export and download", async ({ page }) 
   await expect(page.getByText("User can log in")).toBeVisible();
   await expect(page.getByTestId("grid-row-2")).toBeVisible();
 
-  await page.getByTestId("export-csv").click();
+  await page.getByTestId("menu-file").click();
+  await page.getByTestId("menuitem-export-csv").click();
   await expect(page.getByTestId("toast-success")).toBeVisible({ timeout: 45000 });
 });

@@ -51,6 +51,7 @@ jobs:
       - run: pnpm --filter @docsys/database build
       - run: pnpm --filter @docsys/config build
       - run: pnpm -r --filter "./apps/*" typecheck
+      - run: pnpm lint
       - run: bash infra/scripts/scan-forbidden-chars.sh
       - run: pnpm --filter @docsys/api test
       - run: pnpm --filter @docsys/worker test

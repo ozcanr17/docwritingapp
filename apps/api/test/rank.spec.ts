@@ -29,7 +29,7 @@ describe("rankBetween", () => {
   });
 
   it("never generates ranks ending with the minimal digit", () => {
-    let low: string | null = null;
+    const low: string | null = null;
     let high: string | null = initialRank();
     for (let i = 0; i < 100; i += 1) {
       const mid: string = rankBetween(low, high);

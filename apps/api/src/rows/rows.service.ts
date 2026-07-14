@@ -141,10 +141,31 @@ export class RowsService {
         depth: true,
         rowType: true,
         title: true,
+        description: true,
+        customFields: true,
         version: true,
+        requirementDetail: { select: { status: true, priority: true } },
+        testCaseDetail: { select: { status: true, priority: true, tags: true } },
+        testStepDetail: { select: { action: true, expectedResult: true } },
       },
     });
-    return this.numberRows(rows);
+    const flattened = rows.map((row) => ({
+      id: row.id,
+      parentId: row.parentId,
+      rank: row.rank,
+      depth: row.depth,
+      rowType: row.rowType,
+      title: row.title,
+      description: row.description,
+      customFields: row.customFields as Record<string, unknown>,
+      version: row.version,
+      status: row.requirementDetail?.status ?? row.testCaseDetail?.status ?? null,
+      priority: row.requirementDetail?.priority ?? row.testCaseDetail?.priority ?? null,
+      tags: row.testCaseDetail?.tags ?? [],
+      action: row.testStepDetail?.action ?? null,
+      expectedResult: row.testStepDetail?.expectedResult ?? null,
+    }));
+    return this.numberRows(flattened);
   }
 
   async getRow(actorId: string, rowId: string) {
@@ -574,16 +595,14 @@ export class RowsService {
     return tx.customFieldDefinition.findMany({ where: { documentId, deletedAt: null } });
   }
 
-  private numberRows(
-    rows: Array<{ id: string; parentId: string | null; rank: string; depth: number; rowType: string; title: string; version: number }>,
-  ) {
-    const childrenByParent = new Map<string | null, typeof rows>();
+  private numberRows<T extends { id: string; parentId: string | null; rank: string }>(rows: T[]) {
+    const childrenByParent = new Map<string | null, T[]>();
     for (const row of rows) {
       const list = childrenByParent.get(row.parentId) ?? [];
       list.push(row);
       childrenByParent.set(row.parentId, list);
     }
-    const result: Array<(typeof rows)[number] & { displayNumber: string }> = [];
+    const result: Array<T & { displayNumber: string }> = [];
     const visit = (parentId: string | null, prefix: string) => {
       const children = (childrenByParent.get(parentId) ?? []).sort((a, b) => (a.rank < b.rank ? -1 : 1));
       children.forEach((child, index) => {

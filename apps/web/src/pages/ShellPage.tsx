@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Languages, LogOut, Moon, Settings, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { FileText, LogOut, Settings, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DocumentGrid } from "../components/DocumentGrid";
-import { ExportBar } from "../components/ExportBar";
+import { MenuBar } from "../components/MenuBar";
 import { ResizeHandle } from "../components/ResizeHandle";
 import { RichTextEditor } from "../components/RichTextEditor";
 import { RowDetailPanel } from "../components/RowDetailPanel";
@@ -12,10 +12,8 @@ import { TrashPanel } from "../components/TrashPanel";
 import { TreePanel } from "../components/TreePanel";
 import { useDocumentEvents } from "../hooks/useDocumentEvents";
 import { api } from "../lib/api";
-import { setLanguage, storedLanguage } from "../lib/i18n";
 import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
-import { ThemeMode, useThemeStore } from "../stores/theme";
 
 interface Organization {
   id: string;
@@ -42,8 +40,6 @@ export function ShellPage() {
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);
   const linkedRowId = useSelectionStore((s) => s.linkedRowId);
-  const themeMode = useThemeStore((s) => s.mode);
-  const setThemeMode = useThemeStore((s) => s.setMode);
   const treeWidth = useLayoutStore((s) => s.treeWidth);
   const detailWidth = useLayoutStore((s) => s.detailWidth);
   const setTreeWidth = useLayoutStore((s) => s.setTreeWidth);
@@ -109,16 +105,12 @@ export function ShellPage() {
     return <BootstrapForm onSubmit={(orgName, workspaceName) => bootstrap.mutate({ orgName, workspaceName })} />;
   }
 
-  const themeOrder: ThemeMode[] = ["light", "dark", "system"];
-  const nextTheme = themeOrder[(themeOrder.indexOf(themeMode) + 1) % themeOrder.length] as ThemeMode;
-  const themeIcon = themeMode === "light" ? <Sun size={16} /> : themeMode === "dark" ? <Moon size={16} /> : <SunMoon size={16} />;
-  const themeLabel = themeMode === "light" ? t("themeLight") : themeMode === "dark" ? t("themeDark") : t("themeSystem");
-
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen flex-col">
+      <MenuBar documentId={selectedDocumentId} isTextDocument={isTextDocument} view={view} setView={setView} />
+      <div className="flex flex-1 overflow-hidden">
       <aside className="flex w-60 flex-col bg-sidebarBackground text-sidebarForeground">
-        <div className="border-b border-white/10 px-4 py-3 font-semibold">{t("appName")}</div>
-        <div className="px-4 py-2 text-xs uppercase tracking-wide opacity-60">
+        <div className="px-4 py-3 text-xs uppercase tracking-wide opacity-60">
           {workspaces.data?.[0]?.name ?? "—"}
         </div>
         <nav className="flex-1 px-2 text-sm">
@@ -141,21 +133,7 @@ export function ShellPage() {
         <div className="border-t border-white/10 p-3 text-sm">
           <div className="mb-2 truncate opacity-80">{profile.data.displayName}</div>
           <button
-            className="mb-1 flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-white/10"
-            onClick={() => setThemeMode(nextTheme)}
-          >
-            {themeIcon}
-            {themeLabel}
-          </button>
-          <button
-            data-testid="language-toggle"
-            className="mb-1 flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-white/10"
-            onClick={() => setLanguage(storedLanguage() === "tr" ? "en" : "tr")}
-          >
-            <Languages size={15} />
-            {t("language")}: {storedLanguage().toUpperCase()}
-          </button>
-          <button
+            data-testid="logout"
             className="flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-white/10"
             onClick={async () => {
               await api("/auth/logout", { method: "POST" });
@@ -183,12 +161,7 @@ export function ShellPage() {
       <ResizeHandle side="left" ariaLabel="tree" onResize={(dx) => setTreeWidth(treeWidth + dx)} />
       <main className="flex flex-1 flex-col overflow-hidden">
         <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-2 text-sm">
-          <span className="flex items-center gap-3">
-            <span className="text-mutedForeground">{view === "trash" ? t("trash") : t("documents")}</span>
-            {selectedDocumentId && view === "documents" && !isTextDocument && (
-              <ExportBar documentId={selectedDocumentId} />
-            )}
-          </span>
+          <span className="text-mutedForeground">{view === "trash" ? t("trash") : t("documents")}</span>
           {selectedDocumentId && view === "documents" && (
             <span className="flex items-center gap-2 text-mutedForeground">
               <Users size={14} />
@@ -233,6 +206,7 @@ export function ShellPage() {
           </aside>
         </>
       )}
+      </div>
     </div>
   );
 }

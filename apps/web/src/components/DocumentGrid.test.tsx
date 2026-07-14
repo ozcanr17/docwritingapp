@@ -12,15 +12,31 @@ vi.mock("@tanstack/react-virtual", () => ({
 import { OutlineRow } from "../lib/api";
 import { DocumentGrid } from "./DocumentGrid";
 
+function makeRow(partial: Partial<OutlineRow> & Pick<OutlineRow, "id" | "parentId" | "depth" | "rowType" | "title" | "displayNumber">): OutlineRow {
+  return {
+    rank: "i",
+    version: 1,
+    description: null,
+    customFields: {},
+    status: null,
+    priority: null,
+    tags: [],
+    action: null,
+    expectedResult: null,
+    ...partial,
+  };
+}
+
 const rows: OutlineRow[] = [
-  { id: "r1", parentId: null, rank: "i", depth: 0, rowType: "heading", title: "Giris", version: 1, displayNumber: "1" },
-  { id: "r2", parentId: "r1", rank: "i", depth: 1, rowType: "requirement", title: "Gereksinim A", version: 1, displayNumber: "1.1" },
-  { id: "r3", parentId: "r1", rank: "r", depth: 1, rowType: "requirement", title: "Gereksinim B", version: 1, displayNumber: "1.2" },
+  makeRow({ id: "r1", parentId: null, depth: 0, rowType: "heading", title: "Giris", displayNumber: "1" }),
+  makeRow({ id: "r2", parentId: "r1", depth: 1, rowType: "requirement", title: "Gereksinim A", displayNumber: "1.1" }),
+  makeRow({ id: "r3", parentId: "r1", rank: "r", depth: 1, rowType: "requirement", title: "Gereksinim B", displayNumber: "1.2" }),
 ];
 
 function renderGrid(seed: OutlineRow[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["outline", "doc-1"], seed);
+  client.setQueryData(["fields", "doc-1"], []);
   return render(
     <QueryClientProvider client={client}>
       <div style={{ height: 600 }}>

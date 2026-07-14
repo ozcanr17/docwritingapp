@@ -24,15 +24,47 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return payload as T;
 }
 
+export type RowType = "heading" | "requirement" | "test_case" | "test_step" | "note";
+
 export interface OutlineRow {
   id: string;
   parentId: string | null;
   rank: string;
   depth: number;
-  rowType: "heading" | "requirement" | "test_case" | "test_step" | "note";
+  rowType: RowType;
   title: string;
+  description: string | null;
+  customFields: Record<string, unknown>;
+  status: string | null;
+  priority: string | null;
+  tags: string[];
+  action: string | null;
+  expectedResult: string | null;
   version: number;
   displayNumber: string;
+}
+
+export type CustomFieldType =
+  | "text"
+  | "long_text"
+  | "integer"
+  | "decimal"
+  | "boolean"
+  | "date"
+  | "datetime"
+  | "single_select"
+  | "multi_select"
+  | "user"
+  | "project"
+  | "url";
+
+export interface FieldDefinition {
+  id: string;
+  fieldKey: string;
+  displayName: string;
+  fieldType: CustomFieldType;
+  allowedValues: string[];
+  displayOrder: number;
 }
 
 export interface RequirementLink {
