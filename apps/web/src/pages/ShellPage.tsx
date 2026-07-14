@@ -4,10 +4,15 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DocumentGrid } from "../components/DocumentGrid";
+import { ResizeHandle } from "../components/ResizeHandle";
+import { RowDetailPanel } from "../components/RowDetailPanel";
+import { TrashPanel } from "../components/TrashPanel";
 import { TreePanel } from "../components/TreePanel";
 import { useDocumentEvents } from "../hooks/useDocumentEvents";
 import { api } from "../lib/api";
 import { setLanguage, storedLanguage } from "../lib/i18n";
+import { useLayoutStore } from "../stores/layout";
+import { useSelectionStore } from "../stores/selection";
 import { ThemeMode, useThemeStore } from "../stores/theme";
 
 interface Organization {
@@ -30,9 +35,17 @@ export function ShellPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [view, setView] = useState<"documents" | "trash">("documents");
+  const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
+  const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
+  const selectedRowId = useSelectionStore((s) => s.selectedRowId);
+  const linkedRowId = useSelectionStore((s) => s.linkedRowId);
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
+  const treeWidth = useLayoutStore((s) => s.treeWidth);
+  const detailWidth = useLayoutStore((s) => s.detailWidth);
+  const setTreeWidth = useLayoutStore((s) => s.setTreeWidth);
+  const setDetailWidth = useLayoutStore((s) => s.setDetailWidth);
 
   const profile = useQuery({
     queryKey: ["me"],
@@ -100,8 +113,20 @@ export function ShellPage() {
           {workspaces.data?.[0]?.name ?? "—"}
         </div>
         <nav className="flex-1 px-2 text-sm">
-          <SidebarItem icon={<FileText size={15} />} label={t("documents")} active />
-          <SidebarItem icon={<Trash2 size={15} />} label={t("trash")} />
+          <SidebarItem
+            icon={<FileText size={15} />}
+            label={t("documents")}
+            active={view === "documents"}
+            onClick={() => setView("documents")}
+            testId="nav-documents"
+          />
+          <SidebarItem
+            icon={<Trash2 size={15} />}
+            label={t("trash")}
+            active={view === "trash"}
+            onClick={() => setView("trash")}
+            testId="nav-trash"
+          />
           <SidebarItem icon={<Settings size={15} />} label={t("settings")} />
         </nav>
         <div className="border-t border-white/10 p-3 text-sm">
@@ -134,19 +159,23 @@ export function ShellPage() {
           </button>
         </div>
       </aside>
-      <section className="w-72 border-r border-border bg-surface">
-        {workspaceId && (
-          <TreePanel
-            workspaceId={workspaceId}
-            selectedDocumentId={selectedDocumentId}
-            onSelectDocument={setSelectedDocumentId}
-          />
-        )}
+      <section className="shrink-0 border-r border-border bg-surface" style={{ width: treeWidth }}>
+        {workspaceId &&
+          (view === "trash" ? (
+            <TrashPanel workspaceId={workspaceId} />
+          ) : (
+            <TreePanel
+              workspaceId={workspaceId}
+              selectedDocumentId={selectedDocumentId}
+              onSelectDocument={setSelectedDocumentId}
+            />
+          ))}
       </section>
-      <main className="flex flex-1 flex-col">
+      <ResizeHandle side="left" ariaLabel="tree" onResize={(dx) => setTreeWidth(treeWidth + dx)} />
+      <main className="flex flex-1 flex-col overflow-hidden">
         <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-2 text-sm">
-          <span className="text-mutedForeground">{t("documents")}</span>
-          {selectedDocumentId && (
+          <span className="text-mutedForeground">{view === "trash" ? t("trash") : t("documents")}</span>
+          {selectedDocumentId && view === "documents" && (
             <span className="flex items-center gap-2 text-mutedForeground">
               <Users size={14} />
               <span data-testid="presence-count">
@@ -166,19 +195,47 @@ export function ShellPage() {
             </span>
           )}
         </header>
-        {selectedDocumentId ? (
+        {view === "documents" && selectedDocumentId ? (
           <DocumentGrid documentId={selectedDocumentId} />
-        ) : (
+        ) : view === "documents" ? (
           <div className="p-8 text-sm text-mutedForeground">{t("selectDocument")}</div>
+        ) : (
+          <div className="p-8 text-sm text-mutedForeground">{t("trash")}</div>
         )}
       </main>
+      {view === "documents" && selectedDocumentId && (selectedRowId || linkedRowId) && (
+        <>
+          <ResizeHandle side="right" ariaLabel="detail" onResize={(dx) => setDetailWidth(detailWidth + dx)} />
+          <aside className="flex shrink-0 flex-col border-l border-border" style={{ width: detailWidth }}>
+            {linkedRowId ? (
+              <RowDetailPanel rowId={linkedRowId} documentId={selectedDocumentId} variant="linked" />
+            ) : selectedRowId ? (
+              <RowDetailPanel rowId={selectedRowId} documentId={selectedDocumentId} variant="primary" />
+            ) : null}
+          </aside>
+        </>
+      )}
     </div>
   );
 }
 
-function SidebarItem({ icon, label, active }: { icon: React.ReactNode; label: string; active?: boolean }) {
+function SidebarItem({
+  icon,
+  label,
+  active,
+  onClick,
+  testId,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
+  testId?: string;
+}) {
   return (
     <button
+      data-testid={testId}
+      onClick={onClick}
       className={`mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-white/10 ${
         active ? "bg-white/10" : ""
       }`}

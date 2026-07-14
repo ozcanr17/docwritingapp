@@ -12,10 +12,10 @@ The full product specification lives in the original prompt and is summarized ac
 
 - Phase 1 — Architecture + database: **DONE and approved.**
 - Phase 2 — Backend, authorization, realtime: **DONE (this session), awaiting approval.**
-- Phase 3 — Frontend core: **CORE DELIVERED** (apps/web: shell, themes, TR+EN i18n with locale JSON files and a sidebar language switcher, tree, virtualized grid, optimistic UI + 409 handling, presence, component tests, Playwright e2e passing). Remaining inside Phase 3 scope: Tiptap+Yjs rich text, dnd-kit drag-drop, resizable persisted panels, split-screen linked viewer, trash UI, fuller a11y. Approval pending.
+- Phase 3 — Frontend core: **SUBSTANTIALLY DELIVERED** (apps/web: shell, themes, TR+EN i18n with locale JSON files and a sidebar language switcher, lazy tree, virtualized grid, optimistic UI + 409 handling, presence; PLUS row detail/properties panel, split-screen linked-requirement viewer with back nav, trash/restore view, resizable+persisted tree & detail panels; component tests + Playwright e2e passing). Remaining inside Phase 3 scope: Tiptap+Yjs rich-text editor, dnd-kit drag-drop reordering, ESLint config, deeper a11y/keyboard-tree navigation. Approval pending before Phase 4.
 - Phase 4 — Traceability, DOCX/CSV/XLSX import-export, attachments: NOT STARTED.
 
-The old prototype (a DIFFERENT app named ReqTrack, Python FastAPI + Next.js) is at `workspace/reqtrack` (NOT `workspace/docsys`) — read-only reference, never modify it, and never reuse its `reqtrack` database. This repo (currently the working dir is named `reqtrack-v2` on disk but the app is DocSys) is the from-scratch rewrite and uses the `docsys` / `docsys_test` databases.
+The old prototype (a DIFFERENT app named ReqTrack, Python FastAPI + Next.js) is at `workspace/reqtrack` — read-only reference, never modify it, and never reuse its `reqtrack` database. This DocSys repo lives at `workspace/docsys` (the working dir was renamed from `reqtrack-v2` to `docsys` and git/pnpm survived the move cleanly) and uses the `docsys` / `docsys_test` databases.
 
 ## 2. What has been completed
 

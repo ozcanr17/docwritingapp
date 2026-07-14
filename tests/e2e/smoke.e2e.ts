@@ -32,12 +32,20 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
   await expect(page.getByTestId("grid-row-1.1")).toBeVisible();
 
   const childTitle = page.getByTestId("grid-row-1.1").getByRole("button");
-  await childTitle.dblclick();
-  await page.keyboard.type("System requirement");
+  await childTitle.click();
+  await expect(page.getByTestId("row-detail-primary")).toBeVisible();
+  await expect(page.getByTestId("detail-description")).toBeVisible();
+
+  await childTitle.press("Enter");
+  await page.getByTestId("grid-row-1.1").getByRole("textbox").fill("System requirement");
   await page.keyboard.press("Enter");
   await expect(page.getByText("System requirement")).toBeVisible();
 
   await expect(page.getByTestId("presence-count")).toContainText(": 1");
+
+  await page.getByTestId("nav-trash").click();
+  await expect(page.getByTestId("trash-panel")).toBeVisible();
+  await page.getByTestId("nav-documents").click();
 
   await page.getByTestId("language-toggle").click();
   await expect(page.getByRole("button", { name: "Documents" })).toBeVisible();

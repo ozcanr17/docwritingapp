@@ -34,6 +34,30 @@ export interface OutlineRow {
   displayNumber: string;
 }
 
+export interface RequirementLink {
+  id: string;
+  sourceRowId: string;
+  targetRowId: string;
+  linkType: "verifies" | "relates_to" | "derives_from" | "duplicates";
+}
+
+export interface RowDetail {
+  id: string;
+  documentId: string;
+  parentId: string | null;
+  rowType: OutlineRow["rowType"];
+  title: string;
+  description: string | null;
+  version: number;
+  customFields: Record<string, unknown>;
+  requirementDetail: { status: string; priority: string | null; rationale: string | null } | null;
+  testCaseDetail: { status: string; priority: string | null; assigneeId: string | null; tags: string[] } | null;
+  testStepDetail: { action: string | null; expectedResult: string | null } | null;
+  outgoingLinks: RequirementLink[];
+  incomingLinks: RequirementLink[];
+  rowProjects: { id: string; projectId: string }[];
+}
+
 export interface DocumentSummary {
   id: string;
   title: string;

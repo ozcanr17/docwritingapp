@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, OutlineRow } from "../lib/api";
+import { useSelectionStore } from "../stores/selection";
 import { useToastStore } from "../stores/toasts";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 
@@ -28,6 +29,8 @@ export function DocumentGrid({ documentId }: GridProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
+  const setSelectedRow = useSelectionStore((s) => s.setRow);
+  const selectedRowId = useSelectionStore((s) => s.selectedRowId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [editing, setEditing] = useState<{ rowId: string; value: string } | null>(null);
@@ -197,8 +200,11 @@ export function DocumentGrid({ documentId }: GridProps) {
                 <div
                   key={row.id}
                   data-testid={`grid-row-${row.displayNumber}`}
-                  className="absolute left-0 grid w-full grid-cols-[7rem_9rem_1fr] items-center gap-2 border-b border-border px-4 text-sm hover:bg-muted"
+                  className={`absolute left-0 grid w-full grid-cols-[7rem_9rem_1fr] items-center gap-2 border-b border-border px-4 text-sm hover:bg-muted ${
+                    selectedRowId === row.id ? "bg-selection" : ""
+                  }`}
                   style={{ top: virtualRow.start, height: virtualRow.size }}
+                  onClick={() => setSelectedRow(row.id)}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
