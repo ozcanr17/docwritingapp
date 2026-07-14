@@ -1,118 +1,136 @@
-# HANDOFF — DocSys v2 (repo: docwritingapp)
+# HANDOFF — DocSys (repo: docwritingapp)
 
-Written for a fresh session with zero context. Read this top to bottom before touching anything.
+Written for a brand-new session with zero prior context. Read this top to bottom before touching anything.
 
 ## 1. What this project is
 
-The app is named **DocSys** (in-code identifier `docsys`, package scope `@docsys/*`). It is an enterprise-grade, browser-based Requirements / Test / Document Management System inspired by IBM DOORS, built for Rıdvan (ridvanozcan7@gmail.com, GitHub `ozcanr17`). The UI ships in **both Turkish (default) and English** via i18next; Turkish is the primary product language. **All source-level identifiers must be ASCII English — Turkish characters (ö ç ş ı ğ ü and uppercase forms) are forbidden in code, filenames, DB names, routes, everything.** The ONLY place Turkish characters are allowed is user-facing translation strings, which live in `apps/web/src/locales/{tr,en}.json` (proper Turkish characters used there). A scanner enforces the rule and excludes the `locales/` dir: `bash infra/scripts/scan-forbidden-chars.sh`.
+**DocSys** (in-code id `docsys`, package scope `@docsys/*`) is an enterprise-grade, browser-based Requirements / Test / Document Management System modeled on IBM DOORS, built for Rıdvan (ridvanozcan7@gmail.com, GitHub `ozcanr17`). It manages a folder/document tree of hierarchical rows (headings, requirements, test cases, test steps, notes) with configurable columns, real-time collaboration, traceability links, exports/imports, baselines, and coverage analysis.
 
-The full product specification lives in the original prompt and is summarized across `docs/architecture/*.md` and `docs/adr/*.md`. Architecture: TypeScript modular monolith, pnpm + Turborepo monorepo, NestJS 11 + Fastify API, Prisma 6 + PostgreSQL 16, Redis (ephemeral only), Yjs + Hocuspocus collaboration, BullMQ worker, React/Vite frontend (not built yet), MinIO/S3 for binaries, Docker Compose deployment.
+- **Repo location on disk:** `~/Desktop/workspace/docsys` (renamed once from `reqtrack-v2`; git + pnpm survived the move).
+- **GitHub:** `ozcanr17/docwritingapp`, private, branch `main`. Everything described below is committed and pushed unless stated otherwise.
+- **A DIFFERENT, unrelated old prototype** named ReqTrack (Python FastAPI + Next.js) lives at `~/Desktop/workspace/reqtrack`. Never touch it and never reuse its `reqtrack` database. DocSys uses databases `docsys` (dev) and `docsys_test` (tests).
 
-**Development is strictly phased. Do not start a phase without Rıdvan's explicit approval.**
+### Two absolute, non-negotiable rules
+1. **ASCII-only source.** No Turkish characters (ö ç ş ı ğ ü and uppercase İ Ğ Ü Ş Ç Ö) anywhere in code, filenames, identifiers, DB names, routes, or string literals in `.ts/.tsx`. The ONLY allowed place for Turkish characters is the UI translation files `apps/web/src/locales/{tr,en}.json` and prose docs. Enforced by `bash infra/scripts/scan-forbidden-chars.sh` (excludes `locales/`). Run it before every commit. If you need UI text, add a key to both locale files and use `t("key")` — never hardcode a visible string.
+2. **No code comments.** Rıdvan's standing rule — code must be self-explanatory; explanation goes in `docs/`.
 
-- Phase 1 — Architecture + database: **DONE and approved.**
-- Phase 2 — Backend, authorization, realtime: **DONE (this session), awaiting approval.**
-- Phase 3 — Frontend core: **DELIVERED** (apps/web: top **menu bar** (File/Edit/View/Insert/Columns/Help) hosting export/import, row inserts, theme, language, add-column, and per-document column visibility; shell, themes, TR+EN i18n via locale JSON, lazy tree, **column-driven virtualized grid** with dynamic custom columns + built-in test columns (Status, Test Step/action, Expected Result) all inline-editable, optimistic UI + 409 handling, presence, row detail panel, split-screen linked viewer, trash/restore, resizable+persisted panels, Tiptap+Yjs rich-text editor, **ESLint** flat config wired into `pnpm lint` + CI). Remaining Phase 3 niceties: dnd-kit drag-drop reordering, deeper keyboard-tree a11y.
-- Phase 4 — Links, imports, exports: **DELIVERED**. Background export jobs (CSV + DOCX) via a BullMQ `docsys-exports` queue: API `POST /documents/:id/exports` enqueues, worker generates the file and stores it in MinIO, `GET /exports/:id` reports status/progress, `GET /exports/:id/download` returns a presigned URL. CSV import `POST /documents/:id/imports` rebuilds hierarchy from a `level,type,title,description` CSV. Traceability link creation in the row detail panel. Object storage via `minio` client in both api (presign/read) and worker (upload); bucket auto-created. Worker has a liveness HTTP endpoint (port 3003). Remaining Phase 4 nice-to-haves: XLSX, DOCX template management (docxtemplater), attachment upload UI, PDF.
+## 2. Architecture (all delivered)
 
-- DOORS-parity features (post-phase, delivered): **Suspect links** — editing a linked row auto-flags its links suspect (bidirectional) with reason/timestamp in the same tx + audit; `POST /links/:id/acknowledge`, `GET /documents/:id/suspect-links`; detail panel shows a suspect badge + Acknowledge. **Baselines** — `POST/GET /documents/:id/baselines` snapshots all rows into a DocumentRevision (row snapshot in `summary` JSONB); `GET /documents/:id/baselines/:n/diff` returns added/removed/modified vs current; Analysis menu → Baselines dialog with Create + Diff. **Coverage report** — `GET /documents/:id/coverage` returns requirement coverage from verifying links (+ suspect count); Analysis menu → Coverage dialog. Remaining DOORS gaps intentionally NOT built: DXL scripting (inappropriate/oversized), full column/row-level ACL, change-proposal approval workflow, ReqIF import/export, rich-text tables/images/OLE. dnd-kit drag reorder still open.
+TypeScript modular monolith in a pnpm + Turborepo monorepo.
 
-The old prototype (a DIFFERENT app named ReqTrack, Python FastAPI + Next.js) is at `workspace/reqtrack` — read-only reference, never modify it, and never reuse its `reqtrack` database. This DocSys repo lives at `workspace/docsys` (the working dir was renamed from `reqtrack-v2` to `docsys` and git/pnpm survived the move cleanly) and uses the `docsys` / `docsys_test` databases.
+- `apps/api` — NestJS 11 + Fastify. Modules: `auth` (register/login/me, JWT in `docsys_session` HTTP-only cookie, bcryptjs, plus `GET /auth/collab-token` issuing a short-lived JWT the browser CAN read for the collab server), `access` (RBAC — 7 system roles seeded on boot by `AccessService.onModuleInit`; org/workspace/project scopes), `tenancy`, `tree` (folders/documents, moves with cycle prevention, soft delete/restore, trash), `rows` (CRUD, subtree move under `pg_advisory_xact_lock`, LexoRank ordering, derived display numbers via `/documents/:id/outline`, requirement links + **suspect links**, row-projects, custom field definitions + JSONB validation, **coverage** + **traceability** endpoints), `events` (Redis pub-sub → WS gateway `/ws/events`, presence in Redis TTL keys), `audit` (append-only, same-transaction), `exports` (BullMQ enqueue + presigned download + CSV import), `baselines` (freeze + diff), `storage` (MinIO client), `health`. Swagger at `/api/docs`.
+- `apps/collaboration` — Hocuspocus server (port 3002). `onAuthenticate` verifies the JWT + document.read permission; snapshots persist to `collaboration_snapshots`. Logs auth rejections. Also serves HTTP 200 on `/` (Playwright health-checks it).
+- `apps/worker` — BullMQ. Scheduled lifecycle jobs (30-day purge: batch, legal-hold-aware, idempotent, child-first hard deletes + snapshot compaction keep-last-5) AND the `docsys-exports` queue consumer (generates CSV/DOCX from the outline, uploads to MinIO, updates job progress). Liveness HTTP endpoint on port 3003.
+- `apps/web` — React 18 + Vite + TS strict. Top **menu bar** (Dosya/Düzen/Görünüm/Ekle/Sütunlar/Analiz/Yardım = File/Edit/View/Insert/Columns/Analysis/Help). Column-driven virtualized grid (TanStack Virtual) with built-in test columns (Status, Test Step/action, Expected Result) + user-added typed custom columns, all inline-editable; lazy folder/document tree; row detail panel with link creation + suspect badges; split-screen linked-requirement viewer; trash/restore; resizable+persisted panels; light/dark/system themes via CSS-var design tokens; TR(default)+EN i18n; Tiptap+Yjs rich-text editor for `general_document` docs; Analysis dialog (baselines + coverage + traceability matrix).
+- `packages/database` — Prisma 6 schema + migrations + a re-export of the generated client (`export * from "@prisma/client"`). **Must be built** (`pnpm --filter @docsys/database build`) before apps typecheck.
+- `packages/config` — zod env schema.
+- PostgreSQL 16 (sole source of truth), Redis (ephemeral only — pub-sub, presence, queues, cache, idempotency; ADR 0005 forbids it as a store of record), MinIO/S3 for binaries.
 
-## 2. What has been completed
+## 3. What has been completed (Phases 1–4 + DOORS parity)
 
-### Phase 1 (docs + schema)
-- `docs/architecture/phase1-analysis.md` — bounded contexts, risks, assumptions.
-- `docs/adr/0001–0011` — all major decisions with alternatives (read 0007 hierarchy and 0008 audit/soft-delete before touching rows).
-- `docs/architecture/{hierarchy,concurrency,soft-delete-audit,diagrams,database-design}.md`.
-- `packages/database/prisma/schema.prisma` — 31 tables, validated; 2 migrations applied (`init`, `hierarchy_prefix_indexes` with `text_pattern_ops` indexes written by hand).
-- `infra/docker/docker-compose.dev.yml` (postgres/redis/minio) — **verified healthy via Colima on this machine**.
+- **Phase 1** — architecture, 11 ADRs (`docs/adr/0001–0011`), analysis docs, Prisma schema (~31 tables). Read `docs/adr/0007` (hierarchy) and `0008` (audit/soft-delete) before changing rows.
+- **Phase 2** — full backend + realtime, all tests green; 50-client Yjs load test passes (`tests/performance/collab-load.mjs`).
+- **Phase 3** — full frontend (menu bar, themes, i18n, tree, column-driven grid with custom columns + test fields, optimistic UI + 409 handling, presence, detail panel, split viewer, trash, resizable panels, Tiptap+Yjs editor, ESLint flat config wired into `pnpm lint` + CI).
+- **Phase 4** — background CSV/DOCX exports via BullMQ + MinIO with progress + presigned download; CSV import rebuilding hierarchy; traceability link creation; object storage.
+- **DOORS-parity features:** **Suspect links** (editing a linked row auto-flags its links suspect bidirectionally with reason/timestamp, in-tx + audit; `POST /links/:id/acknowledge`, `GET /documents/:id/suspect-links`; badge + Acknowledge in the detail panel). **Baselines** (`POST/GET /documents/:id/baselines` snapshots rows into a `DocumentRevision.summary` JSONB; `GET .../baselines/:n/diff` returns added/removed/modified). **Coverage report** (`GET /documents/:id/coverage`). **Traceability matrix** (`GET /documents/:id/traceability`). All three reports are in the Analysis menu → a modal dialog.
 
-### Phase 2 (backend, all tests green)
-- `apps/api` — NestJS + Fastify. Modules: auth (register/login/me, JWT in `docsys_session` HTTP-only cookie, bcryptjs), access (RBAC: system roles seeded idempotently on boot by `AccessService.onModuleInit`), tenancy (orgs/workspaces/projects/members), tree (folders/documents, move with cycle prevention, soft delete/restore, trash), rows (CRUD, subtree move under `pg_advisory_xact_lock`, LexoRank sibling ordering, derived display numbers via `/documents/:id/outline`, requirement links, row-projects, custom field definitions + JSONB value validation), events (Redis pub-sub → WS gateway at `/ws/events` with presence in Redis TTL keys), audit (same-transaction append-only events), health (`/health/live`, `/health/ready`), Swagger at `/api/docs`.
-- `apps/collaboration` — Hocuspocus server (port 3002), JWT auth + document.read permission check on join, snapshot persistence to `collaboration_snapshots`.
-- `apps/worker` — BullMQ scheduled jobs: 30-day purge (batch, legal-hold aware, idempotent, child-first hard deletes, purge audit events) + snapshot compaction (keep last 5).
-- Tests: `apps/api/test/*.spec.ts` — 24 passing (auth, tenant isolation, RBAC, 409 optimistic conflicts, cycle rejection, subtree move path updates, idempotency replay, soft delete/restore, link lifecycle, custom field validation, audit, concurrent move, WS auth + event delivery). `apps/worker/test/purge.spec.ts` — 5 passing. `tests/performance/collab-load.mjs` — **50-client Yjs load test PASSED** (sync 76 ms, convergence 105 ms, snapshot persisted).
-- `infra/docker/Dockerfile.{api,collaboration,worker}` + `docker-compose.full.yml` (written, **images never built** — do that or fix findings when asked).
-- CI workflow (install → prisma validate → typecheck → char scan → api + worker tests) — currently parked at `infra/github-ci.yml`; see the note at the bottom of this file for how to activate it.
+**Migrations (3):** `init`, `hierarchy_prefix_indexes` (adds `text_pattern_ops` indexes by hand-written SQL), `suspect_links` (adds `suspect`/`suspectSince`/`suspectReason` to requirement_links + indexes).
 
-## 3. How to run everything locally (this machine)
+**Test status (all green as of session end):** api **32**, worker **9**, web **4**, Playwright e2e **5** (`smoke`, `editor`, `exports`, `columns`, `traceability`). Lint clean, char scan clean.
 
-No Docker needed for dev; Homebrew services are used:
+## 4. Where we are / what is NOT done (nothing is blocking)
+
+There is no open bug or half-finished feature. The last session ended cleanly with everything committed and pushed (latest commit `7a140e0`, traceability matrix). During that session the Bash command-approval classifier had a ~15-minute outage where only trivial commands ran — it self-resolved; if you hit `"claude-opus-4-8 is temporarily unavailable"` on Bash, just wait and retry, it is transient infra, not your command.
+
+Remaining work, roughly by value (pick from here for "next"):
+- **DOORS features not yet built:** ReqIF import/export (XML interop — high value), change-proposal approval workflow (propose→approve before edit), column/row-level ACL (finer than the current org/workspace/project RBAC), a full requirement×test matrix export, rich-text tables/images (Tiptap extensions). **DXL scripting was deliberately NOT built** and should stay out — adding an arbitrary scripting language is a security/scope hazard.
+- **Phase 4 nice-to-haves:** XLSX import/export, DOCX template management (docxtemplater — spec's original intent; current DOCX is generated from scratch with the `docx` lib), attachment upload UI (schema + storage exist), PDF export.
+- **Phase 3 leftovers:** dnd-kit drag-drop row reordering (currently reorder is via Indent/Outdent + context menu / move API), deeper keyboard-tree a11y.
+- **Ops/infra:** Docker images (`infra/docker/Dockerfile.*` + `docker-compose.full.yml`) are written but **never built** — build/verify them when asked. CI is parked at `infra/github-ci.yml` because the local `gh` token lacks the `workflow` scope; after `gh auth refresh -h github.com -s workflow`, move it to `.github/workflows/ci.yml`. OpenAPI schemas are shallow (zod is the source of truth). CSRF token pattern not implemented (cookie is SameSite=strict). `collaboration_updates` table is unused (Hocuspocus stores debounced full snapshots, 2s window; ADR 0006).
+
+## 5. How to run and verify locally (this machine)
+
+Dev uses **Homebrew** Postgres + Redis (no Docker needed for those); **MinIO runs via Colima/Docker** only when you touch exports.
+
 ```
-export LC_ALL=C                      # MANDATORY before any postgres command, see pitfalls
+export LC_ALL=C                                   # MANDATORY before ANY postgres command (see pitfall 1)
 brew services start postgresql@16 redis
-cd <repo root>
+cd ~/Desktop/workspace/docsys
 pnpm install
 pnpm --filter @docsys/database generate && pnpm --filter @docsys/database build
-pnpm --filter @docsys/api test     # needs DB docsys_test (exists)
-pnpm --filter @docsys/worker test
 ```
-Dev DB: `postgresql://docsys:docsys@localhost:5432/docsys` (URL also in `packages/database/.env`, gitignored). Test DB: same host, `docsys_test`. Docker via **Colima** (`colima start`), compose plugin symlinked to `~/.docker/cli-plugins/docker-compose`.
 
-Load test: start collab server with test-DB env (`DATABASE_URL=...docsys_test JWT_SECRET=test-secret-at-least-16-chars npx tsx apps/collaboration/src/main.ts`), then `DATABASE_URL=...docsys_test node tests/performance/collab-load.mjs`.
+Per-area checks:
+```
+cd apps/api && npx tsc -p tsconfig.json --noEmit && npx vitest run     # needs DB docsys_test (exists)
+cd apps/worker && npx vitest run
+cd apps/web && npx tsc -p tsconfig.json --noEmit && npx vitest run
+npx eslint apps packages                                                # from repo root; pnpm lint also works
+bash infra/scripts/scan-forbidden-chars.sh
+```
 
-## 4. Where we are right now / what is unfinished
+**e2e (Playwright)** — self-starts api, collaboration, worker, and web via `webServer` (serialized, `workers:1`). Needs MinIO up for the exports test:
+```
+docker compose -f infra/docker/docker-compose.dev.yml up -d minio      # port 9000/9001, no clash with Homebrew
+cd tests/e2e && npx playwright test
+```
+Dev DB URL `postgresql://docsys:docsys@localhost:5432/docsys` (also in `packages/database/.env`, gitignored). Test DB `docsys_test`. Role `docsys`/`docsys` with CREATEDB. To run a live stack manually for screenshots: build api (`cd apps/api && npx tsc`), then start `node apps/api/dist/main.js`, `npx tsx apps/collaboration/src/main.ts`, `npx tsx apps/worker/src/main.ts`, `npx vite --port 5173` — each with the env vars the playwright config uses (DATABASE_URL, REDIS_URL, JWT_SECRET=dev-secret-at-least-16-chars, S3_* for the worker).
 
-- Phase 2 was reported; user said to proceed to Phase 3. Phase 3 core is delivered and reported; Phase 3 completion items above remain.
-- ESLint is configured nowhere yet (deliberately deferred to save budget; disclose it). Add flat-config typescript-eslint at root in Phase 3.
-- Docker images (`Dockerfile.*`) and `docker-compose.full.yml` are unbuilt/untested.
-- OpenAPI docs are shallow (no per-DTO schemas — zod is the source of truth; consider zod-to-openapi later).
-- Known small gaps (disclosed limitations, not bugs): CSRF token pattern not implemented (cookie is SameSite=strict; add CSRF before cookie-auth cross-site scenarios), Yjs incremental update log (`collaboration_updates` table) unused — Hocuspocus Database extension stores debounced full snapshots instead (2 s debounce window documented in ADR 0006 / concurrency doc), presence `presence.left` event publishes empty organizationId, MemberRole NULL-scope partial unique indexes still pending (service-level upsert guards it), rate limits/helmet are on but CSP is disabled pending frontend.
-- Session usage was near limits; work may resume in a compacted-context session — this file is the source of truth.
+50-client load test: start the collab server against `docsys_test`, then `DATABASE_URL=...docsys_test node tests/performance/collab-load.mjs`.
 
-## 5. Next plan (after Phase 2 approval)
+## 6. Pitfalls we actually hit (do not rediscover these)
 
-Phase 3 frontend core, per spec: Vite + React + TS strict in `apps/web`; TanStack Query/Table/Virtual; Zustand; Tailwind + shadcn/Radix; design tokens for light/dark/system themes (see spec section 5.3 token list); app shell (sidebar + tree + editor + properties panels, resizable, sizes persisted per user); virtualized hierarchical grid with context menu, drag-drop (dnd-kit), keyboard a11y; Tiptap + Yjs rich text against the collaboration server; optimistic mutations wired to the 409/version protocol and `/ws/events` invalidation; i18next with Turkish as default locale; Vitest + RTL + Playwright. Keep identifiers English.
+1. **Turkish system locale crashes Homebrew PostgreSQL** — every `psql`/`createdb`/`brew services start postgresql@16` must run with `LC_ALL=C` or the postmaster dies ("became multithreaded during startup").
+2. **Prisma `$queryRaw` binds JS numbers as bigint** — `substring(col from $1)` fails ("function pg_catalog.substring(text, bigint) does not exist"). Cast every numeric param: `${n}::int`. Used in the subtree-move raw SQL in rows + tree services.
+3. **`@prisma/client` auto-loads `packages/database/.env` at import time** (ESM hoists the import above your `process.env.DATABASE_URL = ...`). Standalone scripts silently hit the DEV db. Always pass `DATABASE_URL` in the process environment, never set it inside the script.
+4. **Bodyless POST + `Content-Type: application/json` → Fastify 400** ("body cannot be empty"). The web `api()` helper now only sets the header/body when a body is present. Any new bodyless POST (acknowledge, restore, logout) relies on this — do not re-add an unconditional Content-Type.
+5. **Grid rows have one `<button>` per cell** — Playwright `getByRole("button")` inside a row is ambiguous. Target cells by `data-testid="cell-value-<key>"` / `cell-input-<key>`. Inline edit via **click-then-Enter** (double-click races the row-selection click and drops the edit).
+6. **Detail panel served stale data** — it uses `staleTime: 0, refetchOnMount: "always"` so suspect/link state is current when you reopen a row. Keep that.
+7. **NestJS WS gateway auth race** — `handleConnection` is async and does NOT block incoming messages; a `join` right after `open` saw no auth. Fix: store the auth promise synchronously in `handleConnection`, await it in handlers (`resolveState`).
+8. **Hocuspocus provider + React StrictMode** — a `useMemo`-created provider is destroyed on the simulated unmount and never reconnects. Create it in a `useEffect` and mount the editor only once it exists (see `RichTextEditor.tsx`).
+9. **Vitest + NestJS decorators** — esbuild strips decorator metadata → DI breaks. Use `unplugin-swc` in `vitest.config.ts`; do NOT set `module: { type: "commonjs" }` there (Vitest can't be require()d).
+10. **ESM/CJS split** — Nest apps are CommonJS; `packages/database` and `packages/config` must NOT have `"type": "module"`. Apps set `"declaration": false` to avoid TS2742 "type cannot be named" on Prisma return types.
+11. **Swagger + Fastify needs `@fastify/static`** or `SwaggerModule.setup` calls `process.exit(1)` (shows up as a weird vitest crash).
+12. **BullMQ vs ioredis type clash** — pass `{ host, port, maxRetriesPerRequest: null }` as `connection`, not an ioredis instance.
+13. **LexoRank trailing-zero invariant** — `rankBetween` (apps/api/src/common/rank.ts) never emits ranks ending in `0`; seeds must use `initialRank()` (returns "i"), never hand-write ranks ending in 0 (breaks midpoint generation). Tested in `rank.spec.ts`.
+14. **Worker/purge tests truncate the shared test DB** (including seeded roles); the load test self-seeds its role, API tests reseed on boot. Order-sensitive if you add cross-suite state.
+15. **i18n reads localStorage at module load** — `storedLanguage()` guards `typeof window.localStorage?.getItem !== "function"` or component tests crash in jsdom.
+16. **e2e must not assert on visible UI text** (bilingual) — select by `data-testid`. For `window.prompt` chains (add-column asks name then type), register ONE `page.on("dialog")` handler that shifts an answers array; multiple `page.once("dialog")` all fire on the first dialog and double-accept → crash.
+17. **Ports** — Homebrew Postgres/Redis on 5432/6379 clash with the full Compose stack; api 3001, collab 3002, worker health 3003, web 5173, MinIO 9000/9001.
+18. **A blanket `sed` rename** (the ReqTrack→DocSys migration) also rewrites legitimate mentions of the OLD prototype path/db; those were hand-fixed in this file. If you ever mass-rename again, re-check references to `workspace/reqtrack`.
 
-## 6. Pitfalls we actually hit (and their fixes)
+## 7. Hard rules — do not violate
 
-1. **Turkish locale breaks Homebrew PostgreSQL**: every `psql`/`createdb`/`brew services start postgresql@16` must run with `LC_ALL=C` or the postmaster crashes / commands misbehave.
-2. **Prisma raw SQL binds JS numbers as bigint**: `substring(col from $1)` fails with `function pg_catalog.substring(text, bigint) does not exist`. Cast every numeric param: `${n}::int`. Applied in the two subtree-move `$executeRaw` statements (rows + folders services).
-3. **`@prisma/client` auto-loads `packages/database/.env` at import time** (ESM imports hoist above your `process.env.DATABASE_URL = ...` line). Standalone scripts silently hit the DEV database. Always pass `DATABASE_URL` in the process environment, never set it inside the script.
-4. **NestJS WS gateway auth race**: `handleConnection` is async and does NOT block incoming messages; a `join` sent immediately after `open` saw no auth state. Fix in `events.gateway.ts`: store the auth promise synchronously in `handleConnection`, `await` it in handlers (`resolveState`).
-5. **Vitest + NestJS decorators**: esbuild strips decorator metadata → DI breaks. Must use `unplugin-swc` in `vitest.config.ts` — and do NOT set `module: { type: "commonjs" }` there (Vitest cannot be require()d; leave swc emitting ESM).
-6. **ESM/CJS split in the monorepo**: Nest apps are CommonJS; `packages/database` and `packages/config` must NOT have `"type": "module"` (removed). `@docsys/database` re-exports `* from "@prisma/client"` and must be **built** (`pnpm --filter @docsys/database build`) before app typechecks.
-7. **TS2742 "type cannot be named"** on controllers returning Prisma types: caused by declaration emit in apps. Apps set `"declaration": false`. Don't re-enable.
-8. **Swagger + Fastify needs `@fastify/static`** or `SwaggerModule.setup` calls `process.exit(1)` (surfaces as a bizarre vitest crash).
-9. **BullMQ vs root ioredis type clash** (two ioredis versions + `exactOptionalPropertyTypes`): pass `{ host, port, maxRetriesPerRequest: null }` object as `connection`, not an ioredis instance.
-10. **LexoRank trailing-zero invariant**: `rankBetween` (apps/api/src/common/rank.ts) never emits ranks ending in `0`; seeds must use `initialRank()` (returns "i"), never hand-write "a0"-style ranks that end in 0 — a next-rank ending in `0` breaks midpoint generation. Tested in `rank.spec.ts`.
-11. **Worker tests truncate the shared test DB** (including seeded roles); anything run after them must reseed (the load test now self-seeds its role). API tests reseed roles automatically on app boot.
-12. **Ports 5432/6379 clash** between Homebrew services and the Compose dev stack — stop one before starting the other.
-13. **i18n init reads localStorage at module load**: `storedLanguage()` must guard `typeof window.localStorage?.getItem !== "function"` or component tests importing i18n crash in some jsdom timing. UI text lives ONLY in `locales/*.json`; never hardcode a Turkish (or English) string in a `.tsx` — add a key and use `t("key")`.
-14. **e2e must not assert on UI text**: since the app is bilingual and defaults can change, Playwright selectors use `data-testid` (e.g. `menu-heading`, `grid-row-1.1`, `auth-submit`, `language-toggle`), not visible labels. Keep adding testids when you add interactive elements.
-15. **The rename (ReqTrack→DocSys) was done by a repo-wide sed** on `reqtrack_v2_test`→`docsys_test`, `reqtrack_v2`→`docsys`, `@reqtrack/`→`@docsys/`, `ReqTrack`→`DocSys`, `reqtrack`→`docsys`. Watch out: a blanket sed also rewrites legitimate mentions of the OLD ReqTrack prototype path — those were manually reverted in this file. If you ever re-run such a sed, re-check HANDOFF's prototype references.
+- **No Turkish characters in source; no code comments.** (See section 1.) Run the char scan before committing.
+- **Never claim a command/test passed without running it.** If you couldn't run it, say "not executed".
+- **PostgreSQL is authoritative; Redis is ephemeral only** (ADR 0005).
+- **No last-write-wins:** rich text = Yjs CRDT; structured fields = `version` + HTTP 409 returning current state; structural moves = per-document advisory lock + cycle check. Don't "simplify" these away.
+- **Soft delete only in user paths;** hard deletes happen exclusively in the worker purge job (legal-hold-aware, batched, audit-writing). Business FKs are `onDelete: Restrict` on purpose — never switch to Cascade.
+- **Audit in the same transaction as the mutation** — every mutating service call does `AuditService.record(tx, …)` inside its `$transaction`.
+- **Never trust client-sent org/workspace/project/row IDs** — resolve the entity server-side and call `AccessService.assertPermission` with the entity's own tenant IDs.
+- **Every collaboration-room join is authorized by the backend** (`onAuthenticate`).
+- **Do not touch `workspace/reqtrack`** or its `reqtrack` DB. Secrets never in git (`.env` gitignored; only `.env.example` committed).
 
-## 7. Things we must absolutely NOT do again / hard rules
-
-- **Never generate the whole app in one pass; never start the next phase without explicit user approval.** End each phase with: decisions, files, commands, tests, limitations, approval request — then stop.
-- **No Turkish characters in any identifier/file/route/DB name.** Run `pnpm scan:chars` before claiming a phase complete. (The scanner builds its own regex from `\x` escapes so it doesn't self-match — keep it that way.)
-- **No code comments** — Rıdvan's standing rule. Code must be self-explanatory; docs go in `docs/`.
-- **Never claim a command/test succeeded without running it**; label anything unexecuted as "not executed".
-- **Redis must never hold the only copy of business data** (ADR 0005). PostgreSQL is authoritative; presence/queues/cache only.
-- **No last-write-wins anywhere**: rich text = Yjs; structured fields = `version` + HTTP 409 with current state; structural moves = per-document advisory lock + cycle check. Don't "simplify" these away.
-- **Soft delete only** in user paths; hard deletes happen exclusively in the worker purge job (legal-hold aware, batch, audit-writing). `onDelete: Restrict` on business FKs is intentional — do not switch to Cascade.
-- **Audit events are written in the same transaction as the mutation.** Any new mutation endpoint must call `AuditService.record(tx, ...)` inside its `$transaction`.
-- **Never trust client-sent org/workspace/project IDs** — resolve the entity server-side and call `AccessService.assertPermission` with the entity's own tenant IDs.
-- **Don't touch `workspace/reqtrack`** (the old ReqTrack prototype) and don't reuse its DB (`reqtrack`); this DocSys repo uses `docsys` / `docsys_test`.
-- Don't put secrets in git — `.env` files are gitignored; only `.env.example` is committed.
-
-## 8. Repo map (quick)
+## 8. Repo map
 
 ```
-apps/api            NestJS API (src/{auth,access,tenancy,tree,rows,events,audit,health,prisma,common})
-apps/collaboration  Hocuspocus server
-apps/worker         BullMQ purge/compaction
+apps/api            NestJS API (src/{auth,access,tenancy,tree,rows,events,audit,exports,baselines,storage,health,prisma,common})
+apps/collaboration  Hocuspocus server (Yjs)
+apps/worker         BullMQ purge/compaction + export processor (+ liveness :3003)
 apps/web            React/Vite SPA (src/{pages,components,hooks,stores,lib,locales,test})
-packages/database   Prisma schema, migrations, generated client re-export
-packages/config     zod env schema (canonical full-stack env validation)
-infra/docker        compose files + Dockerfiles
-infra/scripts       scan-forbidden-chars.sh (excludes locales/ so TR strings pass)
-docs/adr, docs/architecture   all decisions — read before changing architecture
-docs/DURUM-RAPORU.md   Turkish status report (proper Turkish characters)
-tests/e2e           Playwright smoke (uses data-testid selectors, language-agnostic)
+packages/database   Prisma schema, migrations, generated-client re-export
+packages/config     zod env schema
+infra/docker        docker-compose.dev.yml (pg/redis/minio), docker-compose.full.yml, Dockerfile.{api,collaboration,worker}
+infra/scripts       scan-forbidden-chars.sh (excludes locales/)
+infra/github-ci.yml parked CI (move to .github/workflows/ci.yml after `gh auth refresh -s workflow`)
+docs/adr, docs/architecture   decisions — read before changing architecture
+docs/DURUM-RAPORU.md          Turkish status report (proper Turkish characters)
+tests/e2e           Playwright (data-testid selectors, workers:1, self-starts all 4 apps)
 tests/performance   collab-load.mjs (50-client Yjs test)
-infra/github-ci.yml parked CI workflow (see note below)
 ```
 
-> Note: CI workflow is parked at infra/github-ci.yml because the local gh token lacks the workflow scope. After running `gh auth refresh -h github.com -s workflow`, move it back to .github/workflows/ci.yml and push.
+## 9. Suggested next steps
+
+1. Pick a remaining DOORS feature — **ReqIF export** is the highest interop value and fits the existing export pipeline; **attachment upload UI** unlocks an already-modeled capability; **change-proposal workflow** is the next big DOORS differentiator.
+2. Or harden ops: build and smoke-test the Docker images, activate CI.
+Whatever you pick, keep the ASCII-only + no-comments rules, add `data-testid`s for any new interactive UI, extend the relevant test suite + an e2e, run the four checks in section 5, then commit with a Conventional-Commit message and push to `main`.
