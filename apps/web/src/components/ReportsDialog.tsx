@@ -7,8 +7,14 @@ import { useToastStore } from "../stores/toasts";
 
 interface ReportsDialogProps {
   documentId: string;
-  tab: "baselines" | "coverage";
+  tab: "baselines" | "coverage" | "matrix";
   onClose: () => void;
+}
+
+interface MatrixRow {
+  id: string;
+  title: string;
+  links: { linkId: string; suspect: boolean; linkType: string; sourceId: string; sourceTitle: string; sourceType: string }[];
 }
 
 interface Baseline {
@@ -66,6 +72,12 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
     enabled: diffRevision !== null,
   });
 
+  const matrix = useQuery({
+    queryKey: ["matrix", documentId],
+    queryFn: () => api<MatrixRow[]>(`/documents/${documentId}/traceability`),
+    enabled: tab === "matrix",
+  });
+
   const createBaseline = useMutation({
     mutationFn: (label: string) => api(`/documents/${documentId}/baselines`, { method: "POST", body: JSON.stringify({ label }) }),
     onSuccess: () => {
@@ -83,7 +95,9 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">{tab === "baselines" ? t("baselines") : t("coverageReport")}</h2>
+          <h2 className="text-sm font-semibold">
+            {tab === "baselines" ? t("baselines") : tab === "coverage" ? t("coverageReport") : t("traceabilityMatrix")}
+          </h2>
           <button aria-label={t("close")} onClick={onClose} className="rounded p-1 hover:bg-muted">
             <X size={16} />
           </button>
@@ -154,6 +168,48 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+        )}
+
+        {tab === "matrix" && matrix.data && (
+          <div data-testid="matrix-table" className="text-sm">
+            {matrix.data.length === 0 ? (
+              <div className="text-mutedForeground">{t("noRequirements")}</div>
+            ) : (
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs uppercase text-mutedForeground">
+                    <th className="py-2 pr-3">{t("requirement")}</th>
+                    <th className="py-2">{t("linkedItems")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrix.data.map((r) => (
+                    <tr key={r.id} className="border-b border-border align-top">
+                      <td className="py-2 pr-3 font-medium">{r.title || "—"}</td>
+                      <td className="py-2">
+                        {r.links.length === 0 ? (
+                          <span className="text-destructive">—</span>
+                        ) : (
+                          <ul className="space-y-1">
+                            {r.links.map((link) => (
+                              <li key={link.linkId} className="flex items-center gap-1.5">
+                                <span className="truncate">{link.sourceTitle || link.sourceId.slice(0, 8)}</span>
+                                {link.suspect && (
+                                  <span className="rounded bg-warning/20 px-1 text-[10px] uppercase text-warning">
+                                    {t("suspect")}
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         )}

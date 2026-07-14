@@ -573,6 +573,43 @@ export class RowsService {
     };
   }
 
+  async traceabilityMatrix(actorId: string, documentId: string) {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "row.read", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+    });
+    const requirements = await this.prisma.documentRow.findMany({
+      where: { documentId, deletedAt: null, rowType: "requirement" },
+      orderBy: [{ depth: "asc" }, { rank: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        incomingLinks: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            suspect: true,
+            linkType: true,
+            sourceRow: { select: { id: true, title: true, rowType: true } },
+          },
+        },
+      },
+    });
+    return requirements.map((requirement) => ({
+      id: requirement.id,
+      title: requirement.title,
+      links: requirement.incomingLinks.map((link) => ({
+        linkId: link.id,
+        suspect: link.suspect,
+        linkType: link.linkType,
+        sourceId: link.sourceRow.id,
+        sourceTitle: link.sourceRow.title,
+        sourceType: link.sourceRow.rowType,
+      })),
+    }));
+  }
+
   async assignProject(actorId: string, rowId: string, projectId: string) {
     const row = await this.requireRow(rowId);
     const document = await this.requireDocument(row.documentId);

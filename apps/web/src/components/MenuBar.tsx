@@ -15,7 +15,7 @@ interface MenuBarProps {
   isTextDocument: boolean;
   view: "documents" | "trash";
   setView: (view: "documents" | "trash") => void;
-  onOpenReport: (tab: "baselines" | "coverage") => void;
+  onOpenReport: (tab: "baselines" | "coverage" | "matrix") => void;
 }
 
 function slugifyKey(name: string): string {
@@ -204,6 +204,7 @@ export function MenuBar({ documentId, isTextDocument, view, setView, onOpenRepor
   const analysisEntries: MenuEntry[] = [
     { key: "baselines", label: t("baselines"), onSelect: () => onOpenReport("baselines") },
     { key: "coverage", label: t("coverageReport"), onSelect: () => onOpenReport("coverage") },
+    { key: "matrix", label: t("traceabilityMatrix"), onSelect: () => onOpenReport("matrix") },
   ];
 
   const helpEntries: MenuEntry[] = [

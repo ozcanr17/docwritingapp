@@ -37,7 +37,7 @@ export function ShellPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"documents" | "trash">("documents");
-  const [report, setReport] = useState<"baselines" | "coverage" | null>(null);
+  const [report, setReport] = useState<"baselines" | "coverage" | "matrix" | null>(null);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);

@@ -121,5 +121,16 @@ describe("baselines and coverage", () => {
     expect(body.totalRequirements).toBe(2);
     expect(body.covered).toBe(1);
     expect(body.uncovered).toBe(1);
+
+    const matrix = await app.inject({
+      method: "GET",
+      url: `/documents/${doc}/traceability`,
+      headers: { cookie: actor.cookie },
+    });
+    const rows = JSON.parse(matrix.body) as Array<{ id: string; links: { sourceId: string }[] }>;
+    expect(rows).toHaveLength(2);
+    const coveredRow = rows.find((r) => r.id === req1.id);
+    expect(coveredRow?.links).toHaveLength(1);
+    expect(coveredRow?.links[0]?.sourceId).toBe(test.id);
   });
 });

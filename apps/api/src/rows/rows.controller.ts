@@ -208,6 +208,11 @@ export class RowsController {
     return this.rows.coverage(user.userId, documentId);
   }
 
+  @Get("documents/:documentId/traceability")
+  traceability(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.rows.traceabilityMatrix(user.userId, documentId);
+  }
+
   @Post("rows/:rowId/projects/:projectId")
   assignProject(
     @CurrentUser() user: SessionUser,
