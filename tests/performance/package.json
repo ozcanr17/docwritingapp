@@ -1,0 +1,15 @@
+{
+  "name": "@reqtrack/performance-tests",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "collab-load": "node collab-load.mjs"
+  },
+  "dependencies": {
+    "@hocuspocus/provider": "^2.15.2",
+    "@reqtrack/database": "workspace:*",
+    "jsonwebtoken": "^9.0.2",
+    "ws": "^8.18.0",
+    "yjs": "^13.6.20"
+  }
+}

@@ -1,0 +1,17 @@
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /app
+
+FROM base AS build
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/api ./apps/api
+RUN pnpm install --frozen-lockfile --filter @reqtrack/api... --filter @reqtrack/database...
+RUN pnpm --filter @reqtrack/database generate && pnpm --filter @reqtrack/database build && pnpm --filter @reqtrack/api build
+
+FROM base AS runtime
+ENV NODE_ENV=production
+COPY --from=build /app /app
+USER node
+EXPOSE 3001
+CMD ["node", "apps/api/dist/main.js"]

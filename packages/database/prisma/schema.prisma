@@ -1,0 +1,751 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentType {
+  requirement
+  test
+  general_document
+}
+
+enum RowType {
+  heading
+  requirement
+  test_case
+  test_step
+  note
+}
+
+enum CustomFieldType {
+  text
+  long_text
+  integer
+  decimal
+  boolean
+  date
+  datetime
+  single_select
+  multi_select
+  user
+  project
+  url
+}
+
+enum RequirementLinkType {
+  verifies
+  relates_to
+  derives_from
+  duplicates
+}
+
+enum ExportJobType {
+  docx
+  csv
+  xlsx
+  json_backup
+  pdf
+}
+
+enum ExportJobStatus {
+  pending
+  running
+  completed
+  failed
+  canceled
+}
+
+enum NotificationType {
+  mention
+  assignment
+  review_requested
+  review_completed
+  requirement_changed
+  linked_test_impacted
+  export_completed
+  restore_completed
+}
+
+enum LegalHoldScope {
+  organization
+  workspace
+  project
+  document
+}
+
+enum RoleScopeType {
+  system
+  organization
+  workspace
+  project
+}
+
+enum ThemePreference {
+  light
+  dark
+  system
+}
+
+model User {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String          @unique
+  displayName     String
+  passwordHash    String?
+  oidcSubject     String?         @unique
+  locale          String          @default("tr")
+  themePreference ThemePreference @default(system)
+  uiPreferences   Json            @default("{}")
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime?       @db.Timestamptz(6)
+
+  organizationMemberships OrganizationMember[]
+  workspaceMemberships    WorkspaceMember[]
+  projectMemberships      ProjectMember[]
+  memberRoles             MemberRole[]
+  notifications           Notification[]
+  exportJobs              ExportJob[]
+  assignedTestCases       TestCaseDetail[]     @relation("TestCaseAssignee")
+
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model Organization {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  slug      String    @unique
+  settings  Json      @default("{}")
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  members           OrganizationMember[]
+  workspaces        Workspace[]
+  roles             Role[]
+  memberRoles       MemberRole[]
+  projects          Project[]
+  folders           Folder[]
+  documents         Document[]
+  documentTemplates DocumentTemplate[]
+  documentRows      DocumentRow[]
+  requirementLinks  RequirementLink[]
+  rowProjects       RowProject[]
+  customFieldDefs   CustomFieldDefinition[]
+  attachments       Attachment[]
+  exportTemplates   ExportTemplate[]
+  exportJobs        ExportJob[]
+  auditEvents       AuditEvent[]
+  documentRevisions DocumentRevision[]
+  collabSnapshots   CollaborationSnapshot[]
+  collabUpdates     CollaborationUpdate[]
+  notifications     Notification[]
+  legalHolds        LegalHold[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  userId         String    @db.Uuid
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model Workspace {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  name           String
+  slug           String
+  settings       Json      @default("{}")
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+  deletedById    String?   @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  members     WorkspaceMember[]
+  projects    Project[]
+  folders     Folder[]
+  documents   Document[]
+  memberRoles MemberRole[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, deletedAt])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String    @db.Uuid
+  userId      String    @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model Role {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String?  @db.Uuid
+  key            String
+  name           String
+  description    String?
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  rolePermissions RolePermission[]
+  memberRoles     MemberRole[]
+
+  @@unique([organizationId, key])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roleId       String   @db.Uuid
+  permissionId String   @db.Uuid
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model MemberRole {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String        @db.Uuid
+  userId         String        @db.Uuid
+  roleId         String        @db.Uuid
+  scopeType      RoleScopeType
+  workspaceId    String?       @db.Uuid
+  projectId      String?       @db.Uuid
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime?     @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, roleId, organizationId, scopeType, workspaceId, projectId])
+  @@index([organizationId, userId])
+  @@index([workspaceId, userId])
+  @@index([projectId, userId])
+  @@map("member_roles")
+}
+
+model Project {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  workspaceId    String    @db.Uuid
+  name           String
+  code           String
+  description    String?
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  createdById    String?   @db.Uuid
+  deletedAt      DateTime? @db.Timestamptz(6)
+  deletedById    String?   @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  members     ProjectMember[]
+  rowProjects RowProject[]
+  memberRoles MemberRole[]
+
+  @@unique([workspaceId, code])
+  @@index([organizationId, deletedAt])
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String    @db.Uuid
+  userId    String    @db.Uuid
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
+}
+
+model Folder {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  workspaceId    String    @db.Uuid
+  parentId       String?   @db.Uuid
+  name           String
+  rank           String
+  ancestorPath   String    @default("")
+  depth          Int       @default(0)
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  createdById    String?   @db.Uuid
+  updatedById    String?   @db.Uuid
+  deletedAt      DateTime? @db.Timestamptz(6)
+  deletedById    String?   @db.Uuid
+  deletionReason String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  parent       Folder?      @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Restrict)
+  children     Folder[]     @relation("FolderChildren")
+  documents    Document[]
+
+  @@index([workspaceId, parentId, deletedAt, rank])
+  @@index([workspaceId, ancestorPath])
+  @@map("folders")
+}
+
+model Document {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @db.Uuid
+  workspaceId    String       @db.Uuid
+  folderId       String?      @db.Uuid
+  templateId     String?      @db.Uuid
+  documentType   DocumentType
+  title          String
+  description    String?
+  rank           String
+  columnConfig   Json         @default("[]")
+  numberingStyle Json         @default("{}")
+  version        Int          @default(1)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+  createdById    String?      @db.Uuid
+  updatedById    String?      @db.Uuid
+  deletedAt      DateTime?    @db.Timestamptz(6)
+  deletedById    String?      @db.Uuid
+  deletionReason String?
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  folder       Folder?           @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  template     DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  rows            DocumentRow[]
+  customFieldDefs CustomFieldDefinition[]
+  attachments     Attachment[]
+  revisions       DocumentRevision[]
+  collabSnapshots CollaborationSnapshot[]
+  collabUpdates   CollaborationUpdate[]
+  exportJobs      ExportJob[]
+
+  @@index([workspaceId, folderId, deletedAt, rank])
+  @@index([organizationId, deletedAt])
+  @@map("documents")
+}
+
+model DocumentTemplate {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String       @db.Uuid
+  name             String
+  documentType     DocumentType
+  columnConfig     Json         @default("[]")
+  requiredFields   Json         @default("[]")
+  validationRules  Json         @default("{}")
+  namingConvention Json         @default("{}")
+  numberingStyle   Json         @default("{}")
+  exportTemplateId String?      @db.Uuid
+  version          Int          @default(1)
+  createdAt        DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
+  createdById      String?      @db.Uuid
+  deletedAt        DateTime?    @db.Timestamptz(6)
+  deletedById      String?      @db.Uuid
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  exportTemplate ExportTemplate? @relation(fields: [exportTemplateId], references: [id], onDelete: SetNull)
+
+  documents       Document[]
+  customFieldDefs CustomFieldDefinition[]
+
+  @@unique([organizationId, name, documentType])
+  @@map("document_templates")
+}
+
+model DocumentRow {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  documentId     String    @db.Uuid
+  parentId       String?   @db.Uuid
+  rank           String
+  ancestorPath   String    @default("")
+  depth          Int       @default(0)
+  rowType        RowType
+  title          String    @default("")
+  description    String?
+  richTextRef    String?
+  customFields   Json      @default("{}")
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  createdById    String?   @db.Uuid
+  updatedById    String?   @db.Uuid
+  deletedAt      DateTime? @db.Timestamptz(6)
+  deletedById    String?   @db.Uuid
+  deletionReason String?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document      @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  parent       DocumentRow?  @relation("RowChildren", fields: [parentId], references: [id], onDelete: Restrict)
+  children     DocumentRow[] @relation("RowChildren")
+
+  requirementDetail RequirementDetail?
+  testCaseDetail    TestCaseDetail?
+  testStepDetail    TestStepDetail?
+  outgoingLinks     RequirementLink[]  @relation("LinkSource")
+  incomingLinks     RequirementLink[]  @relation("LinkTarget")
+  rowProjects       RowProject[]
+  attachments       Attachment[]
+
+  @@index([documentId, parentId, deletedAt, rank])
+  @@index([documentId, ancestorPath])
+  @@index([organizationId])
+  @@map("document_rows")
+}
+
+model RequirementDetail {
+  rowId              String   @id @db.Uuid
+  status             String   @default("draft")
+  priority           String?
+  rationale          String?
+  verificationMethod String?
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+
+  row DocumentRow @relation(fields: [rowId], references: [id], onDelete: Restrict)
+
+  @@map("requirement_details")
+}
+
+model TestCaseDetail {
+  rowId      String   @id @db.Uuid
+  status     String   @default("draft")
+  priority   String?
+  assigneeId String?  @db.Uuid
+  tags       String[] @default([])
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  row      DocumentRow @relation(fields: [rowId], references: [id], onDelete: Restrict)
+  assignee User?       @relation("TestCaseAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([assigneeId])
+  @@map("test_case_details")
+}
+
+model TestStepDetail {
+  rowId          String   @id @db.Uuid
+  action         String?
+  expectedResult String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  row DocumentRow @relation(fields: [rowId], references: [id], onDelete: Restrict)
+
+  @@map("test_step_details")
+}
+
+model RequirementLink {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String              @db.Uuid
+  sourceRowId    String              @db.Uuid
+  targetRowId    String              @db.Uuid
+  linkType       RequirementLinkType @default(verifies)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
+  createdById    String?             @db.Uuid
+  deletedAt      DateTime?           @db.Timestamptz(6)
+  deletedById    String?             @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sourceRow    DocumentRow  @relation("LinkSource", fields: [sourceRowId], references: [id], onDelete: Restrict)
+  targetRow    DocumentRow  @relation("LinkTarget", fields: [targetRowId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceRowId, targetRowId, linkType])
+  @@index([targetRowId, deletedAt])
+  @@index([organizationId])
+  @@map("requirement_links")
+}
+
+model RowProject {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  rowId          String    @db.Uuid
+  projectId      String    @db.Uuid
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  createdById    String?   @db.Uuid
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  row          DocumentRow  @relation(fields: [rowId], references: [id], onDelete: Restrict)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@unique([rowId, projectId])
+  @@index([projectId, deletedAt])
+  @@map("row_projects")
+}
+
+model CustomFieldDefinition {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String          @db.Uuid
+  documentId      String?         @db.Uuid
+  templateId      String?         @db.Uuid
+  fieldKey        String
+  displayName     String
+  fieldType       CustomFieldType
+  validationRules Json            @default("{}")
+  defaultValue    Json?
+  allowedValues   Json            @default("[]")
+  isRequired      Boolean         @default(false)
+  isSearchable    Boolean         @default(false)
+  isSortable      Boolean         @default(false)
+  isVisible       Boolean         @default(true)
+  displayOrder    Int             @default(0)
+  version         Int             @default(1)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
+  createdById     String?         @db.Uuid
+  deletedAt       DateTime?       @db.Timestamptz(6)
+  deletedById     String?         @db.Uuid
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document?         @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  template     DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, fieldKey])
+  @@unique([templateId, fieldKey])
+  @@index([organizationId])
+  @@map("custom_field_definitions")
+}
+
+model Attachment {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  documentId     String?   @db.Uuid
+  rowId          String?   @db.Uuid
+  fileName       String
+  contentType    String
+  sizeBytes      BigInt
+  storageKey     String    @unique
+  checksum       String?
+  uploadedById   String?   @db.Uuid
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+  deletedById    String?   @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document?    @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  row          DocumentRow? @relation(fields: [rowId], references: [id], onDelete: Restrict)
+
+  @@index([documentId, deletedAt])
+  @@index([rowId, deletedAt])
+  @@map("attachments")
+}
+
+model ExportTemplate {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @db.Uuid
+  name           String
+  documentType   DocumentType
+  storageKey     String       @unique
+  contentType    String       @default("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+  version        Int          @default(1)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+  createdById    String?      @db.Uuid
+  deletedAt      DateTime?    @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  documentTemplates DocumentTemplate[]
+
+  @@unique([organizationId, name])
+  @@map("export_templates")
+}
+
+model ExportJob {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String          @db.Uuid
+  documentId       String?         @db.Uuid
+  requestedById    String          @db.Uuid
+  jobType          ExportJobType
+  status           ExportJobStatus @default(pending)
+  progress         Int             @default(0)
+  parameters       Json            @default("{}")
+  resultStorageKey String?
+  errorMessage     String?
+  idempotencyKey   String?         @unique
+  startedAt        DateTime?       @db.Timestamptz(6)
+  finishedAt       DateTime?       @db.Timestamptz(6)
+  createdAt        DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime        @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document?    @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  requestedBy  User         @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, createdAt])
+  @@index([requestedById, createdAt])
+  @@map("export_jobs")
+}
+
+model AuditEvent {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  workspaceId    String?  @db.Uuid
+  actorId        String?  @db.Uuid
+  action         String
+  entityType     String
+  entityId       String   @db.Uuid
+  documentId     String?  @db.Uuid
+  requestId      String?
+  correlationId  String?
+  previousData   Json?
+  nextData       Json?
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([documentId, createdAt])
+  @@index([correlationId])
+  @@map("audit_events")
+}
+
+model DocumentRevision {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  documentId     String   @db.Uuid
+  revisionNumber Int
+  label          String?
+  snapshotKey    String?
+  summary        Json     @default("{}")
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document     @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, revisionNumber])
+  @@map("document_revisions")
+}
+
+model CollaborationSnapshot {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  documentId     String   @db.Uuid
+  sequence       BigInt
+  snapshotData   Bytes
+  stateVector    Bytes?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document     @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, sequence])
+  @@map("collaboration_snapshots")
+}
+
+model CollaborationUpdate {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  documentId     String   @db.Uuid
+  sequence       BigInt
+  updateData     Bytes
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document     @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, sequence])
+  @@index([documentId, createdAt])
+  @@map("collaboration_updates")
+}
+
+model Notification {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @db.Uuid
+  recipientId    String           @db.Uuid
+  type           NotificationType
+  payload        Json             @default("{}")
+  readAt         DateTime?        @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  recipient    User         @relation(fields: [recipientId], references: [id], onDelete: Restrict)
+
+  @@index([recipientId, readAt, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("notifications")
+}
+
+model LegalHold {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @db.Uuid
+  scopeType      LegalHoldScope
+  scopeId        String         @db.Uuid
+  reason         String
+  createdById    String?        @db.Uuid
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
+  releasedAt     DateTime?      @db.Timestamptz(6)
+  releasedById   String?        @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([scopeType, scopeId, releasedAt])
+  @@index([organizationId, releasedAt])
+  @@map("legal_holds")
+}
