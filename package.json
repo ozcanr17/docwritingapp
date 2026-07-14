@@ -1,5 +1,5 @@
 {
-  "name": "reqtrack",
+  "name": "docsys",
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@9.15.9",
@@ -11,9 +11,9 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "db:format": "pnpm --filter @reqtrack/database format",
-    "db:validate": "pnpm --filter @reqtrack/database validate",
-    "db:migrate": "pnpm --filter @reqtrack/database migrate:dev",
+    "db:format": "pnpm --filter @docsys/database format",
+    "db:validate": "pnpm --filter @docsys/database validate",
+    "db:migrate": "pnpm --filter @docsys/database migrate:dev",
     "scan:chars": "bash infra/scripts/scan-forbidden-chars.sh"
   },
   "devDependencies": {

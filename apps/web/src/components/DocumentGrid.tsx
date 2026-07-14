@@ -187,7 +187,7 @@ export function DocumentGrid({ documentId }: GridProps) {
         }}
       >
         {rows.length === 0 ? (
-          <div className="p-6 text-sm text-mutedForeground">{t("emptyDocument")}</div>
+          <div data-testid="grid-empty" className="p-6 text-sm text-mutedForeground">{t("emptyDocument")}</div>
         ) : (
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {

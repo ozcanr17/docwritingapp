@@ -1,6 +1,6 @@
 import { Database } from "@hocuspocus/extension-database";
 import { Server } from "@hocuspocus/server";
-import { PrismaClient } from "@reqtrack/database";
+import { PrismaClient } from "@docsys/database";
 import jwt from "jsonwebtoken";
 import pino from "pino";
 import { z } from "zod";

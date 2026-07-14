@@ -6,7 +6,7 @@
 flowchart LR
   user[Engineer or Reviewer\nBrowser on Win Linux macOS]
   oidc[Enterprise OIDC Provider]
-  sys[ReqTrack System]
+  sys[DocSys System]
   user -->|HTTPS + WSS| sys
   sys -->|OIDC auth code flow| oidc
 ```

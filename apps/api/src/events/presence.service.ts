@@ -8,7 +8,7 @@ export class PresenceService {
   constructor(private readonly redis: RedisService) {}
 
   private key(documentId: string, userId: string): string {
-    return `reqtrack:presence:${documentId}:${userId}`;
+    return `docsys:presence:${documentId}:${userId}`;
   }
 
   async heartbeat(documentId: string, userId: string, displayName: string): Promise<void> {
@@ -25,7 +25,7 @@ export class PresenceService {
   }
 
   async list(documentId: string): Promise<Array<{ userId: string; displayName: string; lastSeenAt: string }>> {
-    const keys = await this.redis.client.keys(`reqtrack:presence:${documentId}:*`);
+    const keys = await this.redis.client.keys(`docsys:presence:${documentId}:*`);
     if (keys.length === 0) return [];
     const values = await this.redis.client.mget(keys);
     return values.filter((v): v is string => v !== null).map((v) => JSON.parse(v));

@@ -29,10 +29,10 @@ export async function createApp(): Promise<NestFastifyApplication> {
   });
   app.enableShutdownHooks();
   const openApiConfig = new DocumentBuilder()
-    .setTitle("ReqTrack API")
+    .setTitle("DocSys API")
     .setDescription("Requirements, test, and document management API")
     .setVersion("0.1.0")
-    .addCookieAuth("reqtrack_session")
+    .addCookieAuth("docsys_session")
     .build();
   SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, openApiConfig));
   return app;

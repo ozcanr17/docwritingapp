@@ -14,7 +14,7 @@ PostgreSQL 16 as the sole authoritative store; Prisma ORM for schema, migrations
 - TypeORM: maintenance and type-safety concerns.
 
 ## Consequences
-Typed client shared via `@reqtrack/database`; migrations versioned in-repo; Postgres-specific features are embraced (gen_random_uuid, GIN, tsvector, advisory locks).
+Typed client shared via `@docsys/database`; migrations versioned in-repo; Postgres-specific features are embraced (gen_random_uuid, GIN, tsvector, advisory locks).
 
 ## Risks
 Prisma cannot express some Postgres features (partial indexes, text_pattern_ops, ltree, tsvector columns) declaratively.

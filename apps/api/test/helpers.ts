@@ -1,9 +1,9 @@
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
-import { PrismaClient } from "@reqtrack/database";
+import { PrismaClient } from "@docsys/database";
 
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://reqtrack:reqtrack@localhost:5432/reqtrack_v2_test";
+  process.env.TEST_DATABASE_URL ?? "postgresql://docsys:docsys@localhost:5432/docsys_test";
 process.env.REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 process.env.JWT_SECRET = "test-secret-at-least-16-chars";
 process.env.APP_BASE_URL = "http://localhost:5173";

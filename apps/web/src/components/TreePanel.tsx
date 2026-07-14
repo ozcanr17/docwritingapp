@@ -109,7 +109,7 @@ function TreeBranch(props: {
 
   if (!data) return null;
   if (depth === 0 && data.folders.length === 0 && data.documents.length === 0) {
-    return <div className="px-3 py-2 text-mutedForeground">{t("emptyTree")}</div>;
+    return <div data-testid="tree-empty" className="px-3 py-2 text-mutedForeground">{t("emptyTree")}</div>;
   }
 
   const toggle = (id: string) => {

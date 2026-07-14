@@ -1,5 +1,5 @@
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
-import { PrismaClient } from "@reqtrack/database";
+import { PrismaClient } from "@docsys/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp, createOrgWorkspaceDocument, registerActor, resetDatabase, TestActor } from "./helpers";
 

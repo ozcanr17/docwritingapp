@@ -1,4 +1,4 @@
-# ReqTrack v2
+# DocSys v2
 
 Enterprise requirements, test, and document management system (DOORS-class), browser-based, self-hostable.
 

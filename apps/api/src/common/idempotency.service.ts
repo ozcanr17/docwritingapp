@@ -9,7 +9,7 @@ export class IdempotencyService {
 
   async runOnce<T>(userId: string, key: string | undefined, fn: () => Promise<T>): Promise<T> {
     if (!key) return fn();
-    const cacheKey = `reqtrack:idem:${userId}:${key}`;
+    const cacheKey = `docsys:idem:${userId}:${key}`;
     const cached = await this.redis.client.get(cacheKey);
     if (cached) return JSON.parse(cached) as T;
     const result = await fn();

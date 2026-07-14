@@ -40,6 +40,6 @@ describe("DocumentGrid", () => {
 
   it("shows the empty state for a document without rows", () => {
     renderGrid([]);
-    expect(screen.getByText(/bos/i)).toBeInTheDocument();
+    expect(screen.getByTestId("grid-empty")).toBeInTheDocument();
   });
 });

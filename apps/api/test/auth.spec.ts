@@ -1,5 +1,5 @@
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
-import { PrismaClient } from "@reqtrack/database";
+import { PrismaClient } from "@docsys/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp, registerActor, resetDatabase } from "./helpers";
 
@@ -19,7 +19,7 @@ describe("auth", () => {
 
   it("registers a user and returns a session cookie", async () => {
     const actor = await registerActor(app, "alice");
-    expect(actor.cookie).toContain("reqtrack_session=");
+    expect(actor.cookie).toContain("docsys_session=");
   });
 
   it("rejects duplicate registration", async () => {

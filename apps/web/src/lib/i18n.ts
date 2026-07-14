@@ -1,104 +1,30 @@
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
+import en from "../locales/en.json";
+import tr from "../locales/tr.json";
 
-const resources = {
-  tr: {
-    translation: {
-      appName: "ReqTrack",
-      login: "Giris yap",
-      register: "Kayit ol",
-      logout: "Cikis",
-      email: "E-posta",
-      password: "Parola",
-      displayName: "Ad Soyad",
-      documents: "Dokumanlar",
-      trash: "Cop kutusu",
-      settings: "Ayarlar",
-      newFolder: "Yeni klasor",
-      newDocument: "Yeni dokuman",
-      deleteAction: "Sil",
-      restore: "Geri getir",
-      addChild: "Alt satir ekle",
-      addSiblingBelow: "Altina satir ekle",
-      addHeading: "Baslik ekle",
-      addRequirement: "Gereksinim ekle",
-      addTestCase: "Test senaryosu ekle",
-      indent: "Iceri al",
-      outdent: "Disari al",
-      themeLight: "Acik",
-      themeDark: "Koyu",
-      themeSystem: "Sistem",
-      conflictError: "Satir baska bir kullanici tarafindan degistirildi; guncel hali yuklendi.",
-      genericError: "Islem basarisiz oldu.",
-      emptyDocument: "Bu dokuman henuz bos. Saga tiklayarak satir ekleyin.",
-      emptyTree: "Henuz klasor veya dokuman yok.",
-      selectDocument: "Soldaki agactan bir dokuman secin.",
-      createOrganization: "Organizasyon olustur",
-      organizationName: "Organizasyon adi",
-      workspaceName: "Calisma alani adi",
-      loading: "Yukleniyor...",
-      onlineUsers: "Cevrimici",
-      title: "Baslik",
-      rowNumber: "No",
-      rowType: "Tur",
-      typeHeading: "Baslik",
-      typeRequirement: "Gereksinim",
-      typeTestCase: "Test senaryosu",
-      typeTestStep: "Test adimi",
-      typeNote: "Not",
-    },
-  },
-  en: {
-    translation: {
-      appName: "ReqTrack",
-      login: "Sign in",
-      register: "Register",
-      logout: "Sign out",
-      email: "Email",
-      password: "Password",
-      displayName: "Display name",
-      documents: "Documents",
-      trash: "Trash",
-      settings: "Settings",
-      newFolder: "New folder",
-      newDocument: "New document",
-      deleteAction: "Delete",
-      restore: "Restore",
-      addChild: "Add child row",
-      addSiblingBelow: "Add sibling below",
-      addHeading: "Add heading",
-      addRequirement: "Add requirement",
-      addTestCase: "Add test case",
-      indent: "Indent",
-      outdent: "Outdent",
-      themeLight: "Light",
-      themeDark: "Dark",
-      themeSystem: "System",
-      conflictError: "Row was changed by another user; latest version loaded.",
-      genericError: "Operation failed.",
-      emptyDocument: "This document is empty. Right-click to add rows.",
-      emptyTree: "No folders or documents yet.",
-      selectDocument: "Select a document from the tree.",
-      createOrganization: "Create organization",
-      organizationName: "Organization name",
-      workspaceName: "Workspace name",
-      loading: "Loading...",
-      onlineUsers: "Online",
-      title: "Title",
-      rowNumber: "No",
-      rowType: "Type",
-      typeHeading: "Heading",
-      typeRequirement: "Requirement",
-      typeTestCase: "Test case",
-      typeTestStep: "Test step",
-      typeNote: "Note",
-    },
-  },
-};
+const LANGUAGE_STORAGE_KEY = "docsys-language";
+
+export type AppLanguage = "tr" | "en";
+
+export function storedLanguage(): AppLanguage {
+  if (typeof window === "undefined" || typeof window.localStorage?.getItem !== "function") return "tr";
+  const value = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  return value === "en" ? "en" : "tr";
+}
+
+export function setLanguage(language: AppLanguage): void {
+  window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  void i18next.changeLanguage(language);
+  document.documentElement.lang = language;
+}
 
 void i18next.use(initReactI18next).init({
-  resources,
-  lng: "tr",
+  resources: {
+    tr: { translation: tr },
+    en: { translation: en },
+  },
+  lng: storedLanguage(),
   fallbackLng: "en",
   interpolation: { escapeValue: false },
 });

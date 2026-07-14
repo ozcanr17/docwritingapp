@@ -1,4 +1,4 @@
-import { PrismaClient } from "@reqtrack/database";
+import { PrismaClient } from "@docsys/database";
 
 export interface PurgeResult {
   purgedRows: number;

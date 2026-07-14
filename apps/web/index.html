@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ReqTrack</title>
+    <title>DocSys</title>
     <script>
       (function () {
-        var stored = localStorage.getItem("reqtrack-theme");
+        var stored = localStorage.getItem("docsys-theme");
         var mode = stored ? JSON.parse(stored).state.mode : "system";
         var dark = mode === "dark" || (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
         if (dark) document.documentElement.classList.add("dark");

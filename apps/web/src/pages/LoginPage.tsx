@@ -38,6 +38,7 @@ export function LoginPage() {
           <label className="mb-3 block text-sm">
             {t("displayName")}
             <input
+              data-testid="auth-display-name"
               className="mt-1 w-full rounded border border-border bg-surface px-3 py-2"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
@@ -48,6 +49,7 @@ export function LoginPage() {
         <label className="mb-3 block text-sm">
           {t("email")}
           <input
+            data-testid="auth-email"
             type="email"
             className="mt-1 w-full rounded border border-border bg-surface px-3 py-2"
             value={email}
@@ -58,6 +60,7 @@ export function LoginPage() {
         <label className="mb-4 block text-sm">
           {t("password")}
           <input
+            data-testid="auth-password"
             type="password"
             className="mt-1 w-full rounded border border-border bg-surface px-3 py-2"
             value={password}
@@ -67,10 +70,15 @@ export function LoginPage() {
           />
         </label>
         {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
-        <button type="submit" className="w-full rounded bg-primary px-4 py-2 text-primaryForeground">
+        <button
+          data-testid="auth-submit"
+          type="submit"
+          className="w-full rounded bg-primary px-4 py-2 text-primaryForeground"
+        >
           {mode === "login" ? t("login") : t("register")}
         </button>
         <button
+          data-testid="auth-toggle"
           type="button"
           className="mt-3 w-full text-sm text-mutedForeground hover:text-foreground"
           onClick={() => setMode(mode === "login" ? "register" : "login")}

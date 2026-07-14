@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, LogOut, Moon, Settings, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { FileText, Languages, LogOut, Moon, Settings, Sun, SunMoon, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +7,7 @@ import { DocumentGrid } from "../components/DocumentGrid";
 import { TreePanel } from "../components/TreePanel";
 import { useDocumentEvents } from "../hooks/useDocumentEvents";
 import { api } from "../lib/api";
+import { setLanguage, storedLanguage } from "../lib/i18n";
 import { ThemeMode, useThemeStore } from "../stores/theme";
 
 interface Organization {
@@ -113,6 +114,14 @@ export function ShellPage() {
             {themeLabel}
           </button>
           <button
+            data-testid="language-toggle"
+            className="mb-1 flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-white/10"
+            onClick={() => setLanguage(storedLanguage() === "tr" ? "en" : "tr")}
+          >
+            <Languages size={15} />
+            {t("language")}: {storedLanguage().toUpperCase()}
+          </button>
+          <button
             className="flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-white/10"
             onClick={async () => {
               await api("/auth/logout", { method: "POST" });
@@ -140,7 +149,9 @@ export function ShellPage() {
           {selectedDocumentId && (
             <span className="flex items-center gap-2 text-mutedForeground">
               <Users size={14} />
-              {t("onlineUsers")}: {presence.length}
+              <span data-testid="presence-count">
+                {t("onlineUsers")}: {presence.length}
+              </span>
               <span className="flex gap-1">
                 {presence.slice(0, 8).map((p) => (
                   <span
@@ -195,6 +206,7 @@ function BootstrapForm({ onSubmit }: { onSubmit: (orgName: string, workspaceName
         <label className="mb-3 block text-sm">
           {t("organizationName")}
           <input
+            data-testid="bootstrap-org-name"
             className="mt-1 w-full rounded border border-border bg-surface px-3 py-2"
             value={orgName}
             onChange={(e) => setOrgName(e.target.value)}
@@ -204,13 +216,18 @@ function BootstrapForm({ onSubmit }: { onSubmit: (orgName: string, workspaceName
         <label className="mb-4 block text-sm">
           {t("workspaceName")}
           <input
+            data-testid="bootstrap-workspace-name"
             className="mt-1 w-full rounded border border-border bg-surface px-3 py-2"
             value={workspaceName}
             onChange={(e) => setWorkspaceName(e.target.value)}
             required
           />
         </label>
-        <button type="submit" className="w-full rounded bg-primary px-4 py-2 text-primaryForeground">
+        <button
+          data-testid="bootstrap-submit"
+          type="submit"
+          className="w-full rounded bg-primary px-4 py-2 text-primaryForeground"
+        >
           {t("createOrganization")}
         </button>
       </form>

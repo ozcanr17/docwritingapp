@@ -1,5 +1,5 @@
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { PrismaClient } from "@reqtrack/database";
+import { PrismaClient } from "@docsys/database";
 import jwt from "jsonwebtoken";
 import WebSocket from "ws";
 import * as Y from "yjs";
@@ -8,7 +8,7 @@ const CLIENT_COUNT = Number(process.env.COLLAB_CLIENTS ?? 50);
 const COLLAB_URL = process.env.COLLAB_URL ?? "ws://127.0.0.1:3002";
 const JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-at-least-16-chars";
 const DATABASE_URL =
-  process.env.DATABASE_URL ?? "postgresql://reqtrack:reqtrack@localhost:5432/reqtrack_v2_test";
+  process.env.DATABASE_URL ?? "postgresql://docsys:docsys@localhost:5432/docsys_test";
 
 process.env.DATABASE_URL = DATABASE_URL;
 const prisma = new PrismaClient();

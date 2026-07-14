@@ -1,21 +1,21 @@
-name: reqtrack
+name: docsys
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-reqtrack}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reqtrack}
-      POSTGRES_DB: ${POSTGRES_DB:-reqtrack}
+      POSTGRES_USER: ${POSTGRES_USER:-docsys}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-docsys}
+      POSTGRES_DB: ${POSTGRES_DB:-docsys}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reqtrack}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-docsys}"]
       interval: 5s
       timeout: 3s
       retries: 10
     networks:
-      - reqtrack-net
+      - docsys-net
 
   redis:
     image: redis:7-alpine
@@ -28,7 +28,7 @@ services:
       timeout: 3s
       retries: 10
     networks:
-      - reqtrack-net
+      - docsys-net
 
   minio:
     image: minio/minio:latest
@@ -44,14 +44,14 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - reqtrack-net
+      - docsys-net
 
   api:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-reqtrack}:${POSTGRES_PASSWORD:-reqtrack}@postgres:5432/${POSTGRES_DB:-reqtrack}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-docsys}:${POSTGRES_PASSWORD:-docsys}@postgres:5432/${POSTGRES_DB:-docsys}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
@@ -65,14 +65,14 @@ services:
     ports:
       - "3001:3001"
     networks:
-      - reqtrack-net
+      - docsys-net
 
   collaboration:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.collaboration
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-reqtrack}:${POSTGRES_PASSWORD:-reqtrack}@postgres:5432/${POSTGRES_DB:-reqtrack}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-docsys}:${POSTGRES_PASSWORD:-docsys}@postgres:5432/${POSTGRES_DB:-docsys}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
       COLLAB_PORT: "3002"
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -82,14 +82,14 @@ services:
     ports:
       - "3002:3002"
     networks:
-      - reqtrack-net
+      - docsys-net
 
   worker:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.worker
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-reqtrack}:${POSTGRES_PASSWORD:-reqtrack}@postgres:5432/${POSTGRES_DB:-reqtrack}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-docsys}:${POSTGRES_PASSWORD:-docsys}@postgres:5432/${POSTGRES_DB:-docsys}
       REDIS_URL: redis://redis:6379
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TRASH_RETENTION_DAYS: ${TRASH_RETENTION_DAYS:-30}
@@ -99,7 +99,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - reqtrack-net
+      - docsys-net
 
 volumes:
   postgres-data:
@@ -107,5 +107,5 @@ volumes:
   minio-data:
 
 networks:
-  reqtrack-net:
+  docsys-net:
     driver: bridge

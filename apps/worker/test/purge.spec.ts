@@ -1,9 +1,9 @@
-import { PrismaClient } from "@reqtrack/database";
+import { PrismaClient } from "@docsys/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { compactSnapshots, runPurge } from "../src/purge";
 
 process.env.DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://reqtrack:reqtrack@localhost:5432/reqtrack_v2_test";
+  process.env.TEST_DATABASE_URL ?? "postgresql://docsys:docsys@localhost:5432/docsys_test";
 
 const prisma = new PrismaClient();
 

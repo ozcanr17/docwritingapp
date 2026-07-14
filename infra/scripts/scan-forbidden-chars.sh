@@ -12,6 +12,7 @@ for dir in "${TARGET_DIRS[@]}"; do
       --exclude-dir=node_modules \
       --exclude-dir=dist \
       --exclude-dir=.turbo \
+      --exclude-dir=locales \
       --include='*.ts' --include='*.tsx' --include='*.js' --include='*.json' \
       --include='*.prisma' --include='*.sql' --include='*.yml' --include='*.yaml' \
       --include='*.sh' --include='*.env*'; then

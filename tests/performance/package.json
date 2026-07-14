@@ -1,5 +1,5 @@
 {
-  "name": "@reqtrack/performance-tests",
+  "name": "@docsys/performance-tests",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@hocuspocus/provider": "^2.15.2",
-    "@reqtrack/database": "workspace:*",
+    "@docsys/database": "workspace:*",
     "jsonwebtoken": "^9.0.2",
     "ws": "^8.18.0",
     "yjs": "^13.6.20"

@@ -12,13 +12,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: reqtrack
-          POSTGRES_PASSWORD: reqtrack
-          POSTGRES_DB: reqtrack_v2_test
+          POSTGRES_USER: docsys
+          POSTGRES_PASSWORD: docsys
+          POSTGRES_DB: docsys_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U reqtrack"
+          --health-cmd "pg_isready -U docsys"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
@@ -32,8 +32,8 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://reqtrack:reqtrack@localhost:5432/reqtrack_v2_test
-      TEST_DATABASE_URL: postgresql://reqtrack:reqtrack@localhost:5432/reqtrack_v2_test
+      DATABASE_URL: postgresql://docsys:docsys@localhost:5432/docsys_test
+      TEST_DATABASE_URL: postgresql://docsys:docsys@localhost:5432/docsys_test
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-secret-at-least-16-chars
     steps:
@@ -46,11 +46,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @reqtrack/database validate
-      - run: pnpm --filter @reqtrack/database generate
-      - run: pnpm --filter @reqtrack/database build
-      - run: pnpm --filter @reqtrack/config build
+      - run: pnpm --filter @docsys/database validate
+      - run: pnpm --filter @docsys/database generate
+      - run: pnpm --filter @docsys/database build
+      - run: pnpm --filter @docsys/config build
       - run: pnpm -r --filter "./apps/*" typecheck
       - run: bash infra/scripts/scan-forbidden-chars.sh
-      - run: pnpm --filter @reqtrack/api test
-      - run: pnpm --filter @reqtrack/worker test
+      - run: pnpm --filter @docsys/api test
+      - run: pnpm --filter @docsys/worker test

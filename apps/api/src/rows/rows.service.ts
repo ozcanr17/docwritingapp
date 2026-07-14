@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { Prisma, RowType } from "@reqtrack/database";
+import { Prisma, RowType } from "@docsys/database";
 import { randomUUID } from "crypto";
 import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";

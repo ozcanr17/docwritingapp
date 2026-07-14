@@ -1,4 +1,4 @@
-import { PrismaClient } from "@reqtrack/database";
+import { PrismaClient } from "@docsys/database";
 import { Queue, Worker } from "bullmq";
 import pino from "pino";
 import { z } from "zod";

@@ -1,5 +1,5 @@
 {
-  "name": "@reqtrack/worker",
+  "name": "@docsys/worker",
   "version": "0.1.0",
   "private": true,
   "main": "dist/main.js",
@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@reqtrack/database": "workspace:*",
+    "@docsys/database": "workspace:*",
     "bullmq": "^5.34.0",
     "ioredis": "^5.4.2",
     "pino": "^9.6.0",

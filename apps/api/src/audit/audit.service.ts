@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@reqtrack/database";
+import { Prisma } from "@docsys/database";
 
 export interface AuditEntry {
   organizationId: string;

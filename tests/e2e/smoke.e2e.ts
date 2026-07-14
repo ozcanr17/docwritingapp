@@ -4,38 +4,43 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
   const suffix = Date.now();
 
   await page.goto("/login");
-  await page.getByRole("button", { name: "Kayit ol" }).click();
-  await page.getByLabel("Ad Soyad").fill("E2E Kullanici");
-  await page.getByLabel("E-posta").fill(`e2e-${suffix}@example.com`);
-  await page.getByLabel("Parola").fill("password-123");
-  await page.getByRole("button", { name: "Kayit ol" }).click();
+  await page.getByTestId("auth-toggle").click();
+  await page.getByTestId("auth-display-name").fill("E2E User");
+  await page.getByTestId("auth-email").fill(`e2e-${suffix}@example.com`);
+  await page.getByTestId("auth-password").fill("password-123");
+  await page.getByTestId("auth-submit").click();
 
-  await page.getByLabel("Organizasyon adi").fill("E2E Org");
-  await page.getByLabel("Calisma alani adi").fill("Ana Alan");
-  await page.getByRole("button", { name: "Organizasyon olustur" }).click();
+  await page.getByTestId("bootstrap-org-name").fill("E2E Org");
+  await page.getByTestId("bootstrap-workspace-name").fill("Main Area");
+  await page.getByTestId("bootstrap-submit").click();
 
-  await expect(page.getByText("Henuz klasor veya dokuman yok.")).toBeVisible();
+  await expect(page.getByTestId("tree-empty")).toBeVisible();
 
-  page.once("dialog", (dialog) => void dialog.accept("Gereksinim Dokumani"));
+  page.once("dialog", (dialog) => void dialog.accept("Requirements Doc"));
   await page.locator("section").click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Yeni dokuman" }).click();
+  await page.getByTestId("menu-newDocument").click();
 
-  await page.getByRole("button", { name: "Gereksinim Dokumani" }).click();
-  await expect(page.getByText("Bu dokuman henuz bos", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Requirements Doc" }).click();
+  await expect(page.getByTestId("grid-empty")).toBeVisible();
 
   await page.locator("main .overflow-auto").click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Baslik ekle" }).click();
+  await page.getByTestId("menu-heading").click();
   await expect(page.getByTestId("grid-row-1")).toBeVisible();
 
   await page.getByTestId("grid-row-1").click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Alt satir ekle" }).click();
+  await page.getByTestId("menu-child").click();
   await expect(page.getByTestId("grid-row-1.1")).toBeVisible();
 
   const childTitle = page.getByTestId("grid-row-1.1").getByRole("button");
   await childTitle.dblclick();
-  await page.keyboard.type("Sistem gereksinimi");
+  await page.keyboard.type("System requirement");
   await page.keyboard.press("Enter");
-  await expect(page.getByText("Sistem gereksinimi")).toBeVisible();
+  await expect(page.getByText("System requirement")).toBeVisible();
 
-  await expect(page.getByText("Cevrimici: 1")).toBeVisible();
+  await expect(page.getByTestId("presence-count")).toContainText(": 1");
+
+  await page.getByTestId("language-toggle").click();
+  await expect(page.getByRole("button", { name: "Documents" })).toBeVisible();
+  await page.getByTestId("language-toggle").click();
+  await expect(page.getByRole("button", { name: "Documents" })).toBeHidden();
 });

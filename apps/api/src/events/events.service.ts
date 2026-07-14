@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { RedisService } from "./redis.service";
 
-export const EVENTS_CHANNEL = "reqtrack:events";
+export const EVENTS_CHANNEL = "docsys:events";
 
 export interface DomainEvent {
   type: string;

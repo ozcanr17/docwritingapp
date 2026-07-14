@@ -48,7 +48,7 @@ Each context becomes a NestJS module in Phase 2. No context reaches into another
 
 ## Explicit assumptions
 
-- Product name for the codebase: `reqtrack` (v2 rewrite; the previous Python/Next.js prototype in `workspace/reqtrack` remains untouched as reference).
+- Product name for the codebase: `docsys` (v2 rewrite; the previous Python/Next.js prototype in `workspace/docsys` remains untouched as reference).
 - One PostgreSQL database per deployment (schema-level multi-tenancy via organizationId columns, not database-per-tenant).
 - Initial deployments are intranet-hosted; internet-facing hardening (WAF, etc.) is the operator's responsibility beyond the documented headers/rate limits.
 - `gen_random_uuid()` (built into PostgreSQL 13+) generates UUIDs at the database.

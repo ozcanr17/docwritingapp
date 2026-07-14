@@ -1,5 +1,5 @@
 import { UnprocessableEntityException } from "@nestjs/common";
-import { CustomFieldDefinition } from "@reqtrack/database";
+import { CustomFieldDefinition } from "@docsys/database";
 
 export function validateCustomFields(
   definitions: CustomFieldDefinition[],

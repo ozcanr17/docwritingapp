@@ -1,5 +1,5 @@
 {
-  "name": "@reqtrack/e2e",
+  "name": "@docsys/e2e",
   "version": "0.1.0",
   "private": true,
   "scripts": {

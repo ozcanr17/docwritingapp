@@ -1,4 +1,4 @@
-import { PrismaClient } from "@reqtrack/database";
+import { PrismaClient } from "@docsys/database";
 
 export async function hasDocumentReadPermission(
   prisma: PrismaClient,

@@ -23,7 +23,7 @@ export const useThemeStore = create<ThemeState>()(
         set({ mode });
       },
     }),
-    { name: "reqtrack-theme" },
+    { name: "docsys-theme" },
   ),
 );
 

@@ -43,6 +43,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       {items.map((item) => (
         <button
           key={item.key}
+          data-testid={`menu-${item.key}`}
           role="menuitem"
           className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-muted focus:bg-muted ${
             item.danger ? "text-destructive" : "text-foreground"

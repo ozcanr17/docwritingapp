@@ -3,4 +3,4 @@ export interface SessionUser {
   email: string;
 }
 
-export const SESSION_COOKIE = "reqtrack_session";
+export const SESSION_COOKIE = "docsys_session";
