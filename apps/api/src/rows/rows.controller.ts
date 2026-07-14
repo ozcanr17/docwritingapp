@@ -193,6 +193,16 @@ export class RowsController {
     return this.rows.deleteLink(user.userId, linkId);
   }
 
+  @Post("links/:linkId/acknowledge")
+  acknowledgeLink(@CurrentUser() user: SessionUser, @Param("linkId", ParseUUIDPipe) linkId: string) {
+    return this.rows.acknowledgeLink(user.userId, linkId);
+  }
+
+  @Get("documents/:documentId/suspect-links")
+  suspectLinks(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.rows.listSuspectLinks(user.userId, documentId);
+  }
+
   @Post("rows/:rowId/projects/:projectId")
   assignProject(
     @CurrentUser() user: SessionUser,

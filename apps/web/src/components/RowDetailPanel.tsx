@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, RowDetail } from "../lib/api";
@@ -67,6 +67,12 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
     onError: () => pushToast("error", t("genericError")),
   });
 
+  const acknowledgeLink = useMutation({
+    mutationFn: (linkId: string) => api(`/links/${linkId}/acknowledge`, { method: "POST" }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["row", rowId] }),
+    onError: () => pushToast("error", t("genericError")),
+  });
+
   if (isLoading || !row) {
     return <div className="p-4 text-sm text-mutedForeground">{t("loading")}</div>;
   }
@@ -128,7 +134,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
               {links.map((link) => {
                 const otherId = link.sourceRowId === row.id ? link.targetRowId : link.sourceRowId;
                 return (
-                  <li key={link.id}>
+                  <li key={link.id} className="flex items-center gap-1">
                     <button
                       data-testid="open-linked"
                       className="flex items-center gap-1 text-primary hover:underline"
@@ -138,6 +144,24 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
                       <span className="font-mono text-xs">{otherId.slice(0, 8)}</span>
                       <span className="text-xs text-mutedForeground">({link.linkType})</span>
                     </button>
+                    {link.suspect && (
+                      <>
+                        <span
+                          data-testid="suspect-badge"
+                          className="flex items-center gap-0.5 rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-warning"
+                        >
+                          <AlertTriangle size={10} />
+                          {t("suspect")}
+                        </span>
+                        <button
+                          data-testid="acknowledge-link"
+                          className="text-[10px] text-primary hover:underline"
+                          onClick={() => acknowledgeLink.mutate(link.id)}
+                        >
+                          {t("acknowledge")}
+                        </button>
+                      </>
+                    )}
                   </li>
                 );
               })}

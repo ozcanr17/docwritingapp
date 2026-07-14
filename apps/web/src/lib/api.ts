@@ -72,6 +72,7 @@ export interface RequirementLink {
   sourceRowId: string;
   targetRowId: string;
   linkType: "verifies" | "relates_to" | "derives_from" | "duplicates";
+  suspect: boolean;
 }
 
 export interface RowDetail {

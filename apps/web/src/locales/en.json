@@ -90,5 +90,21 @@
   "testStep": "Test step",
   "expectedResult": "Expected result",
   "langTurkish": "Türkçe",
-  "langEnglish": "English"
+  "langEnglish": "English",
+  "suspect": "Suspect",
+  "acknowledge": "Acknowledge",
+  "baselines": "Baselines",
+  "createBaseline": "Create baseline",
+  "baselineLabel": "Label",
+  "noBaselines": "No baselines yet.",
+  "diff": "Diff",
+  "added": "Added",
+  "removed": "Removed",
+  "modified": "Modified",
+  "coverage": "Coverage",
+  "coverageReport": "Coverage report",
+  "totalRequirements": "Total requirements",
+  "covered": "Covered",
+  "uncovered": "Uncovered",
+  "close": "Close"
 }

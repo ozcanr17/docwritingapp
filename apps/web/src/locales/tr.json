@@ -90,5 +90,21 @@
   "testStep": "Test adımı",
   "expectedResult": "Beklenen sonuç",
   "langTurkish": "Türkçe",
-  "langEnglish": "English"
+  "langEnglish": "English",
+  "suspect": "Şüpheli",
+  "acknowledge": "Onayla",
+  "baselines": "Temel çizgiler",
+  "createBaseline": "Temel çizgi oluştur",
+  "baselineLabel": "Etiket",
+  "noBaselines": "Henüz temel çizgi yok.",
+  "diff": "Fark",
+  "added": "Eklenen",
+  "removed": "Silinen",
+  "modified": "Değişen",
+  "coverage": "Kapsam",
+  "coverageReport": "Kapsam raporu",
+  "totalRequirements": "Toplam gereksinim",
+  "covered": "Kapsanan",
+  "uncovered": "Kapsanmayan",
+  "close": "Kapat"
 }

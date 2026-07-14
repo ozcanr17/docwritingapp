@@ -500,6 +500,9 @@ model RequirementLink {
   sourceRowId    String              @db.Uuid
   targetRowId    String              @db.Uuid
   linkType       RequirementLinkType @default(verifies)
+  suspect        Boolean             @default(false)
+  suspectSince   DateTime?           @db.Timestamptz(6)
+  suspectReason  String?
   createdAt      DateTime            @default(now()) @db.Timestamptz(6)
   createdById    String?             @db.Uuid
   deletedAt      DateTime?           @db.Timestamptz(6)
@@ -511,7 +514,8 @@ model RequirementLink {
 
   @@unique([sourceRowId, targetRowId, linkType])
   @@index([targetRowId, deletedAt])
-  @@index([organizationId])
+  @@index([sourceRowId, deletedAt])
+  @@index([organizationId, suspect])
   @@map("requirement_links")
 }
 

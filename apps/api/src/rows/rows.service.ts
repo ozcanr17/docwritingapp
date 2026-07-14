@@ -226,6 +226,14 @@ export class RowsService {
       if (input.testStepDetail && row.rowType === "test_step") {
         await tx.testStepDetail.update({ where: { rowId }, data: input.testStepDetail });
       }
+      const suspectResult = await tx.requirementLink.updateMany({
+        where: {
+          deletedAt: null,
+          suspect: false,
+          OR: [{ sourceRowId: rowId }, { targetRowId: rowId }],
+        },
+        data: { suspect: true, suspectSince: new Date(), suspectReason: "linked row changed" },
+      });
       await this.audit.record(tx, {
         organizationId: document.organizationId,
         workspaceId: document.workspaceId,
@@ -235,7 +243,7 @@ export class RowsService {
         entityId: rowId,
         documentId: document.id,
         previousData: { title: row.title, version: row.version },
-        nextData: { title: input.title ?? row.title },
+        nextData: { title: input.title ?? row.title, suspectLinksMarked: suspectResult.count },
       });
       return tx.documentRow.findUniqueOrThrow({
         where: { id: rowId },
@@ -488,6 +496,51 @@ export class RowsService {
       });
     });
     return { ok: true };
+  }
+
+  async acknowledgeLink(actorId: string, linkId: string) {
+    const link = await this.prisma.requirementLink.findFirst({ where: { id: linkId, deletedAt: null } });
+    if (!link) throw new NotFoundException("Link not found");
+    const source = await this.requireRow(link.sourceRowId);
+    const sourceDoc = await this.requireDocument(source.documentId);
+    await this.access.assertPermission(actorId, "row.write", {
+      organizationId: sourceDoc.organizationId,
+      workspaceId: sourceDoc.workspaceId,
+    });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.requirementLink.update({
+        where: { id: linkId },
+        data: { suspect: false, suspectSince: null, suspectReason: null },
+      });
+      await this.audit.record(tx, {
+        organizationId: link.organizationId,
+        actorId,
+        action: "link.acknowledged",
+        entityType: "requirement_link",
+        entityId: linkId,
+      });
+    });
+    return { ok: true };
+  }
+
+  async listSuspectLinks(actorId: string, documentId: string) {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "row.read", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+    });
+    return this.prisma.requirementLink.findMany({
+      where: {
+        deletedAt: null,
+        suspect: true,
+        OR: [{ sourceRow: { documentId } }, { targetRow: { documentId } }],
+      },
+      include: {
+        sourceRow: { select: { id: true, title: true, documentId: true } },
+        targetRow: { select: { id: true, title: true, documentId: true } },
+      },
+      orderBy: { suspectSince: "desc" },
+    });
   }
 
   async assignProject(actorId: string, rowId: string, projectId: string) {
