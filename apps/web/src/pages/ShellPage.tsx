@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DocumentGrid } from "../components/DocumentGrid";
+import { ExportBar } from "../components/ExportBar";
 import { ResizeHandle } from "../components/ResizeHandle";
 import { RichTextEditor } from "../components/RichTextEditor";
 import { RowDetailPanel } from "../components/RowDetailPanel";
@@ -182,7 +183,12 @@ export function ShellPage() {
       <ResizeHandle side="left" ariaLabel="tree" onResize={(dx) => setTreeWidth(treeWidth + dx)} />
       <main className="flex flex-1 flex-col overflow-hidden">
         <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-2 text-sm">
-          <span className="text-mutedForeground">{view === "trash" ? t("trash") : t("documents")}</span>
+          <span className="flex items-center gap-3">
+            <span className="text-mutedForeground">{view === "trash" ? t("trash") : t("documents")}</span>
+            {selectedDocumentId && view === "documents" && !isTextDocument && (
+              <ExportBar documentId={selectedDocumentId} />
+            )}
+          </span>
           {selectedDocumentId && view === "documents" && (
             <span className="flex items-center gap-2 text-mutedForeground">
               <Users size={14} />

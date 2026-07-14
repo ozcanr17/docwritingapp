@@ -28,6 +28,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   const closeLinked = useSelectionStore((s) => s.closeLinked);
   const setRow = useSelectionStore((s) => s.setRow);
   const [description, setDescription] = useState("");
+  const [linkTarget, setLinkTarget] = useState("");
 
   const { data: row, isLoading } = useQuery({
     queryKey: ["row", rowId],
@@ -51,6 +52,19 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
     onError: (error) => {
       pushToast("error", error instanceof ApiError && error.status === 409 ? t("conflictError") : t("genericError"));
     },
+  });
+
+  const addLink = useMutation({
+    mutationFn: (targetRowId: string) =>
+      api(`/rows/${rowId}/links`, {
+        method: "POST",
+        body: JSON.stringify({ targetRowId, linkType: "verifies" }),
+      }),
+    onSuccess: () => {
+      setLinkTarget("");
+      void queryClient.invalidateQueries({ queryKey: ["row", rowId] });
+    },
+    onError: () => pushToast("error", t("genericError")),
   });
 
   if (isLoading || !row) {
@@ -129,6 +143,28 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
               })}
             </ul>
           )}
+          <form
+            className="mt-2 flex gap-1"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (linkTarget.trim()) addLink.mutate(linkTarget.trim());
+            }}
+          >
+            <input
+              data-testid="link-target"
+              className="min-w-0 flex-1 rounded border border-border bg-editorBackground px-2 py-1 text-xs"
+              placeholder={t("targetRowId")}
+              value={linkTarget}
+              onChange={(e) => setLinkTarget(e.target.value)}
+            />
+            <button
+              data-testid="link-add"
+              type="submit"
+              className="rounded bg-primary px-2 py-1 text-xs text-primaryForeground"
+            >
+              {t("add")}
+            </button>
+          </form>
         </div>
 
         {row.rowProjects.length > 0 && (

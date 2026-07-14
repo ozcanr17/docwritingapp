@@ -63,5 +63,15 @@
   "selectRow": "Select a row to see its details.",
   "newTextDocument": "New text document",
   "connected": "Connected",
-  "connecting": "Connecting..."
+  "connecting": "Connecting...",
+  "export": "Export",
+  "exportCsv": "Export as CSV",
+  "exportDocx": "Export as Word (DOCX)",
+  "importCsv": "Import CSV",
+  "exporting": "Exporting...",
+  "download": "Download",
+  "exportReady": "Export ready",
+  "addLink": "Add link",
+  "targetRowId": "Target row id",
+  "add": "Add"
 }

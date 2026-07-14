@@ -6,9 +6,11 @@ import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { apiEnv } from "./env";
 import { EventsModule } from "./events/events.module";
+import { ExportsModule } from "./exports/exports.module";
 import { HealthModule } from "./health/health.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RowsModule } from "./rows/rows.module";
+import { StorageModule } from "./storage/storage.module";
 import { TenancyModule } from "./tenancy/tenancy.module";
 import { TreeModule } from "./tree/tree.module";
 
@@ -24,12 +26,14 @@ import { TreeModule } from "./tree/tree.module";
     }),
     PrismaModule,
     EventsModule,
+    StorageModule,
     AccessModule,
     AuditModule,
     AuthModule,
     TenancyModule,
     TreeModule,
     RowsModule,
+    ExportsModule,
     HealthModule,
   ],
 })

@@ -14,6 +14,7 @@ export function Toasts() {
       {toasts.map((toast) => (
         <button
           key={toast.id}
+          data-testid={`toast-${toast.kind}`}
           onClick={() => dismiss(toast.id)}
           className={`max-w-sm rounded border-l-4 ${kindClasses[toast.kind]} border border-border bg-surfaceElevated px-4 py-2 text-left text-sm shadow-md`}
         >

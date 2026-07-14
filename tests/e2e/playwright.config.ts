@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: ".",
   testMatch: "**/*.e2e.ts",
   timeout: 60000,
+  workers: 1,
   use: {
     baseURL: "http://localhost:5173",
   },
@@ -22,6 +23,13 @@ export default defineConfig({
       reuseExistingServer: true,
       timeout: 30000,
       ignoreHTTPSErrors: true,
+    },
+    {
+      command:
+        "cd ../../apps/worker && DATABASE_URL=postgresql://docsys:docsys@localhost:5432/docsys REDIS_URL=redis://localhost:6379 S3_ENDPOINT=http://localhost:9000 S3_ACCESS_KEY=minioadmin S3_SECRET_KEY=minioadmin S3_BUCKET=docsys LOG_LEVEL=warn npx tsx src/main.ts",
+      url: "http://localhost:3003",
+      reuseExistingServer: true,
+      timeout: 30000,
     },
     {
       command: "pnpm --dir ../../apps/web dev",

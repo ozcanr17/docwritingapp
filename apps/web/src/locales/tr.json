@@ -63,5 +63,15 @@
   "selectRow": "Ayrıntıları görmek için bir satır seçin.",
   "newTextDocument": "Yeni metin dokümanı",
   "connected": "Bağlı",
-  "connecting": "Bağlanıyor..."
+  "connecting": "Bağlanıyor...",
+  "export": "Dışa aktar",
+  "exportCsv": "CSV olarak dışa aktar",
+  "exportDocx": "Word (DOCX) olarak dışa aktar",
+  "importCsv": "CSV içe aktar",
+  "exporting": "Dışa aktarılıyor...",
+  "download": "İndir",
+  "exportReady": "Dışa aktarım hazır",
+  "addLink": "Bağlantı ekle",
+  "targetRowId": "Hedef satır kimliği",
+  "add": "Ekle"
 }

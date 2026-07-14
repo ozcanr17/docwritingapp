@@ -10,6 +10,11 @@ const apiEnvSchema = z.object({
   CORS_ALLOWED_ORIGINS: z.string().default("http://localhost:5173"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   COOKIE_SECURE: z.coerce.boolean().default(false),
+  S3_ENDPOINT: z.string().url().default("http://localhost:9000"),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_BUCKET: z.string().default("docsys"),
+  S3_ACCESS_KEY: z.string().default("minioadmin"),
+  S3_SECRET_KEY: z.string().default("minioadmin"),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
