@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, LogOut, Settings, Trash2, Users } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DocumentGrid } from "../components/DocumentGrid";
@@ -38,9 +38,10 @@ export function ShellPage() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<"documents" | "trash">("documents");
   const [report, setReport] = useState<"baselines" | "coverage" | "matrix" | null>(null);
+  const closeReport = useCallback(() => setReport(null), []);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
-  const selectedRowId = useSelectionStore((s) => s.selectedRowId);
+  const detailRowId = useSelectionStore((s) => s.detailRowId);
   const linkedRowId = useSelectionStore((s) => s.linkedRowId);
   const treeWidth = useLayoutStore((s) => s.treeWidth);
   const detailWidth = useLayoutStore((s) => s.detailWidth);
@@ -117,7 +118,7 @@ export function ShellPage() {
         onOpenReport={setReport}
       />
       {report && selectedDocumentId && (
-        <ReportsDialog documentId={selectedDocumentId} tab={report} onClose={() => setReport(null)} />
+        <ReportsDialog documentId={selectedDocumentId} tab={report} onClose={closeReport} />
       )}
       <div className="flex flex-1 overflow-hidden">
       <aside className="flex w-60 flex-col bg-sidebarBackground text-sidebarForeground">
@@ -205,14 +206,14 @@ export function ShellPage() {
           <div className="p-8 text-sm text-mutedForeground">{t("trash")}</div>
         )}
       </main>
-      {view === "documents" && selectedDocumentId && (selectedRowId || linkedRowId) && (
+      {view === "documents" && selectedDocumentId && (detailRowId || linkedRowId) && (
         <>
           <ResizeHandle side="right" ariaLabel="detail" onResize={(dx) => setDetailWidth(detailWidth + dx)} />
           <aside className="flex shrink-0 flex-col border-l border-border" style={{ width: detailWidth }}>
             {linkedRowId ? (
               <RowDetailPanel rowId={linkedRowId} documentId={selectedDocumentId} variant="linked" />
-            ) : selectedRowId ? (
-              <RowDetailPanel rowId={selectedRowId} documentId={selectedDocumentId} variant="primary" />
+            ) : detailRowId ? (
+              <RowDetailPanel rowId={detailRowId} documentId={selectedDocumentId} variant="primary" />
             ) : null}
           </aside>
         </>

@@ -46,7 +46,8 @@ test("suspect links and baseline diff", async ({ page }) => {
   });
 
   // Select the test case, add a verifying link to the requirement.
-  await page.getByTestId("grid-row-2").getByTestId("cell-value-title").click();
+  await page.getByTestId("grid-row-2").click({ button: "right" });
+  await page.getByTestId("menu-detail").click();
   await expect(page.getByTestId("row-detail-primary")).toBeVisible();
   await page.getByTestId("link-target").fill(requirementId);
   await page.getByTestId("link-add").click();
@@ -70,7 +71,8 @@ test("suspect links and baseline diff", async ({ page }) => {
   await page.keyboard.press("Enter");
 
   // Open the test case detail again; its link is now suspect.
-  await page.getByTestId("grid-row-2").getByTestId("cell-value-title").click();
+  await page.getByTestId("grid-row-2").click({ button: "right" });
+  await page.getByTestId("menu-detail").click();
   await expect(page.getByTestId("suspect-badge")).toBeVisible();
   await page.getByTestId("acknowledge-link").click();
   await expect(page.getByTestId("suspect-badge")).toBeHidden();

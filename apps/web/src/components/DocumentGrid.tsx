@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, FieldDefinition, OutlineRow } from "../lib/api";
 import { BUILTIN_COLUMNS, cellValue, customColumns, GridColumn, isCellEditable, totalWidth } from "../lib/columns";
+import { insertOptions } from "../lib/outline";
 import { useColumnStore } from "../stores/columns";
 import { useSelectionStore } from "../stores/selection";
 import { useToastStore } from "../stores/toasts";
@@ -70,8 +71,12 @@ export function DocumentGrid({ documentId }: GridProps) {
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
   const setSelectedRow = useSelectionStore((s) => s.setRow);
+  const openDetail = useSelectionStore((s) => s.openDetail);
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);
   const isHidden = useColumnStore((s) => s.isHidden);
+  const widthOf = useColumnStore((s) => s.widthOf);
+  const setWidth = useColumnStore((s) => s.setWidth);
+  const storedWidths = useColumnStore((s) => s.widths[documentId]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
@@ -87,10 +92,13 @@ export function DocumentGrid({ documentId }: GridProps) {
   });
 
   const columns = useMemo(
-    () => [...BUILTIN_COLUMNS, ...customColumns(fields)].filter((c) => !isHidden(documentId, c.key)),
-    [fields, isHidden, documentId],
+    () =>
+      [...BUILTIN_COLUMNS, ...customColumns(fields)]
+        .filter((c) => !isHidden(documentId, c.key))
+        .map((c) => ({ ...c, width: storedWidths?.[c.key] ?? c.width })),
+    [fields, isHidden, documentId, storedWidths],
   );
-  const template = columns.map((c) => c.width).join(" ");
+  const template = columns.map((c) => `${c.width}px`).join(" ");
   const gridWidth = totalWidth(columns);
 
   const virtualizer = useVirtualizer({
@@ -173,13 +181,21 @@ export function DocumentGrid({ documentId }: GridProps) {
         { key: "testCase", label: t("addTestCase"), onSelect: () => addUnder("test_case", null) },
       ];
     }
+    const sections = insertOptions(rows, row).map((option, index) => ({
+      key: index === 0 ? "child" : index === 1 ? "siblingBelow" : `insert-${option.number}`,
+      label: t("insertSection", { number: option.number, type: t(rowTypeLabelKeys[option.rowType]) }),
+      onSelect: () => addUnder(option.rowType, option.parentId, option.afterRowId),
+    }));
     return [
-      { key: "child", label: t("addChild"), onSelect: () => addUnder("requirement", row.id) },
       {
-        key: "siblingBelow",
-        label: t("addSiblingBelow"),
-        onSelect: () => addUnder(row.rowType === "heading" ? "requirement" : row.rowType, row.parentId, row.id),
+        key: "detail",
+        label: t("openDetails"),
+        onSelect: () => {
+          openDetail(row.id);
+          void queryClient.invalidateQueries({ queryKey: ["row", row.id] });
+        },
       },
+      ...sections,
       { key: "heading", label: t("addHeading"), onSelect: () => addUnder("heading", row.parentId, row.id) },
       { key: "testCase", label: t("addTestCase"), onSelect: () => addUnder("test_case", row.parentId, row.id) },
       { key: "testStep", label: t("addTestStep"), onSelect: () => addUnder("test_step", row.id) },
@@ -187,6 +203,15 @@ export function DocumentGrid({ documentId }: GridProps) {
       { key: "outdent", label: t("outdent"), onSelect: () => outdent(row) },
       { key: "delete", label: t("deleteAction"), danger: true, onSelect: () => deleteRow.mutate(row) },
     ];
+  };
+
+  const moveSelection = (offset: number) => {
+    const index = rows.findIndex((r) => r.id === selectedRowId);
+    const next = rows[index === -1 ? (offset > 0 ? 0 : rows.length - 1) : index + offset];
+    if (next) {
+      setSelectedRow(next.id);
+      virtualizer.scrollToIndex(rows.indexOf(next));
+    }
   };
 
   const commitEdit = (row: OutlineRow, column: GridColumn) => {
@@ -205,19 +230,49 @@ export function DocumentGrid({ documentId }: GridProps) {
       <div
         ref={scrollRef}
         className="flex-1 overflow-auto"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (editing || event.target !== event.currentTarget) return;
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            moveSelection(1);
+          }
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            moveSelection(-1);
+          }
+        }}
         onContextMenu={(event) => {
           event.preventDefault();
           setMenu({ x: event.clientX, y: event.clientY, row: null });
         }}
       >
         <div
-          className="sticky top-0 z-10 grid gap-2 border-b border-border bg-editorBackground px-4 py-2 text-xs font-medium uppercase tracking-wide text-mutedForeground"
+          className="sticky top-0 z-10 grid gap-2 border-b border-border bg-editorBackground px-4 text-xs font-medium uppercase tracking-wide text-mutedForeground"
           style={{ gridTemplateColumns: template, width: gridWidth }}
         >
           {columns.map((column) => (
-            <span key={column.key} className="truncate">
-              {column.kind === "custom" ? column.labelKey : t(column.labelKey)}
-            </span>
+            <div key={column.key} className="relative flex items-center gap-1 overflow-hidden py-2 pr-2">
+              <span className="truncate">{column.kind === "custom" ? column.labelKey : t(column.labelKey)}</span>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                data-testid={`col-resize-${column.key}`}
+                className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize hover:bg-primary"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  const startX = event.clientX;
+                  const startWidth = widthOf(documentId, column.key) ?? column.width;
+                  const move = (e: PointerEvent) => setWidth(documentId, column.key, startWidth + e.clientX - startX);
+                  const up = () => {
+                    window.removeEventListener("pointermove", move);
+                    window.removeEventListener("pointerup", up);
+                  };
+                  window.addEventListener("pointermove", move);
+                  window.addEventListener("pointerup", up);
+                }}
+              />
+            </div>
           ))}
         </div>
         {rows.length === 0 ? (

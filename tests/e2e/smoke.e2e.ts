@@ -33,9 +33,14 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
 
   const childTitle = page.getByTestId("grid-row-1.1").getByTestId("cell-value-title");
   await childTitle.click();
+  await expect(page.getByTestId("row-detail-primary")).toBeHidden();
+  await page.getByTestId("grid-row-1.1").click({ button: "right" });
+  await expect(page.getByTestId("menu-insert-2")).toBeVisible();
+  await page.getByTestId("menu-detail").click();
   await expect(page.getByTestId("row-detail-primary")).toBeVisible();
   await expect(page.getByTestId("detail-description")).toBeVisible();
 
+  await childTitle.click();
   await childTitle.press("Enter");
   await page.getByTestId("cell-input-title").fill("System requirement");
   await page.keyboard.press("Enter");

@@ -26,7 +26,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   const pushToast = useToastStore((s) => s.push);
   const openLinked = useSelectionStore((s) => s.openLinked);
   const closeLinked = useSelectionStore((s) => s.closeLinked);
-  const setRow = useSelectionStore((s) => s.setRow);
+  const closeDetail = useSelectionStore((s) => s.closeDetail);
   const [description, setDescription] = useState("");
   const [linkTarget, setLinkTarget] = useState("");
 
@@ -40,6 +40,18 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   useEffect(() => {
     if (row) setDescription(row.description ?? "");
   }, [row]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.key !== "Escape" || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      if (document.querySelector("[data-testid=reports-dialog]")) return;
+      if (variant === "linked") closeLinked();
+      else closeDetail();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [variant, closeLinked, closeDetail]);
 
   const saveDescription = useMutation({
     mutationFn: (value: string) =>
@@ -90,7 +102,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
         <button
           aria-label={variant === "linked" ? t("backToRow") : t("closePanel")}
           className="rounded p-1 text-mutedForeground hover:bg-muted"
-          onClick={() => (variant === "linked" ? closeLinked() : setRow(null))}
+          onClick={() => (variant === "linked" ? closeLinked() : closeDetail())}
         >
           <X size={16} />
         </button>

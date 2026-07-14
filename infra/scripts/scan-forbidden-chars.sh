@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=en_US.UTF-8
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 TARGET_DIRS=("apps" "packages" "infra" "tests")

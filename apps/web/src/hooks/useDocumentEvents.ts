@@ -33,8 +33,9 @@ export function useDocumentEvents(documentId: string | null): PresenceUser[] {
         }
         if (frame.event === "domain") {
           const data = frame.data as { type: string; entityId: string; payload?: { displayName?: string } };
-          if (data.type.startsWith("row.") || data.type === "document.updated") {
+          if (data.type.startsWith("row.") || data.type.startsWith("link.") || data.type === "document.updated") {
             void queryClient.invalidateQueries({ queryKey: ["outline", documentId] });
+            void queryClient.invalidateQueries({ queryKey: ["row"] });
           }
           if (data.type === "presence.joined") {
             setPresence((current) =>
