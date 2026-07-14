@@ -15,6 +15,7 @@ interface MenuBarProps {
   isTextDocument: boolean;
   view: "documents" | "trash";
   setView: (view: "documents" | "trash") => void;
+  onOpenReport: (tab: "baselines" | "coverage") => void;
 }
 
 function slugifyKey(name: string): string {
@@ -34,7 +35,7 @@ async function pollExport(jobId: string): Promise<{ ready: boolean; status: stri
   throw new Error("timeout");
 }
 
-export function MenuBar({ documentId, isTextDocument, view, setView }: MenuBarProps) {
+export function MenuBar({ documentId, isTextDocument, view, setView, onOpenReport }: MenuBarProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
@@ -200,6 +201,11 @@ export function MenuBar({ documentId, isTextDocument, view, setView }: MenuBarPr
       onSelect: () => documentId && toggleColumn(documentId, column.key),
     }));
 
+  const analysisEntries: MenuEntry[] = [
+    { key: "baselines", label: t("baselines"), onSelect: () => onOpenReport("baselines") },
+    { key: "coverage", label: t("coverageReport"), onSelect: () => onOpenReport("coverage") },
+  ];
+
   const helpEntries: MenuEntry[] = [
     { key: "about", label: t("about"), onSelect: () => pushToast("info", `${t("appName")} — ${t("aboutText")}`) },
   ];
@@ -212,6 +218,7 @@ export function MenuBar({ documentId, isTextDocument, view, setView }: MenuBarPr
       <Menu testId="menu-view" label={t("menuView")} entries={viewEntries} />
       <Menu testId="menu-insert" label={t("menuInsert")} entries={insertEntries} />
       {gridDoc && <Menu testId="menu-columns" label={t("menuColumns")} entries={columnEntries} />}
+      {gridDoc && <Menu testId="menu-analysis" label={t("menuAnalysis")} entries={analysisEntries} />}
       <Menu testId="menu-help" label={t("menuHelp")} entries={helpEntries} />
       <input
         ref={fileInput}

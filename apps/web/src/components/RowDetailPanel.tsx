@@ -33,6 +33,8 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   const { data: row, isLoading } = useQuery({
     queryKey: ["row", rowId],
     queryFn: () => api<RowDetail>(`/rows/${rowId}`),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   useEffect(() => {

@@ -543,6 +543,36 @@ export class RowsService {
     });
   }
 
+  async coverage(actorId: string, documentId: string) {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "row.read", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+    });
+    const requirements = await this.prisma.documentRow.findMany({
+      where: { documentId, deletedAt: null, rowType: "requirement" },
+      select: {
+        id: true,
+        title: true,
+        incomingLinks: {
+          where: { deletedAt: null, linkType: "verifies" },
+          select: { id: true, suspect: true },
+        },
+      },
+    });
+    const covered = requirements.filter((r) => r.incomingLinks.length > 0);
+    const suspect = requirements.filter((r) => r.incomingLinks.some((l) => l.suspect));
+    return {
+      totalRequirements: requirements.length,
+      covered: covered.length,
+      uncovered: requirements.length - covered.length,
+      suspect: suspect.length,
+      uncoveredRows: requirements
+        .filter((r) => r.incomingLinks.length === 0)
+        .map((r) => ({ id: r.id, title: r.title })),
+    };
+  }
+
   async assignProject(actorId: string, rowId: string, projectId: string) {
     const row = await this.requireRow(rowId);
     const document = await this.requireDocument(row.documentId);

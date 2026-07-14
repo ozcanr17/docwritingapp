@@ -79,6 +79,7 @@
   "menuView": "View",
   "menuInsert": "Insert",
   "menuColumns": "Columns",
+  "menuAnalysis": "Analysis",
   "menuHelp": "Help",
   "addColumn": "Add column...",
   "addTestStep": "Add test step",

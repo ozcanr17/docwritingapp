@@ -203,6 +203,11 @@ export class RowsController {
     return this.rows.listSuspectLinks(user.userId, documentId);
   }
 
+  @Get("documents/:documentId/coverage")
+  coverage(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.rows.coverage(user.userId, documentId);
+  }
+
   @Post("rows/:rowId/projects/:projectId")
   assignProject(
     @CurrentUser() user: SessionUser,

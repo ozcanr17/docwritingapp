@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DocumentGrid } from "../components/DocumentGrid";
 import { MenuBar } from "../components/MenuBar";
+import { ReportsDialog } from "../components/ReportsDialog";
 import { ResizeHandle } from "../components/ResizeHandle";
 import { RichTextEditor } from "../components/RichTextEditor";
 import { RowDetailPanel } from "../components/RowDetailPanel";
@@ -36,6 +37,7 @@ export function ShellPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"documents" | "trash">("documents");
+  const [report, setReport] = useState<"baselines" | "coverage" | null>(null);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);
@@ -107,7 +109,16 @@ export function ShellPage() {
 
   return (
     <div className="flex h-screen flex-col">
-      <MenuBar documentId={selectedDocumentId} isTextDocument={isTextDocument} view={view} setView={setView} />
+      <MenuBar
+        documentId={selectedDocumentId}
+        isTextDocument={isTextDocument}
+        view={view}
+        setView={setView}
+        onOpenReport={setReport}
+      />
+      {report && selectedDocumentId && (
+        <ReportsDialog documentId={selectedDocumentId} tab={report} onClose={() => setReport(null)} />
+      )}
       <div className="flex flex-1 overflow-hidden">
       <aside className="flex w-60 flex-col bg-sidebarBackground text-sidebarForeground">
         <div className="px-4 py-3 text-xs uppercase tracking-wide opacity-60">

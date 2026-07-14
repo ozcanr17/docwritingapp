@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { AccessModule } from "./access/access.module";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
+import { BaselinesModule } from "./baselines/baselines.module";
 import { apiEnv } from "./env";
 import { EventsModule } from "./events/events.module";
 import { ExportsModule } from "./exports/exports.module";
@@ -34,6 +35,7 @@ import { TreeModule } from "./tree/tree.module";
     TreeModule,
     RowsModule,
     ExportsModule,
+    BaselinesModule,
     HealthModule,
   ],
 })
