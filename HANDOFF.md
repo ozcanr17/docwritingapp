@@ -32,7 +32,7 @@ An older, unrelated prototype (Python FastAPI + Next.js) exists at `workspace/re
 - `apps/worker` — BullMQ scheduled jobs: 30-day purge (batch, legal-hold aware, idempotent, child-first hard deletes, purge audit events) + snapshot compaction (keep last 5).
 - Tests: `apps/api/test/*.spec.ts` — 24 passing (auth, tenant isolation, RBAC, 409 optimistic conflicts, cycle rejection, subtree move path updates, idempotency replay, soft delete/restore, link lifecycle, custom field validation, audit, concurrent move, WS auth + event delivery). `apps/worker/test/purge.spec.ts` — 5 passing. `tests/performance/collab-load.mjs` — **50-client Yjs load test PASSED** (sync 76 ms, convergence 105 ms, snapshot persisted).
 - `infra/docker/Dockerfile.{api,collaboration,worker}` + `docker-compose.full.yml` (written, **images never built** — do that or fix findings when asked).
-- `.github/workflows/ci.yml` — install → prisma validate → typecheck → char scan → api + worker tests (never executed yet; first push will run it).
+- CI workflow (install → prisma validate → typecheck → char scan → api + worker tests) — currently parked at `infra/github-ci.yml`; see the note at the bottom of this file for how to activate it.
 
 ## 3. How to run everything locally (this machine)
 
