@@ -52,15 +52,20 @@ export function buildServer() {
     debounce: 2000,
     maxDebounce: 10000,
     async onAuthenticate(data) {
-      const payload = jwt.verify(data.token, env.JWT_SECRET) as { sub?: string };
-      if (!payload.sub) throw new Error("Invalid token");
-      const user = await prisma.user.findFirst({
-        where: { id: payload.sub, deletedAt: null, isActive: true },
-      });
-      if (!user) throw new Error("Unknown user");
-      const allowed = await hasDocumentReadPermission(prisma, user.id, data.documentName);
-      if (!allowed) throw new Error("Forbidden");
-      return { userId: user.id, displayName: user.displayName };
+      try {
+        const payload = jwt.verify(data.token, env.JWT_SECRET) as { sub?: string };
+        if (!payload.sub) throw new Error("Invalid token");
+        const user = await prisma.user.findFirst({
+          where: { id: payload.sub, deletedAt: null, isActive: true },
+        });
+        if (!user) throw new Error("Unknown user");
+        const allowed = await hasDocumentReadPermission(prisma, user.id, data.documentName);
+        if (!allowed) throw new Error("Forbidden");
+        return { userId: user.id, displayName: user.displayName };
+      } catch (error) {
+        logger.warn({ documentName: data.documentName, error: (error as Error).message }, "collab auth rejected");
+        throw error;
+      }
     },
     extensions: [
       new Database({

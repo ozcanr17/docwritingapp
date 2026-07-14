@@ -59,6 +59,11 @@ export class AuthController {
     return this.auth.profile(user.userId);
   }
 
+  @Get("collab-token")
+  collabToken(@CurrentUser() user: SessionUser) {
+    return this.auth.collabToken(user.userId, user.email);
+  }
+
   private setCookie(reply: FastifyReply, token: string): void {
     reply.setCookie(SESSION_COOKIE, token, {
       httpOnly: true,

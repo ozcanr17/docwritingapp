@@ -43,6 +43,11 @@ export class AuthService {
     return user;
   }
 
+  async collabToken(userId: string, email: string): Promise<{ token: string }> {
+    const token = await this.jwt.signAsync({ sub: userId, email }, { expiresIn: "1h" });
+    return { token };
+  }
+
   private async issue(id: string, email: string, displayName: string, locale: string): Promise<AuthResult> {
     const token = await this.jwt.signAsync({ sub: id, email });
     return { token, user: { id, email, displayName, locale } };

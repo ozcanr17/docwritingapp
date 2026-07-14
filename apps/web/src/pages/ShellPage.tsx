@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DocumentGrid } from "../components/DocumentGrid";
 import { ResizeHandle } from "../components/ResizeHandle";
+import { RichTextEditor } from "../components/RichTextEditor";
 import { RowDetailPanel } from "../components/RowDetailPanel";
 import { TrashPanel } from "../components/TrashPanel";
 import { TreePanel } from "../components/TreePanel";
@@ -69,6 +70,13 @@ export function ShellPage() {
 
   const workspaceId = workspaces.data?.[0]?.id ?? null;
   const presence = useDocumentEvents(selectedDocumentId);
+
+  const selectedDocument = useQuery({
+    queryKey: ["document", selectedDocumentId],
+    queryFn: () => api<{ id: string; documentType: string }>(`/documents/${selectedDocumentId}`),
+    enabled: selectedDocumentId !== null,
+  });
+  const isTextDocument = selectedDocument.data?.documentType === "general_document";
 
   const bootstrap = useMutation({
     mutationFn: async (input: { orgName: string; workspaceName: string }) => {
@@ -196,7 +204,11 @@ export function ShellPage() {
           )}
         </header>
         {view === "documents" && selectedDocumentId ? (
-          <DocumentGrid documentId={selectedDocumentId} />
+          isTextDocument ? (
+            <RichTextEditor documentId={selectedDocumentId} displayName={profile.data.displayName} />
+          ) : (
+            <DocumentGrid documentId={selectedDocumentId} />
+          )
         ) : view === "documents" ? (
           <div className="p-8 text-sm text-mutedForeground">{t("selectDocument")}</div>
         ) : (

@@ -16,6 +16,14 @@ export default defineConfig({
       timeout: 30000,
     },
     {
+      command:
+        "cd ../../apps/collaboration && DATABASE_URL=postgresql://docsys:docsys@localhost:5432/docsys JWT_SECRET=dev-secret-at-least-16-chars COLLAB_PORT=3002 LOG_LEVEL=warn npx tsx src/main.ts",
+      url: "http://localhost:3002",
+      reuseExistingServer: true,
+      timeout: 30000,
+      ignoreHTTPSErrors: true,
+    },
+    {
       command: "pnpm --dir ../../apps/web dev",
       url: "http://localhost:5173",
       reuseExistingServer: true,

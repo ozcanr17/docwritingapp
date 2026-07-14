@@ -60,5 +60,8 @@
   "restoreFolder": "Klasörü geri getir",
   "emptyTrash": "Çöp kutusu boş.",
   "deletedAt": "Silinme tarihi",
-  "selectRow": "Ayrıntıları görmek için bir satır seçin."
+  "selectRow": "Ayrıntıları görmek için bir satır seçin.",
+  "newTextDocument": "Yeni metin dokümanı",
+  "connected": "Bağlı",
+  "connecting": "Bağlanıyor..."
 }

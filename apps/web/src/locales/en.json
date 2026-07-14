@@ -60,5 +60,8 @@
   "restoreFolder": "Restore folder",
   "emptyTrash": "Trash is empty.",
   "deletedAt": "Deleted at",
-  "selectRow": "Select a row to see its details."
+  "selectRow": "Select a row to see its details.",
+  "newTextDocument": "New text document",
+  "connected": "Connected",
+  "connecting": "Connecting..."
 }

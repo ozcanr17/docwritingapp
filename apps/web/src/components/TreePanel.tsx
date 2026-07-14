@@ -31,6 +31,7 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
     const items: MenuItem[] = [
       { key: "newFolder", label: t("newFolder"), onSelect: () => createNode(state.folderId, "folder") },
       { key: "newDocument", label: t("newDocument"), onSelect: () => createNode(state.folderId, "document") },
+      { key: "newTextDocument", label: t("newTextDocument"), onSelect: () => createNode(state.folderId, "textDocument") },
     ];
     if (state.documentId) {
       items.push({
@@ -47,8 +48,10 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   const invalidateBranch = (parentId: string | null) =>
     queryClient.invalidateQueries({ queryKey: ["tree", workspaceId, parentId] });
 
-  const createNode = (parentId: string | null, kind: "folder" | "document") => {
-    const name = window.prompt(kind === "folder" ? t("newFolder") : t("newDocument"));
+  const createNode = (parentId: string | null, kind: "folder" | "document" | "textDocument") => {
+    const promptLabel =
+      kind === "folder" ? t("newFolder") : kind === "textDocument" ? t("newTextDocument") : t("newDocument");
+    const name = window.prompt(promptLabel);
     if (!name) return;
     const request =
       kind === "folder"
@@ -58,7 +61,11 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
           })
         : api(`/workspaces/${workspaceId}/documents`, {
             method: "POST",
-            body: JSON.stringify({ title: name, documentType: "requirement", folderId: parentId }),
+            body: JSON.stringify({
+              title: name,
+              documentType: kind === "textDocument" ? "general_document" : "requirement",
+              folderId: parentId,
+            }),
           });
     void request.then(() => invalidateBranch(parentId));
   };
