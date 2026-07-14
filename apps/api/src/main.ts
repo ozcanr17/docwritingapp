@@ -22,7 +22,11 @@ export async function createApp(): Promise<NestFastifyApplication> {
   await app.register(fastifyHelmet as never, { contentSecurityPolicy: false } as never);
   await app.register(fastifyRateLimit as never, { max: 600, timeWindow: "1 minute" } as never);
   app.useWebSocketAdapter(new WsAdapter(app));
-  app.enableCors({ origin: env.CORS_ALLOWED_ORIGINS.split(","), credentials: true });
+  app.enableCors({
+    origin: env.CORS_ALLOWED_ORIGINS.split(","),
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+  });
   app.enableShutdownHooks();
   const openApiConfig = new DocumentBuilder()
     .setTitle("ReqTrack API")

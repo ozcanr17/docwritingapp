@@ -12,7 +12,7 @@ The full product specification lives in the original prompt and is summarized ac
 
 - Phase 1 — Architecture + database: **DONE and approved.**
 - Phase 2 — Backend, authorization, realtime: **DONE (this session), awaiting approval.**
-- Phase 3 — Frontend core (React shell, themes, tree, virtualized grid, Tiptap editor, optimistic UI): **NOT STARTED. This is next, only after approval.**
+- Phase 3 — Frontend core: **CORE DELIVERED** (apps/web: shell, themes, i18n-TR, tree, virtualized grid, optimistic UI + 409 handling, presence, component tests, Playwright e2e passing). Remaining inside Phase 3 scope: Tiptap+Yjs rich text, dnd-kit drag-drop, resizable persisted panels, split-screen linked viewer, trash UI, fuller a11y. Approval pending.
 - Phase 4 — Traceability, DOCX/CSV/XLSX import-export, attachments: NOT STARTED.
 
 An older, unrelated prototype (Python FastAPI + Next.js) exists at `workspace/reqtrack` — treat it as read-only reference; never modify it. This repo is the v2 rewrite from scratch.
@@ -52,7 +52,7 @@ Load test: start collab server with test-DB env (`DATABASE_URL=...reqtrack_v2_te
 
 ## 4. Where we are right now / what is unfinished
 
-- **Phase 2 report was not yet delivered to Rıdvan and approval for Phase 3 not requested/granted.** The immediate next action of a new session: summarize Phase 2 (files, tests, limitations below), ask for approval, and STOP until approved.
+- Phase 2 was reported; user said to proceed to Phase 3. Phase 3 core is delivered and reported; Phase 3 completion items above remain.
 - ESLint is configured nowhere yet (deliberately deferred to save budget; disclose it). Add flat-config typescript-eslint at root in Phase 3.
 - Docker images (`Dockerfile.*`) and `docker-compose.full.yml` are unbuilt/untested.
 - OpenAPI docs are shallow (no per-DTO schemas — zod is the source of truth; consider zod-to-openapi later).

@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 220 20% 98%;
+  --foreground: 224 20% 12%;
+  --surface: 0 0% 100%;
+  --surface-elevated: 0 0% 100%;
+  --border: 220 14% 88%;
+  --muted: 220 14% 94%;
+  --muted-foreground: 222 10% 42%;
+  --primary: 222 72% 48%;
+  --primary-foreground: 0 0% 100%;
+  --destructive: 0 68% 50%;
+  --warning: 38 92% 45%;
+  --success: 152 60% 36%;
+  --info: 204 80% 44%;
+  --focus-ring: 222 72% 55%;
+  --selection: 222 72% 92%;
+  --sidebar-background: 222 22% 14%;
+  --sidebar-foreground: 220 15% 88%;
+  --editor-background: 0 0% 100%;
+}
+
+.dark {
+  --background: 224 18% 9%;
+  --foreground: 220 15% 90%;
+  --surface: 224 16% 12%;
+  --surface-elevated: 224 16% 16%;
+  --border: 223 12% 24%;
+  --muted: 223 14% 18%;
+  --muted-foreground: 222 8% 62%;
+  --primary: 218 80% 62%;
+  --primary-foreground: 224 20% 10%;
+  --destructive: 0 62% 56%;
+  --warning: 38 85% 55%;
+  --success: 152 50% 46%;
+  --info: 204 75% 56%;
+  --focus-ring: 218 80% 66%;
+  --selection: 220 45% 26%;
+  --sidebar-background: 225 20% 7%;
+  --sidebar-foreground: 220 15% 85%;
+  --editor-background: 224 16% 11%;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+*:focus-visible {
+  outline: 2px solid hsl(var(--focus-ring));
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

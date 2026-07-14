@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "tsx watch src/main.ts",
+    "dev": "tsc -p tsconfig.json && node --enable-source-maps dist/main.js",
     "start": "node dist/main.js",
     "test": "vitest run",
     "test:watch": "vitest"
