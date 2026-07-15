@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { WS_URL } from "../lib/api";
+import { getSessionToken, getWsUrl } from "../lib/api";
 
 export interface PresenceUser {
   userId: string;
@@ -18,7 +18,8 @@ export function useDocumentEvents(documentId: string | null): PresenceUser[] {
     let closed = false;
 
     const connect = () => {
-      socket = new WebSocket(`${WS_URL}/ws/events`);
+      const token = getSessionToken();
+      socket = new WebSocket(`${getWsUrl()}/ws/events`, token ? ["docsys.events", `docsys.jwt.${token}`] : ["docsys.events"]);
       socket.onopen = () => {
         socket?.send(JSON.stringify({ event: "join", data: { documentId } }));
         heartbeat = setInterval(() => {

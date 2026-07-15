@@ -1,6 +1,7 @@
 import { PrismaClient } from "@docsys/database";
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { StorageService } from "../src/storage/storage.service";
 import { buildApp, createDocument, createOrgWorkspaceDocument, registerActor, resetDatabase, TestActor } from "./helpers";
 
 describe("lifecycle capabilities", () => {
@@ -52,5 +53,36 @@ describe("lifecycle capabilities", () => {
     await app.inject({ method: "PATCH", url: `/executions/${execution.id}/steps/${step.id}`, headers: { cookie: actor.cookie }, payload: { status: "passed", actualResult: "Stopped" } });
     const complete = await app.inject({ method: "POST", url: `/executions/${execution.id}/complete`, headers: { cookie: actor.cookie } });
     expect(JSON.parse(complete.body).status).toBe("passed");
+  });
+
+  it("sanitizes attachment names and verifies uploaded object metadata", async () => {
+    const rowResponse = await app.inject({
+      method: "POST",
+      url: `/documents/${requirementDocumentId}/rows`,
+      headers: { cookie: actor.cookie },
+      payload: { rowType: "requirement", title: "Attachment target", parentId: null },
+    });
+    const row = JSON.parse(rowResponse.body) as { id: string };
+    const createdResponse = await app.inject({
+      method: "POST",
+      url: `/rows/${row.id}/attachments`,
+      headers: { cookie: actor.cookie },
+      payload: { fileName: "../report\r\n.pdf", contentType: "application/pdf", sizeBytes: 4 },
+    });
+    expect(createdResponse.statusCode).toBe(201);
+    const created = JSON.parse(createdResponse.body) as { id: string };
+    const stored = await prisma.attachment.findUniqueOrThrow({ where: { id: created.id } });
+    expect(stored.fileName).toBe("..-report.pdf");
+
+    const storage = app.get(StorageService);
+    const stat = vi.spyOn(storage, "statObject").mockResolvedValue({ size: 5, metaData: { "content-type": "application/pdf" } } as never);
+    vi.spyOn(storage, "removeObject").mockResolvedValue(undefined);
+    const rejected = await app.inject({ method: "POST", url: `/attachments/${created.id}/complete`, headers: { cookie: actor.cookie } });
+    expect(rejected.statusCode).toBe(422);
+
+    stat.mockResolvedValue({ size: 4, metaData: { "content-type": "application/pdf" } } as never);
+    const completed = await app.inject({ method: "POST", url: `/attachments/${created.id}/complete`, headers: { cookie: actor.cookie } });
+    expect(completed.statusCode).toBe(201);
+    vi.restoreAllMocks();
   });
 });

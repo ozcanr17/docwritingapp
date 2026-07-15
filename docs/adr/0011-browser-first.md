@@ -1,6 +1,6 @@
 # ADR 0011 — Browser-First Cross-Platform Strategy
 
-**Status:** Accepted
+**Status:** Superseded by ADR 0012
 
 ## Context
 Users are on Windows, Linux, and macOS; DOORS-class tools historically suffered from thick-client distribution pain. On-prem installs must be trivial.

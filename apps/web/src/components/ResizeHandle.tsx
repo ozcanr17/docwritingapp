@@ -4,9 +4,12 @@ interface ResizeHandleProps {
   onResize: (deltaX: number) => void;
   side: "left" | "right";
   ariaLabel: string;
+  value: number;
+  min: number;
+  max: number;
 }
 
-export function ResizeHandle({ onResize, side, ariaLabel }: ResizeHandleProps) {
+export function ResizeHandle({ onResize, side, ariaLabel, value, min, max }: ResizeHandleProps) {
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -28,6 +31,9 @@ export function ResizeHandle({ onResize, side, ariaLabel }: ResizeHandleProps) {
       role="separator"
       aria-label={ariaLabel}
       aria-orientation="vertical"
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={Math.round(value)}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onKeyDown={(e) => {

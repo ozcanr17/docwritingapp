@@ -155,6 +155,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
       });
       const response = await fetch(created.uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type || "application/octet-stream" } });
       if (!response.ok) throw new Error("upload failed");
+      await api(`/attachments/${created.id}/complete`, { method: "POST" });
       await queryClient.invalidateQueries({ queryKey: ["attachments", rowId] });
     } catch {
       pushToast("error", t("genericError"));

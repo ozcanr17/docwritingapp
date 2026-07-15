@@ -68,6 +68,26 @@ describe("domain event websocket", () => {
     socket.close();
   });
 
+  it("authenticates desktop event sockets without putting tokens in the URL", async () => {
+    const login = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      headers: { "x-docsys-client": "desktop" },
+      payload: { identifier: actor.email, password: "password-123" },
+    });
+    const token = (JSON.parse(login.body) as { token: string }).token;
+    const socket = new WebSocket(`ws://${baseUrl}/ws/events`, ["docsys.events", `docsys.jwt.${token}`]);
+    await new Promise<void>((resolve, reject) => {
+      socket.on("open", resolve);
+      socket.on("error", reject);
+    });
+    const events: Array<{ event: string }> = [];
+    socket.on("message", (raw) => events.push(JSON.parse(String(raw))));
+    socket.send(JSON.stringify({ event: "join", data: { documentId } }));
+    await waitFor(() => events.some((event) => event.event === "joined"));
+    socket.close();
+  });
+
   it("refuses joining a document from another tenant", async () => {
     const outsider = await registerActor(app, "ws-outsider");
     const socket = connect(outsider.cookie);

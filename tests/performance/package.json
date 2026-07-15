@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "collab-load": "node collab-load.mjs"
+    "collab-load": "node collab-load.mjs",
+    "large-document": "node large-document.mjs"
   },
   "dependencies": {
     "@hocuspocus/provider": "^2.15.2",

@@ -6,7 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as Y from "yjs";
-import { api, COLLAB_URL } from "../lib/api";
+import { api, getCollabUrl } from "../lib/api";
 
 interface RichTextEditorProps {
   documentId: string;
@@ -34,7 +34,7 @@ export function RichTextEditor({ documentId, displayName }: RichTextEditorProps)
   useEffect(() => {
     const ydoc = new Y.Doc();
     const provider = new HocuspocusProvider({
-      url: COLLAB_URL,
+      url: getCollabUrl(),
       name: documentId,
       document: ydoc,
       token: async () => (await api<{ token: string }>("/auth/collab-token")).token,

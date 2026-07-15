@@ -20,16 +20,18 @@ export class AuthService {
   ) {}
 
   async register(email: string, displayName: string, password: string): Promise<AuthResult> {
-    const existing = await this.prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = email.trim().toLocaleLowerCase("en");
+    const existing = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) throw new ConflictException("Email already registered");
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await this.prisma.user.create({
-      data: { email, displayName, passwordHash },
+      data: { email: normalizedEmail, displayName, passwordHash },
     });
     return this.issue(user.id, user.email, user.displayName, user.locale);
   }
 
-  async login(email: string, password: string): Promise<AuthResult> {
+  async login(identifier: string, password: string): Promise<AuthResult> {
+    const email = this.resolveLoginEmail(identifier);
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.passwordHash || user.deletedAt || !user.isActive) {
       throw new UnauthorizedException("Invalid credentials");
@@ -37,6 +39,13 @@ export class AuthService {
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new UnauthorizedException("Invalid credentials");
     return this.issue(user.id, user.email, user.displayName, user.locale);
+  }
+
+  private resolveLoginEmail(identifier: string): string {
+    const normalized = identifier.trim().toLocaleLowerCase("en");
+    if (normalized.includes("@")) return normalized;
+    if (!/^[a-z0-9._-]+$/.test(normalized)) throw new UnauthorizedException("Invalid credentials");
+    return `${normalized}@docsys.local`;
   }
 
   async profile(userId: string) {

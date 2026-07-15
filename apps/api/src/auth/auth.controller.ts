@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Res } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Headers, Param, Post, Query, Res } from "@nestjs/common";
 import { FastifyReply } from "fastify";
 import { z } from "zod";
 import { ZodBodyPipe } from "../common/zod-body.pipe";
@@ -15,9 +15,10 @@ const registerSchema = z.object({
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
+  identifier: z.string().trim().min(1).max(254).optional(),
+  email: z.string().trim().min(1).max(254).optional(),
+  password: z.string().min(1).max(200),
+}).refine((value) => Boolean(value.identifier || value.email), { message: "Identifier is required" });
 
 type RegisterInput = z.infer<typeof registerSchema>;
 type LoginInput = z.infer<typeof loginSchema>;
@@ -30,22 +31,34 @@ export class AuthController {
   @Post("register")
   async register(
     @Body(new ZodBodyPipe(registerSchema)) body: RegisterInput,
+    @Headers("x-docsys-client") client: string | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
+    const env = apiEnv();
+    if (env.NODE_ENV === "production" && !env.ALLOW_PUBLIC_REGISTRATION) {
+      throw new ForbiddenException("Public registration is disabled");
+    }
     const result = await this.auth.register(body.email, body.displayName, body.password);
     this.setCookie(reply, result.token);
-    return { user: result.user };
+    return client === "desktop" ? { user: result.user, token: result.token } : { user: result.user };
   }
 
   @Public()
   @Post("login")
   async login(
     @Body(new ZodBodyPipe(loginSchema)) body: LoginInput,
+    @Headers("x-docsys-client") client: string | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
-    const result = await this.auth.login(body.email, body.password);
+    const result = await this.auth.login(body.identifier ?? body.email ?? "", body.password);
     this.setCookie(reply, result.token);
-    return { user: result.user };
+    return client === "desktop" ? { user: result.user, token: result.token } : { user: result.user };
+  }
+
+  @Public()
+  @Get("client-config")
+  clientConfig() {
+    return { collaborationUrl: apiEnv().COLLAB_PUBLIC_URL };
   }
 
   @Public()

@@ -19,22 +19,28 @@ export async function createApp(): Promise<NestFastifyApplication> {
   );
   app.useLogger(app.get(Logger));
   await app.register(fastifyCookie as never, { secret: env.JWT_SECRET } as never);
-  await app.register(fastifyHelmet as never, { contentSecurityPolicy: false } as never);
-  await app.register(fastifyRateLimit as never, { max: 600, timeWindow: "1 minute" } as never);
+  await app.register(fastifyHelmet as never, (env.NODE_ENV === "production" ? {} : { contentSecurityPolicy: false }) as never);
+  await app.register(fastifyRateLimit as never, {
+    max: (request: { url: string }) => /^\/auth\/(login|register)$/.test(request.url) ? 20 : 600,
+    timeWindow: (request: { url: string }) => /^\/auth\/(login|register)$/.test(request.url) ? 15 * 60 * 1000 : 60 * 1000,
+    keyGenerator: (request: { ip: string; url: string }) => `${request.ip}:${/^\/auth\/(login|register)$/.test(request.url) ? "auth" : "general"}`,
+  } as never);
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableCors({
-    origin: env.CORS_ALLOWED_ORIGINS.split(","),
+    origin: [...env.CORS_ALLOWED_ORIGINS.split(",").map((value) => value.trim()), "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"],
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   });
   app.enableShutdownHooks();
-  const openApiConfig = new DocumentBuilder()
-    .setTitle("DocSys API")
-    .setDescription("Requirements, test, and document management API")
-    .setVersion("0.1.0")
-    .addCookieAuth("docsys_session")
-    .build();
-  SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, openApiConfig));
+  if (env.NODE_ENV !== "production") {
+    const openApiConfig = new DocumentBuilder()
+      .setTitle("DocSys API")
+      .setDescription("Requirements, test, and document management API")
+      .setVersion("0.1.0")
+      .addCookieAuth("docsys_session")
+      .build();
+    SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, openApiConfig));
+  }
   return app;
 }
 

@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import {
   ChangeProposalStatus,
   ConfigurationKind,
@@ -358,13 +358,20 @@ export class LifecycleService {
   ) {
     const context = await this.requireRowContext(rowId);
     await this.assertDocument(actorId, context.document, "row.write");
+    const fileName = [...input.fileName]
+      .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
+      .join("")
+      .replace(/[/\\]/g, "-")
+      .trim()
+      .slice(0, 255);
+    if (!fileName || fileName === "." || fileName === "..") throw new BadRequestException("Invalid file name");
     const storageKey = `attachments/${context.document.organizationId}/${rowId}/${randomUUID()}`;
     const attachment = await this.prisma.attachment.create({
       data: {
         organizationId: context.document.organizationId,
         documentId: context.document.id,
         rowId,
-        fileName: input.fileName,
+        fileName,
         contentType: input.contentType,
         sizeBytes: BigInt(input.sizeBytes),
         storageKey,
@@ -379,7 +386,19 @@ export class LifecycleService {
     };
   }
 
+  async completeAttachment(actorId: string, attachmentId: string) {
+    const attachment = await this.requireAttachment(actorId, attachmentId, "document.write");
+    await this.assertAttachmentObject(attachment.storageKey, Number(attachment.sizeBytes), attachment.contentType, attachment.checksum);
+    return { ok: true };
+  }
+
   async downloadAttachment(actorId: string, attachmentId: string) {
+    const attachment = await this.requireAttachment(actorId, attachmentId, "document.read");
+    await this.assertAttachmentObject(attachment.storageKey, Number(attachment.sizeBytes), attachment.contentType, attachment.checksum);
+    return { url: await this.storage.presignedDownloadUrl(attachment.storageKey, attachment.fileName) };
+  }
+
+  private async requireAttachment(actorId: string, attachmentId: string, permission: "document.read" | "document.write") {
     const attachment = await this.prisma.attachment.findFirst({
       where: { id: attachmentId, deletedAt: null },
       include: { row: { include: { document: true } }, document: true },
@@ -387,8 +406,26 @@ export class LifecycleService {
     if (!attachment) throw new NotFoundException("Attachment not found");
     const document = attachment.row?.document ?? attachment.document;
     if (!document) throw new NotFoundException("Attachment document not found");
-    await this.assertDocument(actorId, document, "document.read");
-    return { url: await this.storage.presignedDownloadUrl(attachment.storageKey, attachment.fileName) };
+    await this.assertDocument(actorId, document, permission);
+    return attachment;
+  }
+
+  private async assertAttachmentObject(storageKey: string, expectedSize: number, expectedContentType: string, checksum: string | null): Promise<void> {
+    let stat: Awaited<ReturnType<StorageService["statObject"]>>;
+    try {
+      stat = await this.storage.statObject(storageKey);
+    } catch {
+      throw new UnprocessableEntityException("Attachment upload is incomplete");
+    }
+    const actualType = String(stat.metaData?.["content-type"] ?? "application/octet-stream").toLowerCase();
+    if (stat.size !== expectedSize || actualType !== expectedContentType.toLowerCase()) {
+      await this.storage.removeObject(storageKey).catch(() => undefined);
+      throw new UnprocessableEntityException("Uploaded attachment does not match its declaration");
+    }
+    if (checksum && await this.storage.sha256Object(storageKey) !== checksum.toLowerCase()) {
+      await this.storage.removeObject(storageKey).catch(() => undefined);
+      throw new UnprocessableEntityException("Uploaded attachment checksum does not match");
+    }
   }
 
   async deleteAttachment(actorId: string, attachmentId: string) {

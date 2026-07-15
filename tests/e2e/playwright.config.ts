@@ -32,7 +32,7 @@ export default defineConfig({
       timeout: 30000,
     },
     {
-      command: "pnpm --dir ../../apps/web dev",
+      command: "VITE_DESKTOP_MODE=true pnpm --dir ../../apps/web dev",
       url: "http://localhost:5173",
       reuseExistingServer: true,
       timeout: 30000,

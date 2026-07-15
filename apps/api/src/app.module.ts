@@ -10,6 +10,7 @@ import { EventsModule } from "./events/events.module";
 import { ExportsModule } from "./exports/exports.module";
 import { HealthModule } from "./health/health.module";
 import { LifecycleModule } from "./lifecycle/lifecycle.module";
+import { PerformanceModule } from "./performance/performance.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RowsModule } from "./rows/rows.module";
 import { StorageModule } from "./storage/storage.module";
@@ -22,7 +23,7 @@ import { TreeModule } from "./tree/tree.module";
       pinoHttp: {
         level: apiEnv().LOG_LEVEL,
         genReqId: (req) => (req.headers["x-request-id"] as string | undefined) ?? randomUUID(),
-        redact: ["req.headers.cookie", "req.headers.authorization"],
+        redact: ["req.headers.cookie", "req.headers.authorization", "req.headers.sec-websocket-protocol"],
         autoLogging: apiEnv().NODE_ENV !== "test",
       },
     }),
@@ -38,6 +39,7 @@ import { TreeModule } from "./tree/tree.module";
     ExportsModule,
     BaselinesModule,
     LifecycleModule,
+    PerformanceModule,
     HealthModule,
   ],
 })

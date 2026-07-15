@@ -1,10 +1,16 @@
 node_modules/
 dist/
+target/
+apps/desktop/src-tauri/gen/schemas/
 .turbo/
 .env
 .env.local
 *.log
 coverage/
+artifacts/
+tests/performance/large-document-results.json
+docs/guide/.generated-assets/
 .DS_Store
 .dev-logs/
 .dev-pids
+tmp/

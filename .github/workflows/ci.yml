@@ -1,12 +1,15 @@
-name: ci
+name: web-api-ci
 
 on:
   push:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  build-and-test:
+  verify:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -46,14 +49,5 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @docsys/database validate
-      - run: pnpm --filter @docsys/database generate
-      - run: pnpm --filter @docsys/database build
-      - run: pnpm --filter @docsys/config build
-      - run: pnpm -r --filter "./apps/*" typecheck
-      - run: pnpm lint
-      - run: bash infra/scripts/scan-forbidden-chars.sh
-      - run: pnpm --filter @docsys/api test
-      - run: pnpm --filter @docsys/worker test
-      - run: pnpm --filter @docsys/web test
-      - run: pnpm build
+      - run: pnpm --filter @docsys/database migrate:deploy
+      - run: pnpm verify

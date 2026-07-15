@@ -1,6 +1,79 @@
-export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
-export const WS_URL = API_URL.replace(/^http/, "ws");
-export const COLLAB_URL = import.meta.env.VITE_COLLAB_URL ?? "ws://localhost:3002";
+const DEFAULT_API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+const DEFAULT_COLLAB_URL = import.meta.env.VITE_COLLAB_URL ?? "ws://localhost:3002";
+const SERVER_STORAGE_KEY = "docsys.serverUrl";
+const TOKEN_STORAGE_KEY = "docsys.desktopSession";
+
+let apiUrl = readStorage("localStorage", SERVER_STORAGE_KEY) || DEFAULT_API_URL;
+let collabUrl = DEFAULT_COLLAB_URL;
+let sessionToken = readStorage("sessionStorage", TOKEN_STORAGE_KEY);
+
+function readStorage(kind: "localStorage" | "sessionStorage", key: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window[kind].getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStorage(kind: "localStorage" | "sessionStorage", key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value) window[kind].setItem(key, value);
+    else window[kind].removeItem(key);
+  } catch {
+    return;
+  }
+}
+
+function normalizeServerUrl(value: string): string {
+  const normalized = value.trim().replace(/\/+$/, "");
+  if (!normalized) return DEFAULT_API_URL;
+  const parsed = new URL(normalized);
+  if (!(["http:", "https:"] as string[]).includes(parsed.protocol)) throw new Error("Invalid server protocol");
+  return parsed.toString().replace(/\/$/, "");
+}
+
+export function getApiUrl(): string {
+  return apiUrl;
+}
+
+export function getWsUrl(): string {
+  return apiUrl.replace(/^http/, "ws");
+}
+
+export function getCollabUrl(): string {
+  return collabUrl;
+}
+
+export function getServerAddress(): string {
+  return readStorage("localStorage", SERVER_STORAGE_KEY);
+}
+
+export function getSessionToken(): string {
+  return sessionToken;
+}
+
+export function setServerAddress(value: string): void {
+  apiUrl = normalizeServerUrl(value);
+  collabUrl = DEFAULT_COLLAB_URL;
+  writeStorage("localStorage", SERVER_STORAGE_KEY, value.trim() ? apiUrl : "");
+}
+
+export function setSessionToken(token: string | null): void {
+  sessionToken = token ?? "";
+  writeStorage("sessionStorage", TOKEN_STORAGE_KEY, sessionToken);
+}
+
+export async function refreshClientConfig(): Promise<void> {
+  const response = await fetch(`${apiUrl}/auth/client-config`, { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error("Client configuration unavailable");
+  const payload = (await response.json()) as { collaborationUrl?: string };
+  if (!payload.collaborationUrl || !/^wss?:\/\//.test(payload.collaborationUrl)) {
+    throw new Error("Invalid collaboration URL");
+  }
+  collabUrl = payload.collaborationUrl.replace(/\/+$/, "");
+}
 
 export class ApiError extends Error {
   constructor(
@@ -13,10 +86,11 @@ export class ApiError extends Error {
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { headers, body, ...rest } = options;
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${apiUrl}${path}`, {
     credentials: "include",
     headers: {
       ...(body !== undefined && body !== null ? { "Content-Type": "application/json" } : {}),
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
       ...(headers ?? {}),
     },
     ...(body !== undefined ? { body } : {}),

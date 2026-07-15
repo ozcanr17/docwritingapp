@@ -8,7 +8,7 @@ import { ResizeHandle } from "../components/ResizeHandle";
 import { TrashPanel } from "../components/TrashPanel";
 import { TreePanel } from "../components/TreePanel";
 import { useDocumentEvents } from "../hooks/useDocumentEvents";
-import { api, DocumentType } from "../lib/api";
+import { api, DocumentType, setSessionToken } from "../lib/api";
 import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
 
@@ -150,11 +150,11 @@ export function ShellPage() {
         {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} onClose={() => setSettingsOpen(false)} />}
       </Suspense>
       <div className="flex flex-1 gap-1.5 overflow-hidden p-2 pt-1.5">
-      <aside className="flex w-56 flex-col rounded-xl border border-border bg-sidebarBackground text-sidebarForeground shadow-sm">
-        <div className="px-4 py-3 text-xs uppercase tracking-wide opacity-60">
+      <aside aria-label={t("primaryNavigation")} className="flex w-56 flex-col rounded-xl border border-border bg-sidebarBackground text-sidebarForeground shadow-sm">
+        <div className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-sidebarForeground">
           {workspaces.data?.[0]?.name ?? "—"}
         </div>
-        <nav className="flex-1 px-2 text-sm">
+        <nav aria-label={t("primaryNavigation")} className="flex-1 px-2 text-sm">
           <SidebarItem
             icon={<FileText size={15} />}
             label={t("documents")}
@@ -178,6 +178,7 @@ export function ShellPage() {
             className="flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-white/10"
             onClick={async () => {
               await api("/auth/logout", { method: "POST" });
+              setSessionToken(null);
               queryClient.clear();
               navigate("/login");
             }}
@@ -187,7 +188,7 @@ export function ShellPage() {
           </button>
         </div>
       </aside>
-      <section className="shrink-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm" style={{ width: treeWidth }}>
+      <section aria-label={t("documentTree")} className="shrink-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm" style={{ width: treeWidth }}>
         {workspaceId &&
           (view === "trash" ? (
             <TrashPanel workspaceId={workspaceId} />
@@ -199,8 +200,8 @@ export function ShellPage() {
             />
           ))}
       </section>
-      <ResizeHandle side="left" ariaLabel="tree" onResize={(dx) => setTreeWidth(treeWidth + dx)} />
-      <main className="flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+      <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />
+      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
         <header className="flex items-center justify-between border-b border-border bg-surface/85 px-4 py-2.5 text-sm backdrop-blur-xl">
           <button className="flex items-center gap-2 rounded-lg px-2 py-1 text-mutedForeground hover:bg-muted" onClick={() => setSearchOpen(true)}>
             <Search size={14} />{t("globalSearch")} <span className="rounded border border-border px-1.5 text-[10px]">⌘K</span>
@@ -244,7 +245,7 @@ export function ShellPage() {
       </main>
       {view === "documents" && selectedDocumentId && (detailRowId || linkedRowId) && (
         <>
-          <ResizeHandle side="right" ariaLabel="detail" onResize={(dx) => setDetailWidth(detailWidth + dx)} />
+          <ResizeHandle side="right" ariaLabel={t("resizeDetailPanel")} value={detailWidth} min={280} max={640} onResize={(dx) => setDetailWidth(detailWidth + dx)} />
           <aside className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm" style={{ width: detailWidth }}>
             <Suspense fallback={<PanelLoading />}>
               {linkedRowId ? (

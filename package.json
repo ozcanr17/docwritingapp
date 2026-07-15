@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@9.15.9",
+  "pnpm": {
+    "overrides": {
+      "exceljs>uuid": "11.1.1"
+    }
+  },
   "engines": {
     "node": ">=22"
   },
@@ -10,10 +15,12 @@
     "dev": "bash infra/scripts/dev-up.sh",
     "dev:down": "bash infra/scripts/dev-down.sh",
     "seed": "node infra/scripts/seed-admin.mjs",
-    "build": "turbo run build",
+    "build": "turbo run build --filter=!@docsys/desktop",
     "lint": "eslint apps packages --ext .ts,.tsx",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck",
+    "typecheck": "turbo run typecheck --filter=!@docsys/desktop",
+    "desktop:typecheck": "pnpm --filter @docsys/desktop typecheck",
+    "desktop:build": "pnpm --filter @docsys/desktop build",
     "verify": "pnpm db:validate && pnpm typecheck && pnpm lint && pnpm scan:chars && pnpm --filter @docsys/web test && pnpm --filter @docsys/api test && pnpm --filter @docsys/worker test && pnpm build",
     "db:format": "pnpm --filter @docsys/database format",
     "db:validate": "pnpm --filter @docsys/database validate",

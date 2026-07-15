@@ -177,7 +177,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     if (match?.[1]) return decodeURIComponent(match[1]);
     const auth = request.headers.authorization;
     if (auth?.startsWith("Bearer ")) return auth.slice(7);
-    const url = new URL(request.url ?? "/", "http://localhost");
-    return url.searchParams.get("token");
+    const protocols = String(request.headers["sec-websocket-protocol"] ?? "").split(",").map((value) => value.trim());
+    const bearerProtocol = protocols.find((value) => value.startsWith("docsys.jwt."));
+    return bearerProtocol?.slice("docsys.jwt.".length) ?? null;
   }
 }

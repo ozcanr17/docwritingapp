@@ -1,0 +1,20 @@
+[package]
+name = "docsys-desktop"
+version = "0.1.0"
+description = "DocSys desktop client"
+authors = ["DocSys"]
+edition = "2021"
+
+[lib]
+name = "docsys_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"

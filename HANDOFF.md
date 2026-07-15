@@ -4,10 +4,10 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ## 1. What this project is
 
-**DocSys** (in-code id `docsys`, package scope `@docsys/*`) is an enterprise-grade, browser-based Requirements / Test / Document Management System modeled on IBM DOORS, built for Rıdvan (ridvanozcan7@gmail.com, GitHub `ozcanr17`). It manages a folder/document tree of hierarchical rows (headings, requirements, test cases, test steps, notes) with configurable columns, real-time collaboration, traceability links, exports/imports, baselines, and coverage analysis.
+**DocSys** (in-code id `docsys`, package scope `@docsys/*`) is an enterprise-grade web and Tauri desktop Requirements / Test / Document Management System modeled on IBM DOORS, built for Rıdvan (ridvanozcan7@gmail.com, GitHub `ozcanr17`). It manages a folder/document tree of hierarchical rows (headings, requirements, test cases, test steps, notes) with configurable columns, real-time collaboration, traceability links, exports/imports, baselines, and coverage analysis.
 
 - **Repo location on disk:** `~/Desktop/workspace/docsys` (renamed once from `reqtrack-v2`; git + pnpm survived the move).
-- **GitHub:** `ozcanr17/docwritingapp`, private, branch `main`. Everything described below is committed and pushed unless stated otherwise.
+- **GitHub:** `ozcanr17/docwritingapp`, private, branch `main`. This handoff accompanies the 2026-07-15 desktop, observability, accessibility, security-hardening, guide and GitHub Actions delivery on `main`.
 - **A DIFFERENT, unrelated old prototype** named ReqTrack (Python FastAPI + Next.js) lives at `~/Desktop/workspace/reqtrack`. Never touch it and never reuse its `reqtrack` database. DocSys uses databases `docsys` (dev) and `docsys_test` (tests).
 
 ### Two absolute, non-negotiable rules
@@ -22,23 +22,26 @@ TypeScript modular monolith in a pnpm + Turborepo monorepo.
 - `apps/collaboration` — Hocuspocus server (port 3002). `onAuthenticate` verifies the JWT + document.read permission; snapshots persist to `collaboration_snapshots`. Logs auth rejections. Also serves HTTP 200 on `/` (Playwright health-checks it).
 - `apps/worker` — BullMQ. Scheduled lifecycle jobs (30-day purge: batch, legal-hold-aware, idempotent, child-first hard deletes + snapshot compaction keep-last-5) AND the `docsys-exports` queue consumer (generates CSV/DOCX from the outline, uploads to MinIO, updates job progress). Liveness HTTP endpoint on port 3003.
 - `apps/web` — React 18 + Vite + TS strict. The virtual grid has multi-selection, bulk edit/move/copy/link/delete, drag reorder, dynamic row heights, saved personal/team views, sorting, frozen columns and configurable link projection. Workspace search, dashboard widgets, execution history, reviews, proposals, comments, mentions, attachments, notifications, configuration/integration/SSO settings and expanded import/export are exposed in the UI. Routes and heavy editor/dialog surfaces are lazy-loaded with explicit vendor chunks and a stale-deployment recovery boundary.
+- `apps/desktop` — Tauri 2 shell for the same React/Vite build. It packages Windows, macOS and Linux targets, accepts an optional API server address at login, discovers the public collaboration URL from the API, stores desktop bearer auth per session and supports signed updater artifacts.
 - `packages/database` — Prisma 6 schema + migrations + a re-export of the generated client (`export * from "@prisma/client"`). **Must be built** (`pnpm --filter @docsys/database build`) before apps typecheck.
 - `packages/config` — zod env schema.
 - PostgreSQL 16 (sole source of truth), Redis (ephemeral only — pub-sub, presence, queues, cache, idempotency; ADR 0005 forbids it as a store of record), MinIO/S3 for binaries.
 
 ## 3. What has been completed (Phases 1–5 + lifecycle capabilities)
 
-- **Phase 1** — architecture, 11 ADRs (`docs/adr/0001–0011`), analysis docs, Prisma schema (~31 tables). Read `docs/adr/0007` (hierarchy) and `0008` (audit/soft-delete) before changing rows.
+- **Phase 1** — architecture, 12 ADRs (`docs/adr/0001–0012`), analysis docs, Prisma schema (~31 tables). Read `docs/adr/0007` (hierarchy), `0008` (audit/soft-delete) and `0012` (web/desktop distribution) before changing the related areas.
 - **Phase 2** — full backend + realtime, all tests green; 50-client Yjs load test passes (`tests/performance/collab-load.mjs`).
 - **Phase 3** — full frontend (menu bar, themes, i18n, tree, column-driven grid with custom columns + test fields, optimistic UI + 409 handling, presence, detail panel, split viewer, trash, resizable panels, Tiptap+Yjs editor, ESLint flat config wired into `pnpm lint` + CI).
 - **Phase 4** — background CSV/DOCX exports via BullMQ + MinIO with progress + presigned download; CSV import rebuilding hierarchy; traceability link creation; object storage.
 - **DOORS-parity features:** **Suspect links** (editing a linked row auto-flags its links suspect bidirectionally with reason/timestamp, in-tx + audit; `POST /links/:id/acknowledge`, `GET /documents/:id/suspect-links`; badge + Acknowledge in the detail panel). **Baselines** (`POST/GET /documents/:id/baselines` snapshots rows into a `DocumentRevision.summary` JSONB; `GET .../baselines/:n/diff` returns added/removed/modified). **Coverage report** (`GET /documents/:id/coverage`). **Traceability matrix** (`GET /documents/:id/traceability`). All three reports are in the Analysis menu → a modal dialog.
 - **Lifecycle capabilities:** saved personal/team views; global search; frozen columns and linked-field projections; bulk operations and drag reorder; requirement quality and dashboards; comments, `@email` mentions, notifications and attachments; test execution history; reviews and change proposals; CSV/XLSX/ReqIF import; CSV/XLSX/PDF/DOCX/ReqIF export; OIDC SSO; row ACLs; product configurations; generic integration registry; deterministic engineering suggestions.
 - **Production delivery:** Vite manifest-driven bundle budgets enforce at most 180 KiB gzip for every JavaScript chunk and for the initial dependency graph. The measured initial graph is about 89.3 KiB gzip and the largest lazy chunk is about 72.1 KiB gzip. The Nginx web image serves immutable hashed assets, non-cacheable HTML, SPA fallback, gzip, CSP and defensive headers. Full Compose uses required secrets, health checks, restart policies, a one-shot migration gate and a pinned MinIO release.
+- **Production validation:** Prometheus HTTP/Web-Vitals metrics, a repeatable 10,000-row benchmark, WCAG A/AA axe checks, semantic landmarks and basic workflow e2e tests are wired. GitHub Actions continuously validates web/API, browser e2e and the Tauri shell on macOS, Windows and Linux; a weekly performance job records benchmark artifacts, OSV scans report dependency findings to GitHub Security, and `desktop-v*` tags create signed updater artifacts in a draft release.
+- **Authentication/security:** the browser retains HTTP-only SameSite=strict cookie auth and no longer receives a JWT in login/register JSON. Desktop login can leave the server address blank or select an on-prem API root, then uses a session-scoped bearer token. Its event WebSocket token travels in a redacted subprotocol header, never a URL. Local users can enter either `admin@docsys.local` or just `admin`. Cross-site cookie mutations are rejected, login/register are rate-limited, public production registration defaults off, production requires secure cookies plus 32-character JWT/metrics secrets, OIDC URLs require one credential-free HTTPS origin, and production Swagger is disabled with Helmet CSP enabled.
 
 **Migrations (6):** `init`, `hierarchy_prefix_indexes`, `suspect_links`, `platform_capabilities`, `test_step_result`, `requirement_numbers`.
 
-**Test status (all green as of 2026-07-15):** api **36**, worker **10**, web **10**, Playwright e2e **5** (`smoke`, `editor`, `exports`, `columns`, `traceability`). Typecheck, production build, lint and char scan are clean.
+**Test status (all green as of 2026-07-15):** api **42**, worker **10**, web **10**, Playwright e2e **7** (`smoke`, `editor`, `exports`, `columns`, `traceability`, `accessibility`, `desktop-auth`). Typecheck, production build, lint, char scan, Tauri Rust check, macOS bundle generation and signed updater artifact generation are clean. The 10,000-row benchmark seeded in 768.2 ms and measured a 290.8 ms outline p95 with a 4.33 MiB response, below its 2,500 ms budget.
 
 ## 4. Where we are / production-hardening work
 
@@ -48,8 +51,9 @@ The requested capability set has working vertical slices. Remaining work is prod
 - Add SCIM, SAML, row-grant administration UI and enterprise identity-provider conformance tests; current SSO is OIDC/PKCE.
 - Add configuration merge/rebase semantics and full variant effectivity; current configurations snapshot row versions and rules.
 - Add template upload/selection management screens; template storage and worker rendering already exist.
-- Add antivirus scanning and upload-completion state for attachments.
-- **Ops/infra:** all four application images build successfully. The complete isolated Compose stack has been runtime-smoke-tested through its migration gate with healthy PostgreSQL, Redis, MinIO, API, collaboration, worker and web services; the web image also passes cache/security-header checks. CI is parked at `infra/github-ci.yml` because the local `gh` token lacks the `workflow` scope; after `gh auth refresh -h github.com -s workflow`, move it to `.github/workflows/ci.yml`. OpenAPI schemas are shallow (zod is the source of truth). CSRF token pattern not implemented (cookie is SameSite=strict). `collaboration_updates` table is unused (Hocuspocus stores debounced full snapshots, 2s window; ADR 0006).
+- Add antivirus/CDR quarantine and a persistent upload-completion column for attachments. Current upload completion and every download verify declared size/MIME metadata; optional SHA-256 is streamed and verified, unsafe names are normalized, and Content-Disposition is encoded safely.
+- **Ops/infra:** all four server application images build successfully. The complete isolated Compose stack has been runtime-smoke-tested through its migration gate with healthy PostgreSQL, Redis, MinIO, API, collaboration, worker and web services; the web image also passes cache/security-header checks. Six workflows are active in `.github/workflows`: web/API verification, browser e2e, cross-platform desktop verification, weekly performance, dependency security and tagged desktop release. Desktop releases require updater signing secrets; trusted macOS/Windows distribution requires platform signing credentials. OpenAPI schemas are shallow (zod is the source of truth). Cookie mutations use SameSite=strict plus Origin/Fetch Metadata CSRF protection; desktop Bearer requests are exempt. `collaboration_updates` table is unused (Hocuspocus stores debounced full snapshots, 2s window; ADR 0006).
+- **Security scan status:** Gitleaks found no secret in git history or the working tree. OSV found no critical/high issue after overriding ExcelJS's vulnerable `uuid` 8 transitive dependency to 11.1.1. It still reports the current Tauri Linux WebKitGTK dependency chain: 16 unmaintained-crate advisories and `RUSTSEC-2024-0429` for `glib` 0.18.5. Tauri 2.11.5 currently pins WebKitGTK 2.0/GTK 0.18, so `glib` 0.20 cannot be selected without breaking the upstream graph. DocSys does not call `glib::VariantStrIter`; keep the advisory visible in weekly OSV results and update immediately when Tauri/WebKitGTK moves to the fixed binding line.
 
 ## 5. How to run and verify locally (this machine)
 
@@ -86,9 +90,13 @@ bash infra/scripts/scan-forbidden-chars.sh
 docker compose -f infra/docker/docker-compose.dev.yml up -d minio      # port 9000/9001, no clash with Homebrew
 cd tests/e2e && npx playwright test
 ```
-Dev DB URL `postgresql://docsys:docsys@localhost:5432/docsys` (also in `packages/database/.env`, gitignored). Test DB `docsys_test`. Role `docsys`/`docsys` with CREATEDB. To run a live stack manually for screenshots: build api (`cd apps/api && npx tsc`), then start `node apps/api/dist/main.js`, `npx tsx apps/collaboration/src/main.ts`, `npx tsx apps/worker/src/main.ts`, `npx vite --port 5173` — each with the env vars the playwright config uses (DATABASE_URL, REDIS_URL, JWT_SECRET=dev-secret-at-least-16-chars, S3_* for the worker).
+Dev DB URL `postgresql://docsys:docsys@localhost:5432/docsys` (also in `packages/database/.env`, gitignored). Test DB `docsys_test`. Role `docsys`/`docsys` with CREATEDB. To run a live stack manually for screenshots: build api (`cd apps/api && npx tsc`), then start `node apps/api/dist/main.js`, `npx tsx apps/collaboration/src/main.ts`, `npx tsx apps/worker/src/main.ts`, `npx vite --port 5173` — each with the env vars the playwright config uses (DATABASE_URL, REDIS_URL, JWT_SECRET=dev-secret-at-least-16-chars, S3_* for the worker). Full Compose sets `NODE_ENV=production`; it will refuse short JWT secrets, `COOKIE_SECURE=false`, or an absent/short `METRICS_TOKEN`. `ALLOW_PUBLIC_REGISTRATION` defaults false there.
 
 50-client load test: start the collab server against `docsys_test`, then `DATABASE_URL=...docsys_test node tests/performance/collab-load.mjs`.
+
+Large-document benchmark: start the API against `docsys_test`, then run `DATABASE_URL=...docsys_test API_URL=http://127.0.0.1:3001 pnpm --filter @docsys/performance-tests large-document`. See `docs/PERFORMANCE-ACCESSIBILITY.md`.
+
+Desktop checks: `pnpm desktop:typecheck`; for a full local package use `pnpm desktop:build`. See `docs/DESKTOP.md` for server selection, updater secrets and platform-signing prerequisites.
 
 ## 6. Pitfalls we actually hit (do not rediscover these)
 
@@ -130,21 +138,24 @@ apps/api            NestJS API (src/{auth,access,tenancy,tree,rows,events,audit,
 apps/collaboration  Hocuspocus server (Yjs)
 apps/worker         BullMQ purge/compaction + export processor (+ liveness :3003)
 apps/web            React/Vite SPA (src/{pages,components,hooks,stores,lib,locales,test})
+apps/desktop        Tauri 2 shell, desktop capabilities, icons and updater configuration
 packages/database   Prisma schema, migrations, generated-client re-export
 packages/config     zod env schema
 infra/docker        dev/full Compose; Dockerfile.{api,collaboration,worker,web}; hardened Nginx config
 infra/scripts       scan-forbidden-chars.sh; dev-up/dev-down (.sh + .ps1); seed-admin.mjs
-infra/github-ci.yml parked CI (move to .github/workflows/ci.yml after `gh auth refresh -s workflow`)
+.github/workflows   web/API, browser e2e, desktop matrix, performance, OSV security and desktop release automation
 docs/adr, docs/architecture   decisions — read before changing architecture
 docs/DURUM-RAPORU.md          Turkish status report (proper Turkish characters)
 docs/CALISTIRMA.md            Turkish per-OS run/test guide (macOS/Linux/Windows) + admin creds
+docs/guide                    editable 35-chapter guide source and deterministic DOCX builder
+output/docx, output/pdf       rendered 40-page architecture, operations, security and user guide
 tests/e2e           Playwright (data-testid selectors, workers:1, self-starts all 4 apps)
-tests/performance   collab-load.mjs (50-client Yjs test)
+tests/performance   50-client Yjs load test + 10,000-row API benchmark
 ```
 
 ## 9. Suggested next steps
 
 1. Deepen enterprise interoperability: full ReqIF datatype/specification round trips, provider-specific ALM adapters, webhook delivery and secrets-vault integration.
 2. Deepen enterprise governance: SCIM/SAML, row-grant administration, template management, attachment scanning and configuration merge/effectivity semantics.
-3. Activate the parked CI after refreshing the GitHub token with `workflow` scope, then add Compose integration and browser jobs.
+3. Add production signing credentials, publish the first `desktop-v*` release, verify auto-update against that release and add Windows code-signing when a certificate is available.
 Whatever you pick, keep the ASCII-only + no-comments rules, add `data-testid`s for any new interactive UI, extend the relevant test suite + an e2e, run the four checks in section 5, then commit with a Conventional-Commit message and push to `main`.

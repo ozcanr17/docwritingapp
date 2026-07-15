@@ -1,10 +1,10 @@
 # DocSys — Kapsamlı Durum Raporu
 
-Tarih: 14 Temmuz 2026 · Depo: `ozcanr17/docwritingapp` (main dalı)
+Tarih: 15 Temmuz 2026 · Depo: `ozcanr17/docwritingapp` (main dalı)
 
 ## 1. Proje Nedir?
 
-DocSys, IBM DOORS'tan esinlenen, tarayıcı tabanlı, kurumsal sınıf bir **Gereksinim, Test ve Doküman Yönetim Sistemi**dir. Windows, Linux ve macOS üzerinde modern bir web tarayıcısıyla çalışır; hem şirket içi (on-premise) hem bulut kurulumunu destekler ve tamamen Docker ile paketlenir.
+DocSys, IBM DOORS'tan esinlenen, web ve Tauri masaüstü dağıtımları bulunan, kurumsal sınıf bir **Gereksinim, Test ve Doküman Yönetim Sistemi**dir. Tarayıcıdan çalışır; Windows, Linux ve macOS masaüstü paketi üretir; şirket içi ve bulut sunucularına bağlanabilir.
 
 Temel yetenekler (hedef): sınırsız derinlikte klasör/doküman ağacı, hiyerarşik numaralandırma (1.1.2 gibi), gereksinim–test izlenebilirliği, 50 kullanıcıya kadar eşzamanlı gerçek zamanlı düzenleme, yumuşak silme + 30 gün geri getirme, değiştirilemez denetim kaydı (audit), Word/CSV/XLSX dışa aktarım, açık/koyu tema, Türkçe ve İngilizce arayüz (kod tanımlayıcıları daima İngilizce).
 
@@ -20,9 +20,9 @@ Temel yetenekler (hedef): sınırsız derinlikte klasör/doküman ağacı, hiyer
 | Nesne depolama | MinIO / S3 (ekler, DOCX şablonları, dışa aktarımlar) |
 | Arka plan işleri | BullMQ worker: 30 günlük kalıcı silme (purge), anlık görüntü sıkıştırma |
 | Ön yüz | React + Vite + TypeScript, TanStack Query/Virtual, Tailwind, i18next (TR/EN) |
-| Dağıtım | Docker Compose (tek sunucu), ileride Kubernetes'e hazır |
+| Dağıtım | Docker Compose web/sunucu + Tauri 2 Windows/macOS/Linux istemci |
 
-Mimari kararların tamamı `docs/adr/0001–0011` dosyalarında gerekçeleriyle kayıtlıdır. Hiyerarşi tasarımı: komşuluk listesi (parentId) + `ancestorPath` ön-ek yolu + LexoRank sıra anahtarları; görüntüleme numaraları asla veritabanında tutulmaz, sıradan türetilir — böylece bir satırı taşımak belgenin tamamını yeniden numaralandırmaz.
+Mimari kararların tamamı `docs/adr/0001–0012` dosyalarında gerekçeleriyle kayıtlıdır. Hiyerarşi tasarımı: komşuluk listesi (parentId) + `ancestorPath` ön-ek yolu + LexoRank sıra anahtarları; görüntüleme numaraları asla veritabanında tutulmaz, sıradan türetilir — böylece bir satırı taşımak belgenin tamamını yeniden numaralandırmaz.
 
 ## 3. Hangi Kilometre Taşındayız?
 
@@ -61,24 +61,26 @@ Proje 4 fazlı bir planla ilerliyor. **Şu an: Faz 3'ün çekirdeği teslim edil
 - Canlı işbirliği: `/ws/events` bağlantısı, presence avatarları ("Çevrimiçi: N"), olay güdümlü önbellek tazeleme.
 - 4 bileşen testi + **Playwright uçtan uca duman testi geçti** (kayıt → organizasyon kurulumu → doküman oluşturma → hiyerarşik satır ekleme → satır içi düzenleme → dil değiştirme).
 
-## 5. Bilinen Sınırlamalar (açıkça beyan)
+## 5. Son Üretim Sertleştirmesi
 
-- Zengin metin editörü (Tiptap + Yjs), sürükle-bırak (dnd-kit), yeniden boyutlandırılabilir paneller, bölünmüş ekran bağlantı görüntüleyici ve çöp kutusu ekranı Faz 3'ün kalan işleridir.
-- ESLint yapılandırması henüz eklenmedi.
-- Docker imaj dosyaları yazıldı ancak henüz build edilmedi.
-- CSRF token deseni henüz yok (cookie SameSite=strict ile sınırlı koruma mevcut).
+- Cookie tabanlı mutasyonlarda SameSite=strict ile birlikte Origin ve Fetch Metadata CSRF koruması bulunuyor.
 - Yjs kalıcılığı artımlı güncelleme kütüğü yerine 2 sn debounce'lu tam anlık görüntü kullanıyor (ADR 0006'da belgelendi).
-- CI iş akışı `infra/github-ci.yml` konumunda bekliyor; `gh auth refresh -s workflow` sonrası `.github/workflows/` altına taşınmalı.
+- Prometheus HTTP ölçümleri, Web Vitals telemetrisi ve 10.000 satırlık doküman benchmark'ı eklendi.
+- WCAG A/AA axe denetimleri ile giriş ve temel çalışma alanı akışları Playwright'ta doğrulanıyor.
+- Tauri masaüstü kabuğu, isteğe bağlı sunucu adresi, kısa kullanıcı adı girişi ve imzalı auto-update akışı eklendi.
+- `.github/workflows/` altında web/API, tarayıcı e2e, üç işletim sistemli masaüstü, haftalık performans ve masaüstü sürüm iş akışları bulunuyor.
+- Güvenilir genel dağıtım için Apple notarization ve Windows kod imzalama sertifikaları depo secret'larına ayrıca tanımlanmalıdır.
 
 ## 6. Sıradaki Plan
 
-Faz 3'ün kalanları (onay sonrası): Tiptap + Yjs zengin metin editörü, dnd-kit ile sürükle-bırak, kalıcı panel boyutları, bölünmüş ekran gereksinim görüntüleyici, çöp kutusu/geri getirme ekranı, ESLint, erişilebilirlik derinleştirme. Ardından Faz 4: izlenebilirlik matrisi, DOCX/CSV/XLSX içe-dışa aktarım, ekler ve nesne depolama entegrasyonu.
+Sıradaki üretim derinliği: tam ReqIF birlikte çalışabilirliği, sağlayıcıya özel ALM adaptörleri, SCIM/SAML, antivirüs taraması, varyant birleştirme semantiği ve ilk imzalı masaüstü sürümünün gerçek güncelleme kanalı üzerinden kabul testidir.
 
 ## 7. Depo Haritası ve Çalıştırma
 
 ```
 apps/api            NestJS API          apps/collaboration  Hocuspocus sunucusu
 apps/worker         BullMQ worker       apps/web            React/Vite ön yüz
+apps/desktop        Tauri 2 masaüstü kabuğu
 packages/database   Prisma şema+client  packages/config     zod ortam doğrulama
 infra/docker        Compose+Dockerfile  docs/adr, docs/architecture  kararlar
 tests/e2e           Playwright          tests/performance   50 istemcili yük testi

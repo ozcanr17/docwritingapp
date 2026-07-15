@@ -40,10 +40,33 @@ describe("auth", () => {
       payload: { email: actor.email, password: "password-123" },
     });
     expect(login.statusCode).toBe(201);
+    expect(JSON.parse(login.body).token).toBeUndefined();
     const cookie = (login.headers["set-cookie"] as string).split(";")[0];
     const me = await app.inject({ method: "GET", url: "/auth/me", headers: { cookie } });
     expect(me.statusCode).toBe(200);
     expect(JSON.parse(me.body).email).toBe(actor.email);
+  });
+
+  it("logs in to local accounts with a username", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "local-user@docsys.local", displayName: "Local User", password: "password-123" },
+    });
+    const login = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      headers: { "x-docsys-client": "desktop" },
+      payload: { identifier: "local-user", password: "password-123" },
+    });
+    expect(login.statusCode).toBe(201);
+    expect(JSON.parse(login.body).token).toBeTypeOf("string");
+  });
+
+  it("provides public desktop client configuration", async () => {
+    const response = await app.inject({ method: "GET", url: "/auth/client-config" });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).collaborationUrl).toBe("ws://localhost:3002");
   });
 
   it("rejects wrong password", async () => {
@@ -59,5 +82,20 @@ describe("auth", () => {
   it("rejects unauthenticated access to protected routes", async () => {
     const response = await app.inject({ method: "GET", url: "/organizations" });
     expect(response.statusCode).toBe(401);
+  });
+
+  it("rejects cross-site cookie mutations", async () => {
+    const actor = await registerActor(app, "csrf");
+    const response = await app.inject({
+      method: "POST",
+      url: "/organizations",
+      headers: {
+        cookie: actor.cookie,
+        origin: "https://attacker.example",
+        "sec-fetch-site": "cross-site",
+      },
+      payload: { name: "Rejected", slug: "rejected" },
+    });
+    expect(response.statusCode).toBe(403);
   });
 });

@@ -22,9 +22,9 @@ const commentSchema = z.object({
 });
 const attachmentSchema = z.object({
   fileName: z.string().min(1).max(500),
-  contentType: z.string().min(1).max(200),
+  contentType: z.string().regex(/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i).max(200),
   sizeBytes: z.number().int().positive().max(100 * 1024 * 1024),
-  checksum: z.string().max(200).optional(),
+  checksum: z.string().regex(/^[a-f0-9]{64}$/i).optional(),
 });
 
 const executionSchema = z.object({
@@ -94,6 +94,19 @@ const ssoSchema = z.object({
   userInfoEndpoint: z.string().url().optional(),
   scopes: z.array(z.string()).default(["openid", "profile", "email"]),
   enabled: z.boolean().default(true),
+}).superRefine((configuration, context) => {
+  const issuer = new URL(configuration.issuer);
+  if (issuer.protocol !== "https:" || issuer.username || issuer.password) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["issuer"], message: "OIDC issuer must be an HTTPS URL without credentials" });
+  }
+  for (const field of ["authorizationEndpoint", "tokenEndpoint", "userInfoEndpoint"] as const) {
+    const value = configuration[field];
+    if (!value) continue;
+    const endpoint = new URL(value);
+    if (endpoint.protocol !== "https:" || endpoint.origin !== issuer.origin || endpoint.username || endpoint.password) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: "OIDC endpoints must use the issuer HTTPS origin" });
+    }
+  }
 });
 
 @Controller()
@@ -180,6 +193,11 @@ export class LifecycleController {
   @Get("attachments/:attachmentId/download")
   downloadAttachment(@CurrentUser() user: SessionUser, @Param("attachmentId", ParseUUIDPipe) attachmentId: string) {
     return this.lifecycle.downloadAttachment(user.userId, attachmentId);
+  }
+
+  @Post("attachments/:attachmentId/complete")
+  completeAttachment(@CurrentUser() user: SessionUser, @Param("attachmentId", ParseUUIDPipe) attachmentId: string) {
+    return this.lifecycle.completeAttachment(user.userId, attachmentId);
   }
 
   @Delete("attachments/:attachmentId")
