@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
 import { Issuer, generators } from "openid-client";
 import { apiEnv } from "../env";
 import { AccessService } from "../access/access.service";
+import { AuditService } from "../audit/audit.service";
 
 export interface AuthResult {
   token: string;
@@ -17,6 +18,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly access: AccessService,
+    private readonly audit: AuditService,
   ) {}
 
   async register(email: string, displayName: string, password: string): Promise<AuthResult> {
@@ -30,7 +32,7 @@ export class AuthService {
     return this.issue(user.id, user.email, user.displayName, user.locale);
   }
 
-  async login(identifier: string, password: string): Promise<AuthResult> {
+  async login(identifier: string, password: string, rememberMe = false): Promise<AuthResult> {
     const email = this.resolveLoginEmail(identifier);
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.passwordHash || user.deletedAt || !user.isActive) {
@@ -38,7 +40,7 @@ export class AuthService {
     }
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new UnauthorizedException("Invalid credentials");
-    return this.issue(user.id, user.email, user.displayName, user.locale);
+    return this.issue(user.id, user.email, user.displayName, user.locale, rememberMe);
   }
 
   private resolveLoginEmail(identifier: string): string {
@@ -51,9 +53,66 @@ export class AuthService {
   async profile(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { id: true, email: true, displayName: true, locale: true, themePreference: true },
+      select: { id: true, email: true, displayName: true, firstName: true, lastName: true, jobTitle: true, department: true, phone: true, bio: true, locale: true, themePreference: true },
     });
     return user;
+  }
+
+  async publicProfile(viewerId: string, userId: string) {
+    const sharedOrganization = viewerId === userId || await this.prisma.organizationMember.count({
+      where: {
+        userId,
+        deletedAt: null,
+        organization: { members: { some: { userId: viewerId, deletedAt: null } } },
+      },
+    }) > 0;
+    if (!sharedOrganization) throw new ForbiddenException("User profile is not available");
+    return this.profile(userId);
+  }
+
+  async updateProfile(userId: string, input: {
+    email: string;
+    displayName: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    jobTitle?: string | null;
+    department?: string | null;
+    phone?: string | null;
+    bio?: string | null;
+  }) {
+    const email = input.email.trim().toLocaleLowerCase("en");
+    const existing = await this.prisma.user.findFirst({ where: { email, id: { not: userId } }, select: { id: true } });
+    if (existing) throw new ConflictException("Email already registered");
+    return this.prisma.$transaction(async (tx) => {
+      const previous = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: {
+          email,
+          displayName: input.displayName.trim(),
+          firstName: input.firstName?.trim() || null,
+          lastName: input.lastName?.trim() || null,
+          jobTitle: input.jobTitle?.trim() || null,
+          department: input.department?.trim() || null,
+          phone: input.phone?.trim() || null,
+          bio: input.bio?.trim() || null,
+        },
+        select: { id: true, email: true, displayName: true, firstName: true, lastName: true, jobTitle: true, department: true, phone: true, bio: true, locale: true, themePreference: true },
+      });
+      const memberships = await tx.organizationMember.findMany({ where: { userId, deletedAt: null }, select: { organizationId: true } });
+      for (const membership of memberships) {
+        await this.audit.record(tx, {
+          organizationId: membership.organizationId,
+          actorId: userId,
+          action: "user.profile.updated",
+          entityType: "user",
+          entityId: userId,
+          previousData: { email: previous.email, displayName: previous.displayName },
+          nextData: { email: updated.email, displayName: updated.displayName },
+        });
+      }
+      return updated;
+    });
   }
 
   async collabToken(userId: string, email: string): Promise<{ token: string }> {
@@ -128,8 +187,8 @@ export class AuthService {
     return this.issue(user.id, user.email, user.displayName, user.locale);
   }
 
-  private async issue(id: string, email: string, displayName: string, locale: string): Promise<AuthResult> {
-    const token = await this.jwt.signAsync({ sub: id, email });
+  private async issue(id: string, email: string, displayName: string, locale: string, rememberMe = false): Promise<AuthResult> {
+    const token = await this.jwt.signAsync({ sub: id, email }, { expiresIn: rememberMe ? "30d" : "12h" });
     return { token, user: { id, email, displayName, locale } };
   }
 }

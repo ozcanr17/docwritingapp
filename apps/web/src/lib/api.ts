@@ -5,7 +5,7 @@ const TOKEN_STORAGE_KEY = "docsys.desktopSession";
 
 let apiUrl = readStorage("localStorage", SERVER_STORAGE_KEY) || DEFAULT_API_URL;
 let collabUrl = DEFAULT_COLLAB_URL;
-let sessionToken = readStorage("sessionStorage", TOKEN_STORAGE_KEY);
+let sessionToken = readStorage("localStorage", TOKEN_STORAGE_KEY) || readStorage("sessionStorage", TOKEN_STORAGE_KEY);
 
 function readStorage(kind: "localStorage" | "sessionStorage", key: string): string {
   if (typeof window === "undefined") return "";
@@ -60,9 +60,10 @@ export function setServerAddress(value: string): void {
   writeStorage("localStorage", SERVER_STORAGE_KEY, value.trim() ? apiUrl : "");
 }
 
-export function setSessionToken(token: string | null): void {
+export function setSessionToken(token: string | null, rememberMe = false): void {
   sessionToken = token ?? "";
-  writeStorage("sessionStorage", TOKEN_STORAGE_KEY, sessionToken);
+  writeStorage("sessionStorage", TOKEN_STORAGE_KEY, rememberMe ? "" : sessionToken);
+  writeStorage("localStorage", TOKEN_STORAGE_KEY, rememberMe ? sessionToken : "");
 }
 
 export async function refreshClientConfig(): Promise<void> {
@@ -105,8 +106,22 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 export type RowType = "heading" | "requirement" | "test_case" | "test_step" | "note";
 export type DocumentType = "requirement" | "test" | "general_document";
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  firstName: string | null;
+  lastName: string | null;
+  jobTitle: string | null;
+  department: string | null;
+  phone: string | null;
+  bio: string | null;
+}
+
 export interface OutlineRow {
   id: string;
+  objectNumber: number;
+  numberingStart: number | null;
   parentId: string | null;
   rank: string;
   depth: number;
@@ -131,6 +146,7 @@ export interface OutlineRow {
   linkCount: number;
   version: number;
   displayNumber: string;
+  stepNumber: number | null;
 }
 
 export type CustomFieldType =
@@ -181,6 +197,8 @@ export interface LinkCandidate extends LinkedRowSummary {
 
 export interface RowDetail {
   id: string;
+  objectNumber: number;
+  numberingStart: number | null;
   documentId: string;
   parentId: string | null;
   rowType: OutlineRow["rowType"];

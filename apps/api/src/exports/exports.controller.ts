@@ -8,6 +8,7 @@ import { ExportsService } from "./exports.service";
 const createExportSchema = z.object({
   format: z.enum(["csv", "docx", "xlsx", "pdf", "reqif"]),
   templateId: z.string().uuid().optional(),
+  locale: z.enum(["tr", "en"]).default("tr"),
 });
 const importSchema = z.object({ csv: z.string().min(1).max(5_000_000) });
 const reqifImportSchema = z.object({ reqif: z.string().min(1).max(20_000_000) });
@@ -28,7 +29,7 @@ export class ExportsController {
     @Param("documentId", ParseUUIDPipe) documentId: string,
     @Body(new ZodBodyPipe(createExportSchema)) body: z.infer<typeof createExportSchema>,
   ) {
-    return this.exports.createExport(user.userId, documentId, body.format, body.templateId);
+    return this.exports.createExport(user.userId, documentId, body.format, body.templateId, body.locale);
   }
 
   @Get("exports/:jobId")

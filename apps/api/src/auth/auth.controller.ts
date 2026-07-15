@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Headers, Param, Post, Query, Res } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Headers, Param, ParseUUIDPipe, Patch, Post, Query, Res } from "@nestjs/common";
 import { FastifyReply } from "fastify";
 import { z } from "zod";
 import { ZodBodyPipe } from "../common/zod-body.pipe";
@@ -18,7 +18,19 @@ const loginSchema = z.object({
   identifier: z.string().trim().min(1).max(254).optional(),
   email: z.string().trim().min(1).max(254).optional(),
   password: z.string().min(1).max(200),
+  rememberMe: z.boolean().default(false),
 }).refine((value) => Boolean(value.identifier || value.email), { message: "Identifier is required" });
+
+const profileSchema = z.object({
+  email: z.string().email().max(254),
+  displayName: z.string().trim().min(1).max(200),
+  firstName: z.string().trim().max(120).nullable().optional(),
+  lastName: z.string().trim().max(120).nullable().optional(),
+  jobTitle: z.string().trim().max(200).nullable().optional(),
+  department: z.string().trim().max(200).nullable().optional(),
+  phone: z.string().trim().max(60).nullable().optional(),
+  bio: z.string().trim().max(2000).nullable().optional(),
+});
 
 type RegisterInput = z.infer<typeof registerSchema>;
 type LoginInput = z.infer<typeof loginSchema>;
@@ -50,8 +62,8 @@ export class AuthController {
     @Headers("x-docsys-client") client: string | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
-    const result = await this.auth.login(body.identifier ?? body.email ?? "", body.password);
-    this.setCookie(reply, result.token);
+    const result = await this.auth.login(body.identifier ?? body.email ?? "", body.password, body.rememberMe);
+    this.setCookie(reply, result.token, body.rememberMe);
     return client === "desktop" ? { user: result.user, token: result.token } : { user: result.user };
   }
 
@@ -91,18 +103,34 @@ export class AuthController {
     return this.auth.profile(user.userId);
   }
 
+  @Patch("me")
+  updateMe(
+    @CurrentUser() user: SessionUser,
+    @Body(new ZodBodyPipe(profileSchema)) body: z.infer<typeof profileSchema>,
+  ) {
+    return this.auth.updateProfile(user.userId, body);
+  }
+
+  @Get("users/:userId")
+  userProfile(
+    @CurrentUser() user: SessionUser,
+    @Param("userId", ParseUUIDPipe) userId: string,
+  ) {
+    return this.auth.publicProfile(user.userId, userId);
+  }
+
   @Get("collab-token")
   collabToken(@CurrentUser() user: SessionUser) {
     return this.auth.collabToken(user.userId, user.email);
   }
 
-  private setCookie(reply: FastifyReply, token: string): void {
+  private setCookie(reply: FastifyReply, token: string, rememberMe = false): void {
     reply.setCookie(SESSION_COOKIE, token, {
       httpOnly: true,
       sameSite: "strict",
       secure: apiEnv().COOKIE_SECURE,
       path: "/",
-      maxAge: 60 * 60 * 12,
+      ...(rememberMe ? { maxAge: 60 * 60 * 24 * 30 } : {}),
     });
   }
 }

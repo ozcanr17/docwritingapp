@@ -25,6 +25,7 @@ export interface CreateRowInput {
 
 export interface UpdateRowInput {
   expectedVersion: number;
+  numberingStart?: number | null;
   title?: string;
   description?: string | null;
   customFields?: Record<string, unknown>;
@@ -51,6 +52,11 @@ export class RowsService {
     this.assertRowTypeAllowed(document.documentType, input.rowType);
     const row = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
+      const counter = await tx.document.update({
+        where: { id: document.id },
+        data: { nextObjectNumber: { increment: 1 } },
+        select: { nextObjectNumber: true },
+      });
       let ancestorPath = "";
       let depth = 0;
       if (input.parentId) {
@@ -72,6 +78,7 @@ export class RowsService {
         data: {
           organizationId: document.organizationId,
           documentId: document.id,
+          objectNumber: counter.nextObjectNumber - 1,
           parentId: input.parentId,
           rank,
           ancestorPath,
@@ -152,6 +159,8 @@ export class RowsService {
       orderBy: [{ depth: "asc" }, { rank: "asc" }],
       select: {
         id: true,
+        objectNumber: true,
+        numberingStart: true,
         parentId: true,
         rank: true,
         depth: true,
@@ -214,6 +223,8 @@ export class RowsService {
         }));
       return {
         id: row.id,
+        objectNumber: row.objectNumber,
+        numberingStart: row.numberingStart,
         parentId: row.parentId,
         rank: row.rank,
         depth: row.depth,
@@ -233,7 +244,15 @@ export class RowsService {
         linkCount: row.outgoingLinks.length + row.incomingLinks.length,
       };
     });
-    return this.numberRows(flattened);
+    const numbered = this.numberRows(flattened);
+    const stepNumbers = new Map<string, number>();
+    return numbered.map((row) => {
+      if (row.rowType !== "test_step") return { ...row, stepNumber: null };
+      const key = row.parentId ?? "root";
+      const stepNumber = (stepNumbers.get(key) ?? 0) + 1;
+      stepNumbers.set(key, stepNumber);
+      return { ...row, stepNumber };
+    });
   }
 
   async getRow(actorId: string, rowId: string) {
@@ -327,6 +346,9 @@ export class RowsService {
       workspaceId: document.workspaceId,
     });
     await this.access.assertRowAccess(actorId, rowId, "write");
+    if (input.numberingStart !== undefined && row.rowType !== "heading" && row.rowType !== "test_case") {
+      throw new UnprocessableEntityException("Only headings and test cases can start numbering");
+    }
     const updated = await this.prisma.$transaction(async (tx) => {
       if (input.requirementDetail?.requirementNo !== undefined && row.rowType === "requirement") {
         const requirementNo = input.requirementDetail.requirementNo?.trim() || null;
@@ -355,6 +377,7 @@ export class RowsService {
         data: {
           ...(input.title !== undefined ? { title: input.title } : {}),
           ...(input.description !== undefined ? { description: input.description } : {}),
+          ...(input.numberingStart !== undefined ? { numberingStart: input.numberingStart } : {}),
           ...(customFields !== undefined ? { customFields: customFields as Prisma.InputJsonValue } : {}),
           version: { increment: 1 },
           updatedById: actorId,
@@ -488,7 +511,12 @@ export class RowsService {
     return moved;
   }
 
-  async deleteRow(actorId: string, rowId: string, reason?: string) {
+  async deleteRow(
+    actorId: string,
+    rowId: string,
+    reason?: string,
+    childStrategy: "delete_subtree" | "promote_children" = "delete_subtree",
+  ) {
     const row = await this.requireRow(rowId);
     const document = await this.requireDocument(row.documentId);
     await this.access.assertPermission(actorId, "row.write", {
@@ -498,20 +526,64 @@ export class RowsService {
     await this.access.assertRowAccess(actorId, rowId, "write");
     const correlationId = randomUUID();
     await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
       const deletedAt = new Date();
       const prefix = `${row.ancestorPath}${row.id}/`;
-      await tx.documentRow.updateMany({
+      const affected = await tx.documentRow.findMany({
         where: {
           documentId: document.id,
           deletedAt: null,
           OR: [{ id: row.id }, { ancestorPath: { startsWith: prefix } }],
         },
-        data: { deletedAt, deletedById: actorId, deletionReason: reason ?? null },
+        select: { id: true },
       });
+      if (childStrategy === "promote_children") {
+        await tx.documentRow.update({
+          where: { id: row.id },
+          data: { deletedAt, deletedById: actorId, deletionReason: reason ?? null },
+        });
+        const children = await tx.documentRow.findMany({
+          where: { documentId: document.id, parentId: row.id, deletedAt: null },
+          orderBy: { rank: "asc" },
+          select: { id: true },
+        });
+        await tx.documentRow.updateMany({
+          where: { documentId: document.id, parentId: row.id, deletedAt: null },
+          data: { parentId: row.parentId, version: { increment: 1 }, updatedById: actorId },
+        });
+        await tx.$executeRaw`
+          UPDATE document_rows
+          SET "ancestorPath" = ${row.ancestorPath} || substring("ancestorPath" from ${prefix.length + 1}::int),
+              depth = depth - 1
+          WHERE "documentId" = ${document.id}::uuid
+            AND "ancestorPath" LIKE ${prefix} || '%'
+            AND "deletedAt" IS NULL`;
+        const siblings = await tx.documentRow.findMany({
+          where: { documentId: document.id, parentId: row.parentId, deletedAt: null },
+          orderBy: { rank: "asc" },
+          select: { id: true, rank: true },
+        });
+        const childIds = new Set(children.map((child) => child.id));
+        const ordered = siblings.filter((sibling) => !childIds.has(sibling.id));
+        const deletedIndex = ordered.findIndex((sibling) => sibling.rank > row.rank);
+        ordered.splice(deletedIndex < 0 ? ordered.length : deletedIndex, 0, ...children.map((child) => ({ ...child, rank: "" })));
+        let previousRank: string | null = null;
+        for (const sibling of ordered) {
+          const rank = rankBetween(previousRank, null);
+          await tx.documentRow.update({ where: { id: sibling.id }, data: { rank, version: { increment: 1 }, updatedById: actorId } });
+          previousRank = rank;
+        }
+      } else {
+        await tx.documentRow.updateMany({
+          where: { id: { in: affected.map((entry) => entry.id) } },
+          data: { deletedAt, deletedById: actorId, deletionReason: reason ?? null },
+        });
+      }
+      const deletedIds = childStrategy === "delete_subtree" ? affected.map((entry) => entry.id) : [row.id];
       await tx.requirementLink.updateMany({
         where: {
           deletedAt: null,
-          OR: [{ sourceRowId: row.id }, { targetRowId: row.id }],
+          OR: [{ sourceRowId: { in: deletedIds } }, { targetRowId: { in: deletedIds } }],
         },
         data: { deletedAt, deletedById: actorId },
       });
@@ -524,7 +596,7 @@ export class RowsService {
         entityId: row.id,
         documentId: document.id,
         correlationId,
-        metadata: { reason: reason ?? null },
+        metadata: { reason: reason ?? null, childStrategy },
       });
     });
     await this.events.publish({
@@ -552,6 +624,14 @@ export class RowsService {
         if (!parent) throw new UnprocessableEntityException("Parent row is deleted; restore the parent first");
       }
       const prefix = `${row.ancestorPath}${row.id}/`;
+      const restoredRows = await tx.documentRow.findMany({
+        where: {
+          documentId: document.id,
+          deletedAt,
+          OR: [{ id: row.id }, { ancestorPath: { startsWith: prefix } }],
+        },
+        select: { id: true },
+      });
       await tx.documentRow.updateMany({
         where: {
           documentId: document.id,
@@ -561,7 +641,13 @@ export class RowsService {
         data: { deletedAt: null, deletedById: null, deletionReason: null },
       });
       await tx.requirementLink.updateMany({
-        where: { deletedAt, OR: [{ sourceRowId: row.id }, { targetRowId: row.id }] },
+        where: {
+          deletedAt,
+          OR: [
+            { sourceRowId: { in: restoredRows.map((entry) => entry.id) } },
+            { targetRowId: { in: restoredRows.map((entry) => entry.id) } },
+          ],
+        },
         data: { deletedAt: null, deletedById: null },
       });
       await this.audit.record(tx, {
@@ -621,6 +707,12 @@ export class RowsService {
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
       const idMap = new Map<string, { id: string; ancestorPath: string; depth: number }>();
+      const counter = await tx.document.update({
+        where: { id: document.id },
+        data: { nextObjectNumber: { increment: sourceRows.length } },
+        select: { nextObjectNumber: true },
+      });
+      let objectNumber = counter.nextObjectNumber - sourceRows.length;
       let requirementSequence = await tx.requirementDetail.count({ where: { row: { documentId } } });
       let afterRowId: string | undefined;
       for (const source of sourceRows) {
@@ -637,6 +729,7 @@ export class RowsService {
           data: {
             organizationId: document.organizationId,
             documentId,
+            objectNumber,
             parentId,
             rank,
             ancestorPath: parent ? `${parent.ancestorPath}${parent.id}/` : "",
@@ -649,6 +742,7 @@ export class RowsService {
             updatedById: actorId,
           },
         });
+        objectNumber += 1;
         idMap.set(source.id, { id: created.id, ancestorPath: created.ancestorPath, depth: created.depth });
         if (isRoot) afterRowId = created.id;
         if (source.rowType === "requirement") {
@@ -997,9 +1091,9 @@ export class RowsService {
   private assertParentAllowed(rowType: RowType, parentType: RowType) {
     const valid =
       rowType === "test_step"
-        ? parentType === "test_case"
+        ? parentType === "test_case" || parentType === "heading"
         : rowType === "heading"
-          ? parentType === "heading"
+          ? parentType === "heading" || parentType === "test_case"
           : rowType === "requirement"
             ? parentType === "heading" || parentType === "requirement"
             : rowType === "test_case"
@@ -1008,7 +1102,7 @@ export class RowsService {
     if (!valid) throw new UnprocessableEntityException("Row type is not allowed under this parent");
   }
 
-  private numberRows<T extends { id: string; parentId: string | null; rank: string }>(rows: T[]) {
+  private numberRows<T extends { id: string; parentId: string | null; rank: string; numberingStart: number | null }>(rows: T[]) {
     const childrenByParent = new Map<string | null, T[]>();
     for (const row of rows) {
       const list = childrenByParent.get(row.parentId) ?? [];
@@ -1018,8 +1112,11 @@ export class RowsService {
     const result: Array<T & { displayNumber: string }> = [];
     const visit = (parentId: string | null, prefix: string) => {
       const children = (childrenByParent.get(parentId) ?? []).sort((a, b) => (a.rank < b.rank ? -1 : 1));
-      children.forEach((child, index) => {
-        const displayNumber = prefix === "" ? `${index + 1}` : `${prefix}.${index + 1}`;
+      let nextSegment = 1;
+      children.forEach((child) => {
+        const segment = child.numberingStart ?? nextSegment;
+        const displayNumber = prefix === "" ? `${segment}` : `${prefix}.${segment}`;
+        nextSegment = segment + 1;
         result.push({ ...child, displayNumber });
         visit(child.id, displayNumber);
       });

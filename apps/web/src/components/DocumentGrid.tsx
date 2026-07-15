@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link2, Settings2, Trash2, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, DashboardSummary, DocumentType, FieldDefinition, OutlineRow, SavedView } from "../lib/api";
 import { cellValue, columnsForDocument, GridColumn, isCellEditable, totalWidth } from "../lib/columns";
-import { insertOptions } from "../lib/outline";
 import { useColumnStore } from "../stores/columns";
 import { useSelectionStore } from "../stores/selection";
 import { useToastStore } from "../stores/toasts";
@@ -91,8 +90,12 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<OutlineRow | null>(null);
+  const [numberingTarget, setNumberingTarget] = useState<OutlineRow | null>(null);
+  const [numberingStart, setNumberingStart] = useState("");
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [rowTypeFilter, setRowTypeFilter] = useState<OutlineRow["rowType"] | "">("");
   const [sortKey, setSortKey] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [frozenCount, setFrozenCount] = useState(1);
@@ -131,8 +134,9 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   );
   const displayedRows = useMemo(() => {
     const normalized = searchQuery.trim().toLocaleLowerCase();
+    const byType = rowTypeFilter ? rows.filter((row) => row.rowType === rowTypeFilter) : rows;
     const filtered = normalized
-      ? rows.filter((row) =>
+      ? byType.filter((row) =>
           [
             row.displayNumber,
             row.requirementNo ?? "",
@@ -145,7 +149,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
             ...(row.linkedRequirements ?? []).flatMap((linked) => [linked.requirementNo ?? "", linked.title, linked.description ?? ""]),
           ].some((value) => value.toLocaleLowerCase().includes(normalized)),
         )
-      : rows;
+      : byType;
     if (!sortKey) return filtered;
     const column = columns.find((candidate) => candidate.key === sortKey);
     if (!column) return filtered;
@@ -153,7 +157,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
       const compared = cellValue(column, a).localeCompare(cellValue(column, b), undefined, { numeric: true, sensitivity: "base" });
       return sortDirection === "asc" ? compared : -compared;
     });
-  }, [rows, searchQuery, sortKey, sortDirection, columns]);
+  }, [rows, rowTypeFilter, searchQuery, sortKey, sortDirection, columns]);
   const template = columns.map((c) => `${c.width}px`).join(" ");
   const gridWidth = `${parseInt(totalWidth(columns), 10) + 40}px`;
   const gridTemplate = `40px ${template}`;
@@ -170,6 +174,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
       return true;
     });
   }, [rows, selectedRowIds]);
+  const selectedGridRow = rows.find((row) => row.id === selectedRowId);
 
   const virtualizer = useVirtualizer({
     count: displayedRows.length,
@@ -192,7 +197,10 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         method: "POST",
         body: JSON.stringify({
           ...input,
-          filters: searchQuery ? [{ field: "all", operator: "contains", value: searchQuery }] : [],
+          filters: [
+            ...(searchQuery ? [{ field: "all", operator: "contains", value: searchQuery }] : []),
+            ...(rowTypeFilter ? [{ field: "rowType", operator: "equals", value: rowTypeFilter }] : []),
+          ],
           sorting: sortKey ? [{ field: sortKey, direction: sortDirection }] : [],
           visibleColumns: columns.map((column) => column.key),
           frozenColumns: columns.slice(0, frozenCount).map((column) => column.key),
@@ -211,8 +219,14 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   });
 
   const applyView = (view: SavedView) => {
-    const filter = view.filters[0];
-    setSearchQuery(typeof filter?.value === "string" ? filter.value : "");
+    const searchFilter = view.filters.find((filter) => filter.field === "all");
+    const typeFilter = view.filters.find((filter) => filter.field === "rowType");
+    setSearchQuery(typeof searchFilter?.value === "string" ? searchFilter.value : "");
+    setRowTypeFilter(
+      typeof typeFilter?.value === "string" && typeFilter.value in rowTypeLabelKeys
+        ? typeFilter.value as OutlineRow["rowType"]
+        : "",
+    );
     const sorting = view.sorting[0];
     setSortKey(typeof sorting?.field === "string" ? sorting.field : "");
     setSortDirection(sorting?.direction === "desc" ? "desc" : "asc");
@@ -262,7 +276,20 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   });
 
   const deleteRow = useMutation({
-    mutationFn: (row: OutlineRow) => api(`/rows/${row.id}`, { method: "DELETE", body: JSON.stringify({}) }),
+    mutationFn: (input: { row: OutlineRow; childStrategy: "delete_subtree" | "promote_children" }) =>
+      api(`/rows/${input.row.id}`, { method: "DELETE", body: JSON.stringify({ childStrategy: input.childStrategy }) }),
+    onSuccess: () => setDeleteTarget(null),
+    onSettled: invalidate,
+    onError: handleMutationError,
+  });
+
+  const updateNumbering = useMutation({
+    mutationFn: (input: { row: OutlineRow; numberingStart: number | null }) =>
+      api(`/rows/${input.row.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ expectedVersion: input.row.version, numberingStart: input.numberingStart }),
+      }),
+    onSuccess: () => setNumberingTarget(null),
     onSettled: invalidate,
     onError: handleMutationError,
   });
@@ -346,6 +373,58 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
     if (parent) moveRow.mutate({ row, newParentId: parent.parentId, afterRowId: parent.id });
   };
 
+  const childTypeFor = (row: OutlineRow): OutlineRow["rowType"] | null => {
+    if (documentType === "requirement") {
+      if (row.rowType === "heading" || row.rowType === "requirement") return "requirement";
+      return null;
+    }
+    if (row.rowType === "heading") {
+      let parentId = row.parentId;
+      while (parentId) {
+        const parent = rows.find((candidate) => candidate.id === parentId);
+        if (!parent) break;
+        if (parent.rowType === "test_case") return "test_step";
+        parentId = parent.parentId;
+      }
+      return "test_case";
+    }
+    if (row.rowType === "test_case") return "test_step";
+    return null;
+  };
+
+  const addObject = (row = rows.find((candidate) => candidate.id === selectedRowId)) => {
+    if (!row) {
+      createRow.mutate({ parentId: null, rowType: documentType === "requirement" ? "requirement" : "test_case" });
+      return;
+    }
+    createRow.mutate({ parentId: row.parentId, afterRowId: row.id, rowType: row.rowType });
+  };
+
+  const addObjectBelow = (row = rows.find((candidate) => candidate.id === selectedRowId)) => {
+    if (!row) {
+      createRow.mutate({ parentId: null, rowType: "heading" });
+      return;
+    }
+    const rowType = childTypeFor(row);
+    if (!rowType) return;
+    const children = rows.filter((candidate) => candidate.parentId === row.id);
+    createRow.mutate({ parentId: row.id, afterRowId: children.at(-1)?.id, rowType });
+  };
+
+  const openNumbering = (row: OutlineRow) => {
+    setNumberingTarget(row);
+    setNumberingStart(String(row.numberingStart ?? Number(row.displayNumber.split(".").at(-1) ?? 1)));
+  };
+
+  useEffect(() => {
+    const requestDelete = () => {
+      const row = rows.find((candidate) => candidate.id === selectedRowId);
+      if (row) setDeleteTarget(row);
+    };
+    window.addEventListener("docsys:delete-selected-row", requestDelete);
+    return () => window.removeEventListener("docsys:delete-selected-row", requestDelete);
+  }, [rows, selectedRowId]);
+
   const menuItems = (row: OutlineRow | null): MenuItem[] => {
     const addUnder = (rowType: OutlineRow["rowType"], parentId: string | null, afterRowId?: string) =>
       createRow.mutate({ parentId, afterRowId, rowType });
@@ -357,11 +436,6 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           : { key: "testCase", label: t("addTestCase"), onSelect: () => addUnder("test_case", null) },
       ];
     }
-    const sections = insertOptions(rows, row, documentType).map((option, index) => ({
-      key: index === 0 ? "child" : index === 1 ? "siblingBelow" : `insert-${option.number}`,
-      label: t("insertSection", { number: option.number, type: t(rowTypeLabelKeys[option.rowType]) }),
-      onSelect: () => addUnder(option.rowType, option.parentId, option.afterRowId),
-    }));
     return [
       {
         key: "detail",
@@ -371,22 +445,34 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           void queryClient.invalidateQueries({ queryKey: ["row", row.id] });
         },
       },
-      ...sections,
+      { key: "addObject", label: t("addObject"), shortcut: "Insert", onSelect: () => addObject(row) },
+      {
+        key: "addObjectBelow",
+        label: t("addObjectBelow"),
+        shortcut: "Shift+Insert",
+        disabled: childTypeFor(row) === null,
+        onSelect: () => addObjectBelow(row),
+      },
       ...(row.rowType === "heading"
         ? [
-            { key: "subheading", label: t("addSubheading"), onSelect: () => addUnder("heading", row.id) },
+            { key: "subheading", label: t("addChildHeading"), onSelect: () => addUnder("heading", row.id) },
             documentType === "requirement"
               ? { key: "requirement", label: t("addRequirement"), onSelect: () => addUnder("requirement", row.id) }
-              : { key: "testCase", label: t("addTestCase"), onSelect: () => addUnder("test_case", row.id) },
+              : childTypeFor(row) === "test_step"
+                ? { key: "testStep", label: t("addTestStep"), onSelect: () => addUnder("test_step", row.id) }
+                : { key: "testCase", label: t("addTestCase"), onSelect: () => addUnder("test_case", row.id) },
           ]
         : []),
       ...(row.rowType === "test_case"
         ? [{ key: "testStep", label: t("addTestStep"), onSelect: () => addUnder("test_step", row.id) }]
         : []),
-      { key: "heading", label: t("addHeadingBelow"), onSelect: () => addUnder("heading", row.parentId, row.id) },
+      { key: "heading", label: t("addSiblingHeading"), onSelect: () => addUnder("heading", row.parentId, row.id) },
+      ...((row.rowType === "heading" || row.rowType === "test_case")
+        ? [{ key: "numbering", label: t("setNumbering"), onSelect: () => openNumbering(row) }]
+        : []),
       { key: "indent", label: t("indent"), onSelect: () => indent(row) },
       { key: "outdent", label: t("outdent"), onSelect: () => outdent(row) },
-      { key: "delete", label: t("deleteAction"), danger: true, onSelect: () => deleteRow.mutate(row) },
+      { key: "delete", label: t("deleteAction"), danger: true, onSelect: () => setDeleteTarget(row) },
     ];
   };
 
@@ -416,12 +502,14 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
       <ProductivityBar
         columns={columns}
         query={searchQuery}
+        rowTypeFilter={rowTypeFilter}
         sortKey={sortKey}
         sortDirection={sortDirection}
         frozenCount={frozenCount}
         views={savedViews}
         dashboard={dashboard}
         onQueryChange={setSearchQuery}
+        onRowTypeFilterChange={setRowTypeFilter}
         onSortChange={(key, direction) => {
           setSortKey(key);
           setSortDirection(direction);
@@ -430,6 +518,9 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         onApplyView={applyView}
         onSaveView={(name, scope) => saveView.mutate({ name, scope })}
         onDeleteView={(id) => deleteView.mutate(id)}
+        onAddObject={() => addObject()}
+        onAddObjectBelow={() => addObjectBelow()}
+        canAddObjectBelow={!selectedGridRow || childTypeFor(selectedGridRow) !== null}
       />
       {selectedRowIds.length > 1 && (
         <div className="flex items-center gap-3 border-b border-border bg-surface/95 px-4 py-2 text-sm shadow-sm backdrop-blur-xl">
@@ -468,6 +559,26 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           if (event.key === "ArrowUp") {
             event.preventDefault();
             moveSelection(-1);
+          }
+          const selected = rows.find((row) => row.id === selectedRowId);
+          if (event.key === "Insert") {
+            event.preventDefault();
+            if (event.shiftKey) addObjectBelow(selected);
+            else addObject(selected);
+          }
+          if (event.key === "Tab" && selected) {
+            event.preventDefault();
+            if (event.shiftKey) outdent(selected);
+            else indent(selected);
+          }
+          if (event.key === "Delete" && selectedRowIds.length > 0) {
+            event.preventDefault();
+            if (selectedRowIds.length === 1 && selected) setDeleteTarget(selected);
+            else setConfirmBulkDelete(true);
+          }
+          if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+            event.preventDefault();
+            document.querySelector<HTMLInputElement>('[data-testid="grid-search"]')?.focus();
           }
         }}
         onContextMenu={(event) => {
@@ -572,7 +683,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
                     <input
                       type="checkbox"
                       data-testid={`select-row-${row.displayNumber}`}
-                      aria-label={t("selectRowId", { id: row.displayNumber })}
+                      aria-label={t("selectRowId", { id: row.objectNumber })}
                       checked={selectedRowIds.includes(row.id)}
                       onChange={() => toggleRow(row.id)}
                       onClick={(event) => event.stopPropagation()}
@@ -634,6 +745,25 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           </div>
         </div>
       )}
+      {deleteTarget && (
+        <DeleteRowDialog
+          row={deleteTarget}
+          hasChildren={rows.some((row) => row.parentId === deleteTarget.id)}
+          pending={deleteRow.isPending}
+          onClose={() => setDeleteTarget(null)}
+          onDelete={(childStrategy) => deleteRow.mutate({ row: deleteTarget, childStrategy })}
+        />
+      )}
+      {numberingTarget && (
+        <NumberingDialog
+          value={numberingStart}
+          pending={updateNumbering.isPending}
+          onChange={setNumberingStart}
+          onClose={() => setNumberingTarget(null)}
+          onAutomatic={() => updateNumbering.mutate({ row: numberingTarget, numberingStart: null })}
+          onSave={() => updateNumbering.mutate({ row: numberingTarget, numberingStart: Number(numberingStart) })}
+        />
+      )}
       {bulkActionsOpen && (
         <BulkActionsDialog
           count={selectedRowIds.length}
@@ -642,6 +772,84 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           onSubmit={(input) => runBulkAction.mutate(input)}
         />
       )}
+    </div>
+  );
+}
+
+function DeleteRowDialog({
+  row,
+  hasChildren,
+  pending,
+  onClose,
+  onDelete,
+}: {
+  row: OutlineRow;
+  hasChildren: boolean;
+  pending: boolean;
+  onClose: () => void;
+  onDelete: (strategy: "delete_subtree" | "promote_children") => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+      <div role="dialog" aria-modal="true" aria-labelledby="delete-row-title" className="w-full max-w-md rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="delete-row-title" className="font-semibold">{t("deleteHeadingTitle")}</h2>
+            <p className="mt-1 text-sm text-mutedForeground">{t(hasChildren ? "deleteHeadingWithChildren" : "deleteRowConfirm", { title: row.title || row.displayNumber })}</p>
+          </div>
+          <button aria-label={t("close")} className="rounded-md p-1 hover:bg-muted" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="mt-5 flex flex-col gap-2">
+          {hasChildren && (
+            <button data-testid="delete-promote-children" disabled={pending} className="rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50" onClick={() => onDelete("promote_children")}>{t("deleteOnlyAndPromote")}</button>
+          )}
+          <button data-testid="delete-subtree" disabled={pending} className="rounded-lg bg-destructive px-3 py-2 text-left text-sm text-white disabled:opacity-50" onClick={() => onDelete("delete_subtree")}>{t(hasChildren ? "deleteWithAllContent" : "deleteAction")}</button>
+          <button disabled={pending} className="rounded-lg px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NumberingDialog({
+  value,
+  pending,
+  onChange,
+  onClose,
+  onAutomatic,
+  onSave,
+}: {
+  value: string;
+  pending: boolean;
+  onChange: (value: string) => void;
+  onClose: () => void;
+  onAutomatic: () => void;
+  onSave: () => void;
+}) {
+  const { t } = useTranslation();
+  const valid = Number.isInteger(Number(value)) && Number(value) > 0;
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+      <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="numbering-title"
+        className="w-full max-w-sm rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl"
+        onSubmit={(event) => { event.preventDefault(); if (valid) onSave(); }}
+      >
+        <h2 id="numbering-title" className="font-semibold">{t("setNumbering")}</h2>
+        <p className="mt-1 text-sm text-mutedForeground">{t("numberingHelp")}</p>
+        <label className="mt-4 block text-sm">
+          {t("numberingStart")}
+          <input data-testid="numbering-start" autoFocus type="number" min={1} step={1} className="mt-1 w-full rounded-lg border border-border bg-editorBackground px-3 py-2" value={value} onChange={(event) => onChange(event.target.value)} />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" disabled={pending} className="rounded-lg px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button>
+          <button type="button" disabled={pending} className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={onAutomatic}>{t("automaticNumbering")}</button>
+          <button disabled={!valid || pending} className="rounded-lg bg-primary px-3 py-2 text-sm text-primaryForeground disabled:opacity-50">{t("apply")}</button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -665,12 +873,17 @@ function GridCell({
   onCommit: (value?: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   if (column.kind === "number") {
     return (
       <span className="flex items-center gap-1.5 self-center tabular-nums text-mutedForeground">
-        {row.displayNumber}
+        {row.objectNumber}
         {(row.linkCount ?? 0) > 0 && (
-          <span className="flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary" title={String(row.linkCount ?? 0)}>
+          <span
+            className="flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+            title={t("linkCount", { count: row.linkCount })}
+            aria-label={t("linkCount", { count: row.linkCount })}
+          >
             <Link2 size={10} />
             {row.linkCount ?? 0}
           </span>
@@ -737,11 +950,12 @@ function GridCell({
   }
 
   const placeholder = column.kind === "title" ? "—" : " ";
+  const numberedTitle = column.kind === "title" && (row.rowType === "heading" || row.rowType === "test_case");
   return (
     <button
       data-testid={`cell-value-${column.key}`}
       className={`block w-full whitespace-pre-wrap break-words py-1 text-left leading-5 ${
-        column.kind === "title" && row.rowType === "heading" ? "font-semibold" : ""
+        numberedTitle ? "font-semibold text-foreground" : ""
       } ${editable ? "" : "cursor-default text-mutedForeground"}`}
       style={column.kind === "title" ? { paddingLeft: row.depth * 16 } : undefined}
       onDoubleClick={onStartEdit}
@@ -749,7 +963,7 @@ function GridCell({
         if ((e.key === "F2" || e.key === "Enter") && editable) onStartEdit();
       }}
     >
-      {display || placeholder}
+      {numberedTitle ? `${row.displayNumber} ${display || placeholder}` : display || placeholder}
     </button>
   );
 }

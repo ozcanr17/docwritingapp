@@ -43,7 +43,11 @@ describe("lifecycle capabilities", () => {
     const testDocument = await createDocument(app, actor, workspaceId, "test", "Execution");
     const testCaseResponse = await app.inject({ method: "POST", url: `/documents/${testDocument.id}/rows`, headers: { cookie: actor.cookie }, payload: { rowType: "test_case", title: "Shutdown", parentId: null } });
     const testCase = JSON.parse(testCaseResponse.body) as { id: string };
-    const stepResponse = await app.inject({ method: "POST", url: `/documents/${testDocument.id}/rows`, headers: { cookie: actor.cookie }, payload: { rowType: "test_step", title: "Press stop", parentId: testCase.id } });
+    const sectionResponse = await app.inject({ method: "POST", url: `/documents/${testDocument.id}/rows`, headers: { cookie: actor.cookie }, payload: { rowType: "heading", title: "Test Steps", parentId: testCase.id } });
+    expect(sectionResponse.statusCode).toBe(201);
+    const section = JSON.parse(sectionResponse.body) as { id: string };
+    const stepResponse = await app.inject({ method: "POST", url: `/documents/${testDocument.id}/rows`, headers: { cookie: actor.cookie }, payload: { rowType: "test_step", title: "Press stop", parentId: section.id } });
+    expect(stepResponse.statusCode).toBe(201);
     const step = JSON.parse(stepResponse.body) as { id: string };
     const comment = await app.inject({ method: "POST", url: `/rows/${testCase.id}/comments`, headers: { cookie: actor.cookie }, payload: { body: `Review this @${actor.email}`, mentionUserIds: [] } });
     expect(comment.statusCode).toBe(201);

@@ -24,6 +24,7 @@ describe("document columns", () => {
     expect(columns.map((column) => column.key)).toEqual([
       "number",
       "title",
+      "stepNumber",
       "action",
       "expectedResult",
       "linkedRequirements",

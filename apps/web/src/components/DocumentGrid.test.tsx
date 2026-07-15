@@ -16,6 +16,8 @@ import { DocumentGrid } from "./DocumentGrid";
 
 function makeRow(partial: Partial<OutlineRow> & Pick<OutlineRow, "id" | "parentId" | "depth" | "rowType" | "title" | "displayNumber">): OutlineRow {
   return {
+    objectNumber: 1,
+    numberingStart: null,
     rank: "i",
     version: 1,
     description: null,
@@ -29,14 +31,15 @@ function makeRow(partial: Partial<OutlineRow> & Pick<OutlineRow, "id" | "parentI
     requirementNo: null,
     linkedRequirements: [],
     linkCount: 0,
+    stepNumber: null,
     ...partial,
   };
 }
 
 const rows: OutlineRow[] = [
-  makeRow({ id: "r1", parentId: null, depth: 0, rowType: "heading", title: "Giris", displayNumber: "1" }),
-  makeRow({ id: "r2", parentId: "r1", depth: 1, rowType: "requirement", title: "Gereksinim A", displayNumber: "1.1" }),
-  makeRow({ id: "r3", parentId: "r1", rank: "r", depth: 1, rowType: "requirement", title: "Gereksinim B", displayNumber: "1.2" }),
+  makeRow({ id: "r1", objectNumber: 1, parentId: null, depth: 0, rowType: "heading", title: "Giris", displayNumber: "1" }),
+  makeRow({ id: "r2", objectNumber: 2, parentId: "r1", depth: 1, rowType: "requirement", title: "Gereksinim A", displayNumber: "1.1" }),
+  makeRow({ id: "r3", objectNumber: 3, parentId: "r1", rank: "r", depth: 1, rowType: "requirement", title: "Gereksinim B", displayNumber: "1.2" }),
 ];
 
 function renderGrid(seed: OutlineRow[]) {
@@ -55,9 +58,9 @@ function renderGrid(seed: OutlineRow[]) {
 describe("DocumentGrid", () => {
   it("renders hierarchical rows with derived display numbers", () => {
     renderGrid(rows);
-    expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+    expect(screen.getByText("1 Giris")).toBeInTheDocument();
     expect(screen.getByText("Gereksinim A")).toBeInTheDocument();
-    expect(screen.getByText("1.2")).toBeInTheDocument();
+    expect(screen.getAllByText("3").length).toBeGreaterThan(0);
   });
 
   it("shows the empty state for a document without rows", () => {
@@ -70,5 +73,29 @@ describe("DocumentGrid", () => {
     fireEvent.click(screen.getByTestId("select-row-1"));
     fireEvent.click(screen.getByTestId("select-row-1.1"));
     expect(screen.getByTestId("bulk-delete")).toBeInTheDocument();
+  });
+
+  it("filters by object type and shows a compact link count", () => {
+    renderGrid([{ ...rows[0]!, linkCount: 2 }, rows[1]!, rows[2]!]);
+    expect(screen.getByLabelText("2 ba\u011flant\u0131")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("grid-type-filter"), { target: { value: "heading" } });
+    expect(screen.getByText("1 Giris")).toBeInTheDocument();
+    expect(screen.queryByText("Gereksinim A")).not.toBeInTheDocument();
+  });
+
+  it("opens numbering controls for a heading", () => {
+    renderGrid(rows);
+    fireEvent.contextMenu(screen.getByTestId("grid-row-1"), { clientX: 10, clientY: 10 });
+    fireEvent.click(screen.getByTestId("menu-numbering"));
+    expect(screen.getByTestId("numbering-start")).toHaveValue(1);
+    expect(screen.getByRole("button", { name: "Otomatik kullan" })).toBeInTheDocument();
+  });
+
+  it("offers subtree deletion or child promotion for a heading", () => {
+    renderGrid(rows);
+    fireEvent.contextMenu(screen.getByTestId("grid-row-1"), { clientX: 10, clientY: 10 });
+    fireEvent.click(screen.getByTestId("menu-delete"));
+    expect(screen.getByTestId("delete-promote-children")).toBeInTheDocument();
+    expect(screen.getByTestId("delete-subtree")).toBeInTheDocument();
   });
 });

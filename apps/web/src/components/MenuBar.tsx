@@ -75,7 +75,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
     mutationFn: async (format: "csv" | "docx" | "xlsx" | "pdf" | "reqif") => {
       const created = await api<{ id: string }>(`/documents/${documentId}/exports`, {
         method: "POST",
-        body: JSON.stringify({ format }),
+        body: JSON.stringify({ format, locale: storedLanguage() }),
       });
       const job = await pollExport(created.id);
       if (!job.ready) throw new Error("failed");
@@ -111,19 +111,13 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
   });
 
   const insertRow = useMutation({
-    mutationFn: (input: { parentId: string | null; rowType: OutlineRow["rowType"] }) =>
+    mutationFn: (input: { parentId: string | null; afterRowId?: string; rowType: OutlineRow["rowType"] }) =>
       api(`/documents/${documentId}/rows`, {
         method: "POST",
         headers: { "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({ ...input, title: "" }),
       }),
     onSettled: () => invalidateOutline(),
-    onError: () => pushToast("error", t("genericError")),
-  });
-
-  const deleteRow = useMutation({
-    mutationFn: (rowId: string) => api(`/rows/${rowId}`, { method: "DELETE", body: JSON.stringify({}) }),
-    onSettled: invalidateOutline,
     onError: () => pushToast("error", t("genericError")),
   });
 
@@ -148,6 +142,25 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
 
   const isDocumentsView = view === "documents";
   const isTrashView = view === "trash";
+  const headingInsideTestCase = selectedRow?.rowType === "heading" && (() => {
+    let parentId = selectedRow.parentId;
+    while (parentId) {
+      const parent = outline.find((row) => row.id === parentId);
+      if (!parent) return false;
+      if (parent.rowType === "test_case") return true;
+      parentId = parent.parentId;
+    }
+    return false;
+  })();
+  const childType = selectedRow
+    ? documentType === "requirement" && (selectedRow.rowType === "heading" || selectedRow.rowType === "requirement")
+      ? "requirement"
+      : documentType === "test" && selectedRow.rowType === "heading"
+        ? headingInsideTestCase ? "test_step" : "test_case"
+        : documentType === "test" && selectedRow.rowType === "test_case"
+          ? "test_step"
+          : null
+    : null;
   const fileEntry: MenuEntry[] = [
     ...(gridDoc
       ? [
@@ -167,7 +180,30 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
   ];
 
   const editEntries: MenuEntry[] = [
-    { key: "add-heading", label: t("addHeading"), disabled: !gridDoc, onSelect: () => insertRow.mutate({ parentId: null, rowType: "heading" }) },
+    {
+      key: "add-object",
+      label: `${t("addObject")}\tInsert`,
+      disabled: !gridDoc,
+      onSelect: () => insertRow.mutate({
+        parentId: selectedRow?.parentId ?? null,
+        afterRowId: selectedRow?.id,
+        rowType: selectedRow?.rowType ?? (documentType === "test" ? "test_case" : "requirement"),
+      }),
+    },
+    {
+      key: "add-object-below",
+      label: `${t("addObjectBelow")}\tShift+Insert`,
+      disabled: !gridDoc || !selectedRow || !childType,
+      onSelect: () => selectedRow && childType && insertRow.mutate({ parentId: selectedRow.id, rowType: childType }),
+    },
+    { key: "object-sep", label: "", separator: true },
+    { key: "add-heading", label: t("addTopLevelHeading"), disabled: !gridDoc, onSelect: () => insertRow.mutate({ parentId: null, rowType: "heading" }) },
+    {
+      key: "add-child-heading",
+      label: t("addChildHeading"),
+      disabled: !gridDoc || !selectedRow || (selectedRow.rowType !== "heading" && selectedRow.rowType !== "test_case"),
+      onSelect: () => selectedRow && insertRow.mutate({ parentId: selectedRow.id, rowType: "heading" }),
+    },
     ...(documentType === "requirement"
       ? [{ key: "add-requirement", label: t("addRequirement"), disabled: !gridDoc, onSelect: () => insertRow.mutate({ parentId: null, rowType: "requirement" as const }) }]
       : []),
@@ -181,7 +217,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
       onSelect: () => selectedRowId && insertRow.mutate({ parentId: selectedRowId, rowType: "test_step" }),
     },
     { key: "sep", label: "", separator: true },
-    { key: "delete", label: t("deleteAction"), danger: true, disabled: !gridDoc || !selectedRowId, onSelect: () => selectedRowId && deleteRow.mutate(selectedRowId) },
+    { key: "delete", label: t("deleteAction"), danger: true, disabled: !gridDoc || !selectedRowId, onSelect: () => window.dispatchEvent(new Event("docsys:delete-selected-row")) },
   ];
 
   const themeItem = (mode: ThemeMode, label: string): MenuEntry => ({

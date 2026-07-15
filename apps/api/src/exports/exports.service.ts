@@ -41,7 +41,7 @@ export class ExportsService {
     private readonly queue: ExportQueue,
   ) {}
 
-  async createExport(actorId: string, documentId: string, format: ExportFormat, templateId?: string) {
+  async createExport(actorId: string, documentId: string, format: ExportFormat, templateId?: string, locale: "tr" | "en" = "tr") {
     const document = await this.requireDocument(documentId);
     await this.access.assertPermission(actorId, "document.read", {
       organizationId: document.organizationId,
@@ -54,7 +54,7 @@ export class ExportsService {
         requestedById: actorId,
         jobType: format,
         status: "pending",
-        parameters: { format, ...(templateId ? { templateId } : {}) },
+        parameters: { format, locale, ...(templateId ? { templateId } : {}) },
       },
     });
     await this.queue.enqueue({ exportJobId: job.id });
@@ -101,6 +101,12 @@ export class ExportsService {
 
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
+      const counter = await tx.document.update({
+        where: { id: document.id },
+        data: { nextObjectNumber: { increment: rows.length } },
+        select: { nextObjectNumber: true },
+      });
+      let objectNumber = counter.nextObjectNumber - rows.length;
       const stack: { id: string; ancestorPath: string; depth: number; rowType: RowType }[] = [];
       const lastRankByParent = new Map<string | null, string>();
       let count = 0;
@@ -123,6 +129,7 @@ export class ExportsService {
           data: {
             organizationId: document.organizationId,
             documentId: document.id,
+            objectNumber,
             parentId,
             rank,
             ancestorPath,
@@ -134,6 +141,7 @@ export class ExportsService {
             updatedById: actorId,
           },
         });
+        objectNumber += 1;
         if (parsed.rowType === "requirement") {
           requirementSequence += 1;
           await tx.requirementDetail.create({
@@ -282,8 +290,8 @@ export function parseImportCsv(csvText: string): ParsedImportRow[] {
 }
 
 function isAllowedParent(rowType: RowType, parentType: RowType): boolean {
-  if (rowType === "test_step") return parentType === "test_case";
-  if (rowType === "heading") return parentType === "heading";
+  if (rowType === "test_step") return parentType === "test_case" || parentType === "heading";
+  if (rowType === "heading") return parentType === "heading" || parentType === "test_case";
   if (rowType === "requirement") return parentType === "heading" || parentType === "requirement";
   if (rowType === "test_case") return parentType === "heading";
   return true;

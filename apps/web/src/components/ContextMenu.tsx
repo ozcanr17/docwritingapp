@@ -4,6 +4,8 @@ export interface MenuItem {
   key: string;
   label: string;
   danger?: boolean;
+  disabled?: boolean;
+  shortcut?: string;
   onSelect: () => void;
 }
 
@@ -45,7 +47,8 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
           key={item.key}
           data-testid={`menu-${item.key}`}
           role="menuitem"
-          className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-muted focus:bg-muted ${
+          disabled={item.disabled}
+          className={`flex w-full items-center justify-between gap-4 px-3 py-1.5 text-left text-sm hover:bg-muted focus:bg-muted disabled:cursor-not-allowed disabled:opacity-40 ${
             item.danger ? "text-destructive" : "text-foreground"
           }`}
           onClick={() => {
@@ -53,7 +56,8 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             onClose();
           }}
         >
-          {item.label}
+          <span>{item.label}</span>
+          {item.shortcut && <kbd className="text-[10px] text-mutedForeground">{item.shortcut}</kbd>}
         </button>
       ))}
     </div>

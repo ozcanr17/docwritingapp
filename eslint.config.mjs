@@ -7,6 +7,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/node_modules/**",
       "**/.turbo/**",
+      "**/target/**",
       "**/prisma/generated/**",
       "apps/web/src/locales/**",
     ],

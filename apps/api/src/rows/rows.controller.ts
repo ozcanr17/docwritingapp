@@ -28,6 +28,7 @@ const createRowSchema = z.object({
 
 const updateRowSchema = z.object({
   expectedVersion: z.number().int().positive(),
+  numberingStart: z.number().int().positive().nullable().optional(),
   title: z.string().max(1000).optional(),
   description: z.string().max(100000).nullable().optional(),
   customFields: z.record(z.unknown()).optional(),
@@ -62,7 +63,10 @@ const moveRowSchema = z.object({
   expectedVersion: z.number().int().positive(),
 });
 
-const deleteRowSchema = z.object({ reason: z.string().max(1000).optional() });
+const deleteRowSchema = z.object({
+  reason: z.string().max(1000).optional(),
+  childStrategy: z.enum(["delete_subtree", "promote_children"]).default("delete_subtree"),
+});
 const copyRowsSchema = z.object({
   rowIds: z.array(z.string().uuid()).min(1).max(200),
   newParentId: z.string().uuid().nullable().default(null),
@@ -186,7 +190,7 @@ export class RowsController {
     @Param("rowId", ParseUUIDPipe) rowId: string,
     @Body(new ZodBodyPipe(deleteRowSchema)) body: z.infer<typeof deleteRowSchema>,
   ) {
-    return this.rows.deleteRow(user.userId, rowId, body.reason);
+    return this.rows.deleteRow(user.userId, rowId, body.reason, body.childStrategy);
   }
 
   @Post("rows/:rowId/restore")

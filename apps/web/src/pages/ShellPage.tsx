@@ -8,7 +8,7 @@ import { ResizeHandle } from "../components/ResizeHandle";
 import { TrashPanel } from "../components/TrashPanel";
 import { TreePanel } from "../components/TreePanel";
 import { useDocumentEvents } from "../hooks/useDocumentEvents";
-import { api, DocumentType, setSessionToken } from "../lib/api";
+import { api, DocumentType, setSessionToken, UserProfile } from "../lib/api";
 import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
 
@@ -18,6 +18,7 @@ const ReportsDialog = lazy(() => import("../components/ReportsDialog").then((mod
 const RichTextEditor = lazy(() => import("../components/RichTextEditor").then((module) => ({ default: module.RichTextEditor })));
 const RowDetailPanel = lazy(() => import("../components/RowDetailPanel").then((module) => ({ default: module.RowDetailPanel })));
 const WorkspaceSettingsDialog = lazy(() => import("../components/WorkspaceSettingsDialog").then((module) => ({ default: module.WorkspaceSettingsDialog })));
+const ProfileDialog = lazy(() => import("../components/ProfileDialog").then((module) => ({ default: module.ProfileDialog })));
 
 interface Organization {
   id: string;
@@ -29,12 +30,6 @@ interface Workspace {
   name: string;
 }
 
-interface Profile {
-  id: string;
-  email: string;
-  displayName: string;
-}
-
 export function ShellPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -43,6 +38,7 @@ export function ShellPage() {
   const [report, setReport] = useState<"baselines" | "coverage" | "matrix" | "reviews" | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const closeReport = useCallback(() => setReport(null), []);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
@@ -64,9 +60,15 @@ export function ShellPage() {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
+  useEffect(() => {
+    const openProfile = (event: Event) => setProfileUserId((event as CustomEvent<{ userId: string }>).detail.userId);
+    window.addEventListener("docsys:open-profile", openProfile);
+    return () => window.removeEventListener("docsys:open-profile", openProfile);
+  }, []);
+
   const profile = useQuery({
     queryKey: ["me"],
-    queryFn: () => api<Profile>("/auth/me"),
+    queryFn: () => api<UserProfile>("/auth/me"),
     retry: false,
   });
 
@@ -148,13 +150,18 @@ export function ShellPage() {
           />
         )}
         {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} onClose={() => setSettingsOpen(false)} />}
+        {profileUserId && <ProfileDialog userId={profileUserId} currentUserId={profile.data.id} onClose={() => setProfileUserId(null)} />}
       </Suspense>
       <div className="flex flex-1 gap-1.5 overflow-hidden p-2 pt-1.5">
-      <aside aria-label={t("primaryNavigation")} className="flex w-56 flex-col rounded-xl border border-border bg-sidebarBackground text-sidebarForeground shadow-sm">
+      <aside
+        aria-label={t("primaryNavigation")}
+        className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-sidebarBackground text-sidebarForeground shadow-sm"
+        style={{ width: treeWidth }}
+      >
         <div className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-sidebarForeground">
           {workspaces.data?.[0]?.name ?? "—"}
         </div>
-        <nav aria-label={t("primaryNavigation")} className="flex-1 px-2 text-sm">
+        <nav aria-label={t("primaryNavigation")} className="px-2 pb-2 text-sm">
           <SidebarItem
             icon={<FileText size={15} />}
             label={t("documents")}
@@ -171,11 +178,26 @@ export function ShellPage() {
           />
           <SidebarItem icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} />
         </nav>
+        <section aria-label={t("documentTree")} className="min-h-0 flex-1 overflow-hidden border-t border-white/10 bg-surface text-foreground">
+          {workspaceId &&
+            (view === "trash" ? (
+              <TrashPanel workspaceId={workspaceId} />
+            ) : (
+              <TreePanel
+                workspaceId={workspaceId}
+                selectedDocumentId={selectedDocumentId}
+                onSelectDocument={setSelectedDocumentId}
+              />
+            ))}
+        </section>
         <div className="border-t border-white/10 p-3 text-sm">
-          <div className="mb-2 truncate opacity-80">{profile.data.displayName}</div>
+          <div className="flex items-center gap-1">
+            <button data-testid="open-profile" className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left hover:bg-white/10" onClick={() => setProfileUserId(profile.data.id)}>{profile.data.displayName}</button>
           <button
             data-testid="logout"
-            className="flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-white/10"
+            aria-label={t("logout")}
+            title={t("logout")}
+            className="rounded-lg p-2 hover:bg-white/10"
             onClick={async () => {
               await api("/auth/logout", { method: "POST" });
               setSessionToken(null);
@@ -184,22 +206,10 @@ export function ShellPage() {
             }}
           >
             <LogOut size={15} />
-            {t("logout")}
           </button>
+          </div>
         </div>
       </aside>
-      <section aria-label={t("documentTree")} className="shrink-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm" style={{ width: treeWidth }}>
-        {workspaceId &&
-          (view === "trash" ? (
-            <TrashPanel workspaceId={workspaceId} />
-          ) : (
-            <TreePanel
-              workspaceId={workspaceId}
-              selectedDocumentId={selectedDocumentId}
-              onSelectDocument={setSelectedDocumentId}
-            />
-          ))}
-      </section>
       <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />
       <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
         <header className="flex items-center justify-between border-b border-border bg-surface/85 px-4 py-2.5 text-sm backdrop-blur-xl">
@@ -214,13 +224,14 @@ export function ShellPage() {
               </span>
               <span className="flex gap-1">
                 {presence.slice(0, 8).map((p) => (
-                  <span
+                  <button
                     key={p.userId}
                     title={p.displayName}
                     className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs text-primaryForeground"
+                    onClick={() => setProfileUserId(p.userId)}
                   >
                     {p.displayName.charAt(0).toUpperCase()}
-                  </span>
+                  </button>
                 ))}
               </span>
             </span>

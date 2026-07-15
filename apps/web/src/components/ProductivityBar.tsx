@@ -1,23 +1,28 @@
-import { LayoutDashboard, Pin, Save, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { CornerDownRight, LayoutDashboard, Pin, Plus, Save, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DashboardSummary, SavedView } from "../lib/api";
+import { DashboardSummary, OutlineRow, SavedView } from "../lib/api";
 import { GridColumn } from "../lib/columns";
 
 interface ProductivityBarProps {
   columns: GridColumn[];
   query: string;
+  rowTypeFilter: OutlineRow["rowType"] | "";
   sortKey: string;
   sortDirection: "asc" | "desc";
   frozenCount: number;
   views: SavedView[];
   dashboard?: DashboardSummary;
   onQueryChange: (value: string) => void;
+  onRowTypeFilterChange: (value: OutlineRow["rowType"] | "") => void;
   onSortChange: (key: string, direction: "asc" | "desc") => void;
   onFrozenCountChange: (count: number) => void;
   onApplyView: (view: SavedView) => void;
   onSaveView: (name: string, scope: "personal" | "team") => void;
   onDeleteView: (id: string) => void;
+  onAddObject: () => void;
+  onAddObjectBelow: () => void;
+  canAddObjectBelow: boolean;
 }
 
 export function ProductivityBar(props: ProductivityBarProps) {
@@ -36,6 +41,27 @@ export function ProductivityBar(props: ProductivityBarProps) {
   };
   return (
     <div className="relative flex flex-wrap items-center gap-2 border-b border-border bg-surface/90 px-3 py-2 text-xs backdrop-blur-xl">
+      <div className="flex items-center rounded-lg border border-border bg-editorBackground p-0.5">
+        <button
+          data-testid="add-object"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-medium hover:bg-muted"
+          title={`${t("addObject")} · Insert`}
+          onClick={props.onAddObject}
+        >
+          <Plus size={14} />
+          {t("addObject")}
+        </button>
+        <button
+          data-testid="add-object-below"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+          title={`${t("addObjectBelow")} · Shift+Insert`}
+          disabled={!props.canAddObjectBelow}
+          onClick={props.onAddObjectBelow}
+        >
+          <CornerDownRight size={14} />
+          {t("addObjectBelow")}
+        </button>
+      </div>
       <label className="flex min-w-52 flex-1 items-center gap-2 rounded-lg border border-border bg-editorBackground px-2.5 py-1.5">
         <Search size={14} className="text-mutedForeground" />
         <input
@@ -51,6 +77,20 @@ export function ProductivityBar(props: ProductivityBarProps) {
           </button>
         )}
       </label>
+      <select
+        data-testid="grid-type-filter"
+        aria-label={t("filterByType")}
+        className="rounded-lg border border-border bg-editorBackground px-2 py-1.5"
+        value={props.rowTypeFilter}
+        onChange={(event) => props.onRowTypeFilterChange(event.target.value as OutlineRow["rowType"] | "")}
+      >
+        <option value="">{t("allObjectTypes")}</option>
+        <option value="heading">{t("typeHeading")}</option>
+        <option value="requirement">{t("typeRequirement")}</option>
+        <option value="test_case">{t("typeTestCase")}</option>
+        <option value="test_step">{t("typeTestStep")}</option>
+        <option value="note">{t("typeNote")}</option>
+      </select>
       <select
         data-testid="grid-sort"
         className="rounded-lg border border-border bg-editorBackground px-2 py-1.5"

@@ -20,6 +20,15 @@ const typeLabelKeys: Record<RowDetail["rowType"], string> = {
   note: "typeNote",
 };
 
+function apiErrorDetail(error: unknown): string | null {
+  if (!(error instanceof ApiError) || !error.payload || typeof error.payload !== "object") return null;
+  const payload = error.payload as { message?: unknown; issues?: unknown };
+  if (Array.isArray(payload.message)) return payload.message.filter((value): value is string => typeof value === "string").join(" · ");
+  if (typeof payload.message === "string" && payload.message !== "Validation failed") return payload.message;
+  if (Array.isArray(payload.issues)) return payload.issues.filter((value): value is string => typeof value === "string").join(" · ");
+  return null;
+}
+
 export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -119,13 +128,17 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
     onSuccess: () => {
       setCommentBody("");
       void queryClient.invalidateQueries({ queryKey: ["comments", rowId] });
+      pushToast("success", t("commentAdded"));
     },
-    onError: () => pushToast("error", t("genericError")),
+    onError: (error) => pushToast("error", apiErrorDetail(error) ?? t("commentAddFailed")),
   });
   const createExecution = useMutation({
     mutationFn: () => api<TestExecution>(`/rows/${rowId}/executions`, { method: "POST", body: JSON.stringify({}) }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["executions", rowId] }),
-    onError: () => pushToast("error", t("genericError")),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["executions", rowId] });
+      pushToast("success", t("executionStarted"));
+    },
+    onError: (error) => pushToast("error", apiErrorDetail(error) ?? t("executionStartFailed")),
   });
   const updateExecutionStep = useMutation({
     mutationFn: (input: { executionId: string; stepRowId: string; status: string }) =>
@@ -186,7 +199,10 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
       <div className="space-y-4 p-4 text-sm">
         <div>
           <div className="mb-1 text-xs uppercase text-mutedForeground">{t("rowType")}</div>
-          <span className="rounded bg-muted px-2 py-0.5 text-xs">{t(typeLabelKeys[row.rowType])}</span>
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">ID {row.objectNumber}</span>
+            <span className="rounded bg-muted px-2 py-0.5 text-xs">{t(typeLabelKeys[row.rowType])}</span>
+          </div>
         </div>
 
         <div>
@@ -354,7 +370,14 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
           <div>
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs uppercase text-mutedForeground"><Play size={13} />{t("testExecutions")}</div>
-              <button data-testid="start-execution" className="rounded-lg bg-primary px-2 py-1 text-xs text-primaryForeground" onClick={() => createExecution.mutate()}>{t("startExecution")}</button>
+              <button
+                data-testid="start-execution"
+                className="rounded-lg bg-primary px-2 py-1 text-xs text-primaryForeground disabled:cursor-wait disabled:opacity-60"
+                disabled={createExecution.isPending}
+                onClick={() => createExecution.mutate()}
+              >
+                {t("startExecution")}
+              </button>
             </div>
             {executions.length === 0 ? (
               <div className="text-xs text-mutedForeground">{t("noExecutions")}</div>
@@ -429,7 +452,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
             {comments.map((comment) => (
               <div key={comment.id} className={`rounded-lg border border-border p-2 ${comment.resolvedAt ? "opacity-60" : "bg-editorBackground"}`}>
                 <div className="flex items-center justify-between text-[10px] text-mutedForeground">
-                  <span>{comment.author.displayName}</span>
+                  <button className="hover:text-foreground hover:underline" onClick={() => window.dispatchEvent(new CustomEvent("docsys:open-profile", { detail: { userId: comment.author.id } }))}>{comment.author.displayName}</button>
                   <span>{new Date(comment.createdAt).toLocaleString()}</span>
                 </div>
                 <div className="mt-1 whitespace-pre-wrap text-xs">{comment.body}</div>
@@ -444,7 +467,12 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
             }}
           >
             <input data-testid="comment-input" className="min-w-0 flex-1 rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs" value={commentBody} placeholder={t("addComment")} onChange={(event) => setCommentBody(event.target.value)} />
-            <button className="rounded-lg bg-primary px-2 py-1 text-xs text-primaryForeground">{t("add")}</button>
+            <button
+              className="rounded-lg bg-primary px-2 py-1 text-xs text-primaryForeground disabled:cursor-wait disabled:opacity-60"
+              disabled={!commentBody.trim() || addComment.isPending}
+            >
+              {t("add")}
+            </button>
           </form>
         </div>
 

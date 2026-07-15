@@ -4,6 +4,8 @@ import { insertOptions } from "./outline";
 
 function row(partial: Pick<OutlineRow, "id" | "parentId" | "depth" | "rowType" | "displayNumber">): OutlineRow {
   return {
+    objectNumber: 1,
+    numberingStart: null,
     rank: "i",
     version: 1,
     title: "",
@@ -18,6 +20,7 @@ function row(partial: Pick<OutlineRow, "id" | "parentId" | "depth" | "rowType" |
     requirementNo: null,
     linkedRequirements: [],
     linkCount: 0,
+    stepNumber: null,
     ...partial,
   };
 }

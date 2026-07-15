@@ -15,6 +15,7 @@ export function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [organizationSlug, setOrganizationSlug] = useState("");
   const desktop = isDesktopRuntime();
@@ -40,12 +41,12 @@ export function LoginPage() {
         result = await api<AuthResponse>("/auth/login", {
           method: "POST",
           headers: desktop ? { "X-DocSys-Client": "desktop" } : undefined,
-          body: JSON.stringify({ identifier, password }),
+          body: JSON.stringify({ identifier, password, rememberMe }),
         });
       }
       if (desktop) {
         if (!result.token) throw new Error("Desktop session token missing");
-        setSessionToken(result.token);
+        setSessionToken(result.token, rememberMe);
       }
       navigate("/");
     } catch {
@@ -116,6 +117,12 @@ export function LoginPage() {
             minLength={8}
           />
         </label>
+        {mode === "login" && (
+          <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm text-mutedForeground">
+            <input data-testid="auth-remember-me" type="checkbox" className="h-4 w-4 rounded border-border accent-primary" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} />
+            {t("rememberMe")}
+          </label>
+        )}
         {error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
         <button
           data-testid="auth-submit"

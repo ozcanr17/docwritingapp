@@ -1,5 +1,19 @@
 import { PrismaClient } from "@docsys/database";
-import { Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
+import {
+  AlignmentType,
+  BorderStyle,
+  Document,
+  Packer,
+  Paragraph,
+  ShadingType,
+  Table,
+  TableCell,
+  TableLayoutType,
+  TableRow,
+  TextRun,
+  VerticalAlign,
+  WidthType,
+} from "docx";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import Docxtemplater from "docxtemplater";
@@ -8,6 +22,8 @@ import { createStorage, StorageConfig } from "./storage";
 
 export interface ExportRow {
   id: string;
+  objectNumber: number;
+  numberingStart?: number | null;
   parentId: string | null;
   rank: string;
   depth: number;
@@ -19,11 +35,15 @@ export interface ExportRow {
   expectedResult?: string | null;
   testResult?: string | null;
   displayNumber: string;
+  stepNumber: number | null;
+  linkedRequirementNos: string[];
 }
 
 export function numberRows(
   rows: Array<{
     id: string;
+    objectNumber: number;
+    numberingStart?: number | null;
     parentId: string | null;
     rank: string;
     depth: number;
@@ -34,6 +54,7 @@ export function numberRows(
     action?: string | null;
     expectedResult?: string | null;
     testResult?: string | null;
+    linkedRequirementNos?: string[];
   }>,
 ): ExportRow[] {
   const childrenByParent = new Map<string | null, typeof rows>();
@@ -43,11 +64,18 @@ export function numberRows(
     childrenByParent.set(row.parentId, list);
   }
   const result: ExportRow[] = [];
+  const stepNumbers = new Map<string, number>();
   const visit = (parentId: string | null, prefix: string) => {
     const children = (childrenByParent.get(parentId) ?? []).slice().sort((a, b) => (a.rank < b.rank ? -1 : 1));
-    children.forEach((child, index) => {
-      const displayNumber = prefix === "" ? `${index + 1}` : `${prefix}.${index + 1}`;
-      result.push({ ...child, displayNumber });
+    let nextSegment = 1;
+    children.forEach((child) => {
+      const segment = child.numberingStart ?? nextSegment;
+      const displayNumber = prefix === "" ? `${segment}` : `${prefix}.${segment}`;
+      nextSegment = segment + 1;
+      const key = child.parentId ?? "root";
+      const stepNumber = child.rowType === "test_step" ? (stepNumbers.get(key) ?? 0) + 1 : null;
+      if (stepNumber !== null) stepNumbers.set(key, stepNumber);
+      result.push({ ...child, displayNumber, stepNumber, linkedRequirementNos: child.linkedRequirementNos ?? [] });
       visit(child.id, displayNumber);
     });
   };
@@ -61,14 +89,15 @@ function csvCell(value: string): string {
 }
 
 export function toCsv(rows: ExportRow[]): Buffer {
-  const header = ["id", "level", "type", "requirement_no", "title", "test_step", "expected_result", "test_result", "description"].join(",");
+  const header = ["id", "level", "type", "requirement_no", "title", "step_no", "test_step", "expected_result", "test_result", "description"].join(",");
   const lines = rows.map((row) =>
     [
-      row.displayNumber,
+      String(row.objectNumber),
       String(row.depth),
       row.rowType,
       row.requirementNo ?? "",
       row.title,
+      row.stepNumber === null ? "" : String(row.stepNumber),
       row.action ?? "",
       row.expectedResult ?? "",
       row.testResult ?? "",
@@ -80,27 +109,105 @@ export function toCsv(rows: ExportRow[]): Buffer {
   return Buffer.from([header, ...lines].join("\n"), "utf8");
 }
 
-export async function toDocx(title: string, rows: ExportRow[]): Promise<Buffer> {
-  const children = [
-    new Paragraph({ text: title, heading: HeadingLevel.TITLE }),
-    ...rows.map((row) => {
-      if (row.rowType === "heading") {
-        return new Paragraph({ text: `${row.displayNumber}  ${row.title}`, heading: HeadingLevel.HEADING_2 });
-      }
-      return new Paragraph({
-        children: [
-          new TextRun({ text: `${row.displayNumber}  `, bold: true }),
-          ...(row.requirementNo ? [new TextRun({ text: `${row.requirementNo}  `, bold: true })] : []),
-          new TextRun({ text: row.title }),
-          ...(row.action ? [new TextRun({ text: `  | ${row.action}` })] : []),
-          ...(row.expectedResult ? [new TextRun({ text: `  | ${row.expectedResult}` })] : []),
-          ...(row.testResult ? [new TextRun({ text: `  | ${row.testResult}` })] : []),
-          ...(row.description ? [new TextRun({ text: `  — ${row.description}`, italics: true })] : []),
-        ],
-      });
-    }),
-  ];
-  const doc = new Document({ sections: [{ children }] });
+type ExportLocale = "tr" | "en";
+
+const TABLE_WIDTH = 9360;
+const CELL_MARGINS = { top: 80, bottom: 80, left: 120, right: 120 };
+const TABLE_BORDERS = {
+  top: { style: BorderStyle.SINGLE, size: 2, color: "B8C0CA" },
+  bottom: { style: BorderStyle.SINGLE, size: 2, color: "B8C0CA" },
+  left: { style: BorderStyle.SINGLE, size: 2, color: "B8C0CA" },
+  right: { style: BorderStyle.SINGLE, size: 2, color: "B8C0CA" },
+  insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "D7DCE2" },
+  insideVertical: { style: BorderStyle.SINGLE, size: 2, color: "D7DCE2" },
+};
+
+function tableCell(text: string, width: number, options: { header?: boolean; bold?: boolean; center?: boolean; muted?: boolean } = {}) {
+  return new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    margins: CELL_MARGINS,
+    verticalAlign: VerticalAlign.CENTER,
+    ...(options.header ? { shading: { type: ShadingType.CLEAR, fill: "E8EEF5", color: "auto" } } : {}),
+    children: [
+      new Paragraph({
+        alignment: options.center ? AlignmentType.CENTER : AlignmentType.LEFT,
+        spacing: { before: 0, after: 0, line: 240 },
+        children: [new TextRun({ text, bold: Boolean(options.header || options.bold), size: options.header ? 17 : 16, color: options.muted ? "667085" : "172033", font: "Calibri" })],
+      }),
+    ],
+  });
+}
+
+function titleFor(row: ExportRow): string {
+  return row.rowType === "heading" || row.rowType === "test_case"
+    ? `${row.displayNumber} ${row.title}`.trim()
+    : row.title;
+}
+
+function documentTable(rows: ExportRow[], documentType: "requirement" | "test", locale: ExportLocale): Table {
+  const tr = locale === "tr";
+  const requirementWidths = [620, 1500, 3540, 1160, 2540];
+  const testWidths = [560, 1760, 620, 1450, 1450, 1050, 1000, 1470];
+  const widths = documentType === "requirement" ? requirementWidths : testWidths;
+  const headers = documentType === "requirement"
+    ? tr ? ["ID", "Gereksinim No", "Dok\u00fcman \u0130\u00e7eri\u011fi", "Nitelik", "A\u00e7\u0131klama"] : ["ID", "Requirement No", "Document Content", "Type", "Description"]
+    : tr ? ["ID", "Dok\u00fcman \u0130\u00e7eri\u011fi", "Ad\u0131m No", "Test Ad\u0131m\u0131", "Beklenen Sonu\u00e7", "Gereksinim No", "Test Sonucu", "A\u00e7\u0131klama"] : ["ID", "Document Content", "Step No", "Test Step", "Expected Result", "Requirement No", "Test Result", "Description"];
+  const header = new TableRow({
+    tableHeader: true,
+    cantSplit: true,
+    children: headers.map((value, index) => tableCell(value, widths[index]!, { header: true, center: index === 0 || (documentType === "test" && index === 2) })),
+  });
+  const body = rows.map((row) => {
+    const heading = row.rowType === "heading" || row.rowType === "test_case";
+    const values = documentType === "requirement"
+      ? [String(row.objectNumber), row.requirementNo ?? "", titleFor(row), tr ? row.rowType === "heading" ? "Ba\u015fl\u0131k" : row.rowType === "requirement" ? "Gereksinim" : "Not" : row.rowType, row.description ?? ""]
+      : [String(row.objectNumber), titleFor(row), row.stepNumber === null ? "" : `${row.stepNumber}.`, row.action ?? "", row.expectedResult ?? "", row.linkedRequirementNos.join("\n"), row.testResult ?? "", row.description ?? ""];
+    return new TableRow({
+      cantSplit: true,
+      children: values.map((value, index) => tableCell(value, widths[index]!, { bold: heading && index === 2 - (documentType === "test" ? 1 : 0), center: index === 0 || (documentType === "test" && index === 2), muted: !value })),
+    });
+  });
+  return new Table({
+    rows: [header, ...body],
+    width: { size: TABLE_WIDTH, type: WidthType.DXA },
+    indent: { size: 120, type: WidthType.DXA },
+    columnWidths: widths,
+    layout: TableLayoutType.FIXED,
+    margins: CELL_MARGINS,
+    borders: TABLE_BORDERS,
+  });
+}
+
+export async function toDocx(title: string, rows: ExportRow[], documentType: "requirement" | "test" = "requirement", locale: ExportLocale = "tr"): Promise<Buffer> {
+  const label = locale === "tr"
+    ? documentType === "test" ? "Test dok\u00fcman\u0131" : "Gereksinim dok\u00fcman\u0131"
+    : documentType === "test" ? "Test document" : "Requirements document";
+  const doc = new Document({
+    styles: {
+      default: {
+        document: { run: { font: "Calibri", size: 22, color: "172033" }, paragraph: { spacing: { after: 120, line: 300 } } },
+      },
+    },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 12240, height: 15840 },
+          margin: { top: 1080, right: 1080, bottom: 1080, left: 1080, header: 708, footer: 708 },
+        },
+      },
+      children: [
+        new Paragraph({
+          spacing: { before: 0, after: 80 },
+          children: [new TextRun({ text: title, bold: true, size: 30, color: "172033", font: "Calibri" })],
+        }),
+        new Paragraph({
+          spacing: { before: 0, after: 180 },
+          children: [new TextRun({ text: label, size: 18, color: "667085", font: "Calibri" })],
+        }),
+        documentTable(rows, documentType, locale),
+      ],
+    }],
+  });
   return Packer.toBuffer(doc);
 }
 
@@ -110,10 +217,12 @@ export function toTemplatedDocx(template: Buffer, title: string, rows: ExportRow
     title,
     generatedAt: new Date().toISOString(),
     rows: rows.map((row) => ({
-      id: row.displayNumber,
+      id: row.objectNumber,
+      outlineNumber: row.displayNumber,
       type: row.rowType,
       requirementNo: row.requirementNo ?? "",
       title: row.title,
+      stepNumber: row.stepNumber ?? "",
       action: row.action ?? "",
       expectedResult: row.expectedResult ?? "",
       testResult: row.testResult ?? "",
@@ -129,10 +238,12 @@ export async function toXlsx(title: string, rows: ExportRow[]): Promise<Buffer> 
   workbook.created = new Date();
   const sheet = workbook.addWorksheet(title.slice(0, 31) || "Document", { views: [{ state: "frozen", ySplit: 1, xSplit: 2 }] });
   sheet.columns = [
-    { header: "ID", key: "id", width: 14 },
+    { header: "ID", key: "id", width: 10 },
+    { header: "Outline", key: "outline", width: 14 },
     { header: "Type", key: "type", width: 18 },
     { header: "Requirement No", key: "requirementNo", width: 22 },
     { header: "Title", key: "title", width: 48 },
+    { header: "Step No", key: "stepNumber", width: 12 },
     { header: "Test Step", key: "action", width: 48 },
     { header: "Expected Result", key: "expectedResult", width: 48 },
     { header: "Test Result", key: "testResult", width: 24 },
@@ -140,10 +251,12 @@ export async function toXlsx(title: string, rows: ExportRow[]): Promise<Buffer> 
   ];
   for (const row of rows) {
     sheet.addRow({
-      id: row.displayNumber,
+      id: row.objectNumber,
+      outline: row.displayNumber,
       type: row.rowType,
       requirementNo: row.requirementNo ?? "",
       title: row.title,
+      stepNumber: row.stepNumber ?? "",
       action: row.action ?? "",
       expectedResult: row.expectedResult ?? "",
       testResult: row.testResult ?? "",
@@ -221,6 +334,8 @@ export async function runExport(
     orderBy: [{ depth: "asc" }, { rank: "asc" }],
     select: {
       id: true,
+      objectNumber: true,
+      numberingStart: true,
       parentId: true,
       rank: true,
       depth: true,
@@ -229,6 +344,14 @@ export async function runExport(
       description: true,
       requirementDetail: { select: { requirementNo: true } },
       testStepDetail: { select: { action: true, expectedResult: true, testResult: true } },
+      outgoingLinks: {
+        where: { deletedAt: null },
+        select: { targetRow: { select: { requirementDetail: { select: { requirementNo: true } } } } },
+      },
+      incomingLinks: {
+        where: { deletedAt: null },
+        select: { sourceRow: { select: { requirementDetail: { select: { requirementNo: true } } } } },
+      },
     },
   });
   const numbered = numberRows(
@@ -238,6 +361,10 @@ export async function runExport(
       action: row.testStepDetail?.action ?? null,
       expectedResult: row.testStepDetail?.expectedResult ?? null,
       testResult: row.testStepDetail?.testResult ?? null,
+      linkedRequirementNos: [
+        ...row.outgoingLinks.map((link) => link.targetRow.requirementDetail?.requirementNo),
+        ...row.incomingLinks.map((link) => link.sourceRow.requirementDetail?.requirementNo),
+      ].filter((value): value is string => Boolean(value)),
     })),
   );
   const links = await prisma.requirementLink.findMany({
@@ -255,11 +382,12 @@ export async function runExport(
   await storage.ensureBucket();
   const parameters = job.parameters as Record<string, unknown>;
   const templateId = typeof parameters.templateId === "string" ? parameters.templateId : null;
+  const locale = parameters.locale === "en" ? "en" : "tr";
   const template = templateId ? await prisma.exportTemplate.findFirst({ where: { id: templateId, organizationId: job.organizationId, deletedAt: null } }) : null;
   const docxBody = job.jobType === "docx"
     ? template
       ? toTemplatedDocx(await storage.get(template.storageKey), document.title, numbered)
-      : await toDocx(document.title, numbered)
+      : await toDocx(document.title, numbered, document.documentType === "test" ? "test" : "requirement", locale)
     : Buffer.alloc(0);
   const output = job.jobType === "docx"
     ? { body: docxBody, contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", extension: "docx" }

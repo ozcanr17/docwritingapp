@@ -2,6 +2,7 @@ import { DocumentType, FieldDefinition, OutlineRow, RowType } from "./api";
 
 export type ColumnKind =
   | "number"
+  | "stepNumber"
   | "requirementNo"
   | "title"
   | "description"
@@ -24,7 +25,7 @@ export interface GridColumn {
 
 export const MIN_COLUMN_WIDTH = 64;
 
-const NUMBER_COLUMN: GridColumn = { key: "number", labelKey: "rowId", kind: "number", width: 112, editable: false };
+const NUMBER_COLUMN: GridColumn = { key: "number", labelKey: "rowId", kind: "number", width: 96, editable: false };
 const DESCRIPTION_COLUMN: GridColumn = { key: "description", labelKey: "description", kind: "description", width: 320, editable: true };
 
 export function builtInColumns(documentType: Exclude<DocumentType, "general_document">): GridColumn[] {
@@ -39,6 +40,7 @@ export function builtInColumns(documentType: Exclude<DocumentType, "general_docu
   return [
     NUMBER_COLUMN,
     { key: "title", labelKey: "testTitle", kind: "title", width: 320, editable: true },
+    { key: "stepNumber", labelKey: "stepNumber", kind: "stepNumber", width: 96, editable: false, appliesTo: ["test_step"] },
     { key: "action", labelKey: "testStep", kind: "action", width: 320, editable: true, appliesTo: ["test_step"] },
     { key: "expectedResult", labelKey: "expectedResult", kind: "expectedResult", width: 320, editable: true, appliesTo: ["test_step"] },
     { key: "linkedRequirements", labelKey: "linkedRequirements", kind: "linkedRequirements", width: 320, editable: false },
@@ -77,7 +79,9 @@ export function totalWidth(columns: GridColumn[]): string {
 export function cellValue(column: GridColumn, row: OutlineRow): string {
   switch (column.kind) {
     case "number":
-      return row.displayNumber;
+      return String(row.objectNumber);
+    case "stepNumber":
+      return row.stepNumber === null ? "" : `${row.stepNumber}.`;
     case "requirementNo":
       return row.requirementNo ?? "";
     case "title":

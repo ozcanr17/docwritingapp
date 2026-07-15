@@ -49,12 +49,14 @@ async function main() {
   const cookie = auth.cookie.split(";")[0];
 
   const orgs = await call("/organizations", {}, cookie);
-  if (Array.isArray(orgs.body) && orgs.body.length === 0) {
+  let organizationId = Array.isArray(orgs.body) ? orgs.body[0]?.id : null;
+  if (!organizationId) {
     const org = await call(
       "/organizations",
       { method: "POST", body: JSON.stringify({ name: "DocSys Demo", slug: "docsys-demo" }) },
       cookie,
     );
+    organizationId = org.body.id;
     const workspace = await call(
       "/organizations/" + org.body.id + "/workspaces",
       { method: "POST", body: JSON.stringify({ name: "Ana Alan", slug: "main" }) },
@@ -70,6 +72,21 @@ async function main() {
     );
   }
 
+  const demoUsers = [
+    { email: "editor@docsys.local", displayName: "Cem Kaya", firstName: "Cem", lastName: "Kaya", jobTitle: "Requirements Engineer", department: "Systems Engineering", phone: "+90 555 100 00 01", roleKey: "editor" },
+    { email: "reviewer@docsys.local", displayName: "Selin Demir", firstName: "Selin", lastName: "Demir", jobTitle: "Test Lead", department: "Verification and Validation", phone: "+90 555 100 00 02", roleKey: "reviewer" },
+    { email: "viewer@docsys.local", displayName: "Mert Yilmaz", firstName: "Mert", lastName: "Yilmaz", jobTitle: "Project Observer", department: "Program Management", phone: "+90 555 100 00 03", roleKey: "viewer" },
+  ];
+  const demoPassword = process.env.DEMO_PASSWORD ?? "Test1234!";
+  for (const demo of demoUsers) {
+    let demoAuth = await call("/auth/register", { method: "POST", body: JSON.stringify({ email: demo.email, displayName: demo.displayName, password: demoPassword }) });
+    if (demoAuth.status === 409) demoAuth = await call("/auth/login", { method: "POST", body: JSON.stringify({ identifier: demo.email, password: demoPassword }) });
+    if (demoAuth.status !== 201 || !demoAuth.cookie) throw new Error("demo auth failed for " + demo.email);
+    const demoCookie = demoAuth.cookie.split(";")[0];
+    await call("/organizations/" + organizationId + "/members", { method: "POST", body: JSON.stringify({ userId: demoAuth.body.user.id, roleKey: demo.roleKey }) }, cookie);
+    await call("/auth/me", { method: "PATCH", body: JSON.stringify({ email: demo.email, displayName: demo.displayName, firstName: demo.firstName, lastName: demo.lastName, jobTitle: demo.jobTitle, department: demo.department, phone: demo.phone, bio: "DocSys test account" }) }, demoCookie);
+  }
+
   console.log("");
   console.log("========================================");
   console.log(" DocSys admin account is ready");
@@ -77,6 +94,8 @@ async function main() {
   console.log("  URL:      " + APP);
   console.log("  Email:    " + EMAIL);
   console.log("  Password: " + PASSWORD);
+  console.log("  Demo users: editor, reviewer, viewer");
+  console.log("  Demo password: " + demoPassword);
   console.log("========================================");
   console.log("");
 }

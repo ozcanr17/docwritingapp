@@ -32,6 +32,7 @@ async function seedDeletedRow(orgId: string, documentId: string, deletedAt: Date
     data: {
       organizationId: orgId,
       documentId,
+      objectNumber: deletedAt === OLD ? 1 : 2,
       rank: "i",
       rowType: "requirement",
       title: "DeadRow",

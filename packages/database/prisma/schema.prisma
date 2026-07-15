@@ -152,6 +152,12 @@ model User {
   id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email           String          @unique
   displayName     String
+  firstName       String?
+  lastName        String?
+  jobTitle        String?
+  department      String?
+  phone           String?
+  bio             String?
   passwordHash    String?
   oidcSubject     String?         @unique
   locale          String          @default("tr")
@@ -421,25 +427,26 @@ model Folder {
 }
 
 model Document {
-  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String       @db.Uuid
-  workspaceId    String       @db.Uuid
-  folderId       String?      @db.Uuid
-  templateId     String?      @db.Uuid
-  documentType   DocumentType
-  title          String
-  description    String?
-  rank           String
-  columnConfig   Json         @default("[]")
-  numberingStyle Json         @default("{}")
-  version        Int          @default(1)
-  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
-  createdById    String?      @db.Uuid
-  updatedById    String?      @db.Uuid
-  deletedAt      DateTime?    @db.Timestamptz(6)
-  deletedById    String?      @db.Uuid
-  deletionReason String?
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String       @db.Uuid
+  workspaceId      String       @db.Uuid
+  folderId         String?      @db.Uuid
+  templateId       String?      @db.Uuid
+  documentType     DocumentType
+  title            String
+  description      String?
+  rank             String
+  columnConfig     Json         @default("[]")
+  numberingStyle   Json         @default("{}")
+  nextObjectNumber Int          @default(1)
+  version          Int          @default(1)
+  createdAt        DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
+  createdById      String?      @db.Uuid
+  updatedById      String?      @db.Uuid
+  deletedAt        DateTime?    @db.Timestamptz(6)
+  deletedById      String?      @db.Uuid
+  deletionReason   String?
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
@@ -494,6 +501,8 @@ model DocumentRow {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String    @db.Uuid
   documentId     String    @db.Uuid
+  objectNumber   Int
+  numberingStart Int?
   parentId       String?   @db.Uuid
   rank           String
   ancestorPath   String    @default("")
@@ -531,6 +540,7 @@ model DocumentRow {
   configurationItems ConfigurationItem[]
   accessGrants       RowAccessGrant[]
 
+  @@unique([documentId, objectNumber])
   @@index([documentId, parentId, deletedAt, rank])
   @@index([documentId, ancestorPath])
   @@index([organizationId])

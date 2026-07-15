@@ -1,7 +1,7 @@
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { PrismaClient } from "@docsys/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp, registerActor, resetDatabase } from "./helpers";
+import { buildApp, createOrgWorkspaceDocument, registerActor, resetDatabase } from "./helpers";
 
 describe("auth", () => {
   let app: NestFastifyApplication;
@@ -45,6 +45,35 @@ describe("auth", () => {
     const me = await app.inject({ method: "GET", url: "/auth/me", headers: { cookie } });
     expect(me.statusCode).toBe(200);
     expect(JSON.parse(me.body).email).toBe(actor.email);
+  });
+
+  it("uses a persistent cookie only when remember me is selected", async () => {
+    const actor = await registerActor(app, "remember");
+    const sessionLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { identifier: actor.email, password: "password-123", rememberMe: false } });
+    expect(String(sessionLogin.headers["set-cookie"])).not.toContain("Max-Age=");
+    const rememberedLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { identifier: actor.email, password: "password-123", rememberMe: true } });
+    expect(String(rememberedLogin.headers["set-cookie"])).toContain("Max-Age=2592000");
+  });
+
+  it("updates a profile and exposes it to users in the same organization", async () => {
+    const owner = await registerActor(app, "profile-owner");
+    const colleague = await registerActor(app, "profile-colleague");
+    const { org } = await createOrgWorkspaceDocument(app, owner);
+    const addMember = await app.inject({ method: "POST", url: `/organizations/${org.id}/members`, headers: { cookie: owner.cookie }, payload: { userId: colleague.userId, roleKey: "viewer" } });
+    expect(addMember.statusCode).toBe(201);
+    const update = await app.inject({
+      method: "PATCH",
+      url: "/auth/me",
+      headers: { cookie: colleague.cookie },
+      payload: { email: colleague.email, displayName: "Profile Colleague", firstName: "Profile", lastName: "Colleague", department: "Systems", phone: "+90 555 000 00 00", jobTitle: "Engineer", bio: "Test profile" },
+    });
+    expect(update.statusCode).toBe(200);
+    const visible = await app.inject({ method: "GET", url: `/auth/users/${colleague.userId}`, headers: { cookie: owner.cookie } });
+    expect(visible.statusCode).toBe(200);
+    expect(JSON.parse(visible.body)).toMatchObject({ displayName: "Profile Colleague", department: "Systems", jobTitle: "Engineer" });
+    const outsider = await registerActor(app, "profile-outsider");
+    const hidden = await app.inject({ method: "GET", url: `/auth/users/${colleague.userId}`, headers: { cookie: outsider.cookie } });
+    expect(hidden.statusCode).toBe(403);
   });
 
   it("logs in to local accounts with a username", async () => {

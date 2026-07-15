@@ -30,7 +30,7 @@ describe("document rows", () => {
       payload,
     });
     expect(response.statusCode).toBe(201);
-    return JSON.parse(response.body) as { id: string; version: number; rank: string; depth: number };
+    return JSON.parse(response.body) as { id: string; objectNumber: number; version: number; rank: string; depth: number };
   }
 
   it("creates a hierarchy and derives display numbers", async () => {
@@ -45,12 +45,16 @@ describe("document rows", () => {
       headers: { cookie: actor.cookie },
     });
     expect(outline.statusCode).toBe(200);
-    const rows = JSON.parse(outline.body) as Array<{ title: string; displayNumber: string; requirementNo: string | null }>;
+    const rows = JSON.parse(outline.body) as Array<{ title: string; objectNumber: number; displayNumber: string; requirementNo: string | null }>;
     const byTitle = new Map(rows.map((r) => [r.title, r.displayNumber]));
     expect(byTitle.get("Introduction")).toBe("1");
     expect(byTitle.get("Req 1")).toBe("1.1");
     expect(byTitle.get("Req 2")).toBe("1.2");
     expect(byTitle.get("Scope")).toBe("2");
+    expect(rows.find((row) => row.title === "Introduction")?.objectNumber).toBe(1);
+    expect(rows.find((row) => row.title === "Req 1")?.objectNumber).toBe(2);
+    expect(rows.find((row) => row.title === "Req 2")?.objectNumber).toBe(3);
+    expect(rows.find((row) => row.title === "Scope")?.objectNumber).toBe(4);
     expect(rows.find((row) => row.title === "Req 1")?.requirementNo).toBe("REQ-001");
     expect(rows.find((row) => row.title === "Req 2")?.requirementNo).toBe("REQ-002");
     expect(req1.depth).toBe(1);
@@ -151,8 +155,9 @@ describe("document rows", () => {
       payload: { newParentId: parentB.id, expectedVersion: child.version },
     });
     expect(move.statusCode).toBe(201);
-    const moved = JSON.parse(move.body) as { parentId: string; depth: number; version: number };
+    const moved = JSON.parse(move.body) as { parentId: string; objectNumber: number; depth: number; version: number };
     expect(moved.parentId).toBe(parentB.id);
+    expect(moved.objectNumber).toBe(child.objectNumber);
     expect(moved.depth).toBe(1);
 
     const cycleMove = await app.inject({
@@ -195,6 +200,9 @@ describe("document rows", () => {
   it("soft deletes a subtree and restores it", async () => {
     const parent = await createRow({ rowType: "heading", title: "DeleteMe", parentId: null });
     const child = await createRow({ rowType: "requirement", title: "DeleteChild", parentId: parent.id });
+    const target = await createRow({ rowType: "requirement", title: "DeleteTarget", parentId: null });
+    const linkResponse = await app.inject({ method: "POST", url: `/rows/${child.id}/links`, headers: { cookie: actor.cookie }, payload: { targetRowId: target.id, linkType: "relates_to" } });
+    const linkId = (JSON.parse(linkResponse.body) as { id: string }).id;
 
     const del = await app.inject({
       method: "DELETE",
@@ -216,6 +224,32 @@ describe("document rows", () => {
 
     const restoredChild = await prisma.documentRow.findUniqueOrThrow({ where: { id: child.id } });
     expect(restoredChild.deletedAt).toBeNull();
+    const restoredLink = await prisma.requirementLink.findUniqueOrThrow({ where: { id: linkId } });
+    expect(restoredLink.deletedAt).toBeNull();
+  });
+
+  it("continues outline numbering from a user-selected heading number", async () => {
+    const first = await createRow({ rowType: "heading", title: "Custom start", parentId: null });
+    await app.inject({ method: "PATCH", url: `/rows/${first.id}`, headers: { cookie: actor.cookie }, payload: { expectedVersion: first.version, numberingStart: 7 } });
+    await createRow({ rowType: "heading", title: "Continued", parentId: null });
+    const outline = await app.inject({ method: "GET", url: `/documents/${documentId}/outline`, headers: { cookie: actor.cookie } });
+    const rows = JSON.parse(outline.body) as Array<{ title: string; displayNumber: string }>;
+    expect(rows.find((row) => row.title === "Custom start")?.displayNumber).toBe("7");
+    expect(rows.find((row) => row.title === "Continued")?.displayNumber).toBe("8");
+  });
+
+  it("deletes only a heading and promotes its child subtree", async () => {
+    const parent = await createRow({ rowType: "heading", title: "Promote parent", parentId: null });
+    const child = await createRow({ rowType: "heading", title: "Promoted child", parentId: parent.id });
+    const leaf = await createRow({ rowType: "requirement", title: "Promoted leaf", parentId: child.id });
+    const response = await app.inject({ method: "DELETE", url: `/rows/${parent.id}`, headers: { cookie: actor.cookie }, payload: { childStrategy: "promote_children" } });
+    expect(response.statusCode).toBe(200);
+    const deletedParent = await prisma.documentRow.findUniqueOrThrow({ where: { id: parent.id } });
+    const promotedChild = await prisma.documentRow.findUniqueOrThrow({ where: { id: child.id } });
+    const promotedLeaf = await prisma.documentRow.findUniqueOrThrow({ where: { id: leaf.id } });
+    expect(deletedParent.deletedAt).not.toBeNull();
+    expect(promotedChild).toMatchObject({ parentId: null, depth: 0, deletedAt: null, ancestorPath: "" });
+    expect(promotedLeaf).toMatchObject({ parentId: child.id, depth: 1, deletedAt: null, ancestorPath: `${child.id}/` });
   });
 
   it("links a test case to a requirement and soft deletes links with the row", async () => {
