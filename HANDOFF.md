@@ -18,35 +18,38 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 TypeScript modular monolith in a pnpm + Turborepo monorepo.
 
-- `apps/api` — NestJS 11 + Fastify. Modules: `auth` (register/login/me, JWT in `docsys_session` HTTP-only cookie, bcryptjs, plus `GET /auth/collab-token` issuing a short-lived JWT the browser CAN read for the collab server), `access` (RBAC — 7 system roles seeded on boot by `AccessService.onModuleInit`; org/workspace/project scopes), `tenancy`, `tree` (folders/documents, moves with cycle prevention, soft delete/restore, trash), `rows` (CRUD, subtree move under `pg_advisory_xact_lock`, LexoRank ordering, derived display numbers via `/documents/:id/outline`, requirement links + **suspect links**, row-projects, custom field definitions + JSONB validation, **coverage** + **traceability** endpoints), `events` (Redis pub-sub → WS gateway `/ws/events`, presence in Redis TTL keys), `audit` (append-only, same-transaction), `exports` (BullMQ enqueue + presigned download + CSV import), `baselines` (freeze + diff), `storage` (MinIO client), `health`. Swagger at `/api/docs`.
+- `apps/api` — NestJS 11 + Fastify. In addition to auth, RBAC, tenancy, tree, rows, events, audit, baselines, storage and health, it now has a `lifecycle` module for saved views, workspace search, quality/dashboard, comments/mentions/notifications, attachments, test executions, reviews, change proposals, configurations, row ACLs, integrations and OIDC SSO. Exports support CSV, XLSX, PDF, DOCX templates and ReqIF.
 - `apps/collaboration` — Hocuspocus server (port 3002). `onAuthenticate` verifies the JWT + document.read permission; snapshots persist to `collaboration_snapshots`. Logs auth rejections. Also serves HTTP 200 on `/` (Playwright health-checks it).
 - `apps/worker` — BullMQ. Scheduled lifecycle jobs (30-day purge: batch, legal-hold-aware, idempotent, child-first hard deletes + snapshot compaction keep-last-5) AND the `docsys-exports` queue consumer (generates CSV/DOCX from the outline, uploads to MinIO, updates job progress). Liveness HTTP endpoint on port 3003.
-- `apps/web` — React 18 + Vite + TS strict. Top **menu bar** (Dosya/Düzen/Görünüm/Ekle/Sütunlar/Analiz/Yardım = File/Edit/View/Insert/Columns/Analysis/Help). Column-driven virtualized grid (TanStack Virtual) with built-in test columns (Status, Test Step/action, Expected Result) + user-added typed custom columns, all inline-editable; lazy folder/document tree; row detail panel with link creation + suspect badges; split-screen linked-requirement viewer; trash/restore; resizable+persisted panels; light/dark/system themes via CSS-var design tokens; TR(default)+EN i18n; Tiptap+Yjs rich-text editor for `general_document` docs; Analysis dialog (baselines + coverage + traceability matrix).
+- `apps/web` — React 18 + Vite + TS strict. The virtual grid has multi-selection, bulk edit/move/copy/link/delete, drag reorder, dynamic row heights, saved personal/team views, sorting, frozen columns and configurable link projection. Workspace search, dashboard widgets, execution history, reviews, proposals, comments, mentions, attachments, notifications, configuration/integration/SSO settings and expanded import/export are exposed in the UI. Routes and heavy editor/dialog surfaces are lazy-loaded with explicit vendor chunks and a stale-deployment recovery boundary.
 - `packages/database` — Prisma 6 schema + migrations + a re-export of the generated client (`export * from "@prisma/client"`). **Must be built** (`pnpm --filter @docsys/database build`) before apps typecheck.
 - `packages/config` — zod env schema.
 - PostgreSQL 16 (sole source of truth), Redis (ephemeral only — pub-sub, presence, queues, cache, idempotency; ADR 0005 forbids it as a store of record), MinIO/S3 for binaries.
 
-## 3. What has been completed (Phases 1–4 + DOORS parity)
+## 3. What has been completed (Phases 1–5 + lifecycle capabilities)
 
 - **Phase 1** — architecture, 11 ADRs (`docs/adr/0001–0011`), analysis docs, Prisma schema (~31 tables). Read `docs/adr/0007` (hierarchy) and `0008` (audit/soft-delete) before changing rows.
 - **Phase 2** — full backend + realtime, all tests green; 50-client Yjs load test passes (`tests/performance/collab-load.mjs`).
 - **Phase 3** — full frontend (menu bar, themes, i18n, tree, column-driven grid with custom columns + test fields, optimistic UI + 409 handling, presence, detail panel, split viewer, trash, resizable panels, Tiptap+Yjs editor, ESLint flat config wired into `pnpm lint` + CI).
 - **Phase 4** — background CSV/DOCX exports via BullMQ + MinIO with progress + presigned download; CSV import rebuilding hierarchy; traceability link creation; object storage.
 - **DOORS-parity features:** **Suspect links** (editing a linked row auto-flags its links suspect bidirectionally with reason/timestamp, in-tx + audit; `POST /links/:id/acknowledge`, `GET /documents/:id/suspect-links`; badge + Acknowledge in the detail panel). **Baselines** (`POST/GET /documents/:id/baselines` snapshots rows into a `DocumentRevision.summary` JSONB; `GET .../baselines/:n/diff` returns added/removed/modified). **Coverage report** (`GET /documents/:id/coverage`). **Traceability matrix** (`GET /documents/:id/traceability`). All three reports are in the Analysis menu → a modal dialog.
+- **Lifecycle capabilities:** saved personal/team views; global search; frozen columns and linked-field projections; bulk operations and drag reorder; requirement quality and dashboards; comments, `@email` mentions, notifications and attachments; test execution history; reviews and change proposals; CSV/XLSX/ReqIF import; CSV/XLSX/PDF/DOCX/ReqIF export; OIDC SSO; row ACLs; product configurations; generic integration registry; deterministic engineering suggestions.
+- **Production delivery:** Vite manifest-driven bundle budgets enforce at most 180 KiB gzip for every JavaScript chunk and for the initial dependency graph. The measured initial graph is about 89.3 KiB gzip and the largest lazy chunk is about 72.1 KiB gzip. The Nginx web image serves immutable hashed assets, non-cacheable HTML, SPA fallback, gzip, CSP and defensive headers. Full Compose uses required secrets, health checks, restart policies, a one-shot migration gate and a pinned MinIO release.
 
-**Migrations (3):** `init`, `hierarchy_prefix_indexes` (adds `text_pattern_ops` indexes by hand-written SQL), `suspect_links` (adds `suspect`/`suspectSince`/`suspectReason` to requirement_links + indexes).
+**Migrations (6):** `init`, `hierarchy_prefix_indexes`, `suspect_links`, `platform_capabilities`, `test_step_result`, `requirement_numbers`.
 
-**Test status (all green as of session end):** api **32**, worker **9**, web **4**, Playwright e2e **5** (`smoke`, `editor`, `exports`, `columns`, `traceability`). Lint clean, char scan clean.
+**Test status (all green as of 2026-07-15):** api **36**, worker **10**, web **10**, Playwright e2e **5** (`smoke`, `editor`, `exports`, `columns`, `traceability`). Typecheck, production build, lint and char scan are clean.
 
-## 4. Where we are / what is NOT done (nothing is blocking)
+## 4. Where we are / production-hardening work
 
-There is no open bug or half-finished feature. The last session ended cleanly with everything committed and pushed (latest commit `7a140e0`, traceability matrix). During that session the Bash command-approval classifier had a ~15-minute outage where only trivial commands ran — it self-resolved; if you hit `"claude-opus-4-8 is temporarily unavailable"` on Bash, just wait and retry, it is transient infra, not your command.
-
-Remaining work, roughly by value (pick from here for "next"):
-- **DOORS features not yet built:** ReqIF import/export (XML interop — high value), change-proposal approval workflow (propose→approve before edit), column/row-level ACL (finer than the current org/workspace/project RBAC), a full requirement×test matrix export, rich-text tables/images (Tiptap extensions). **DXL scripting was deliberately NOT built** and should stay out — adding an arbitrary scripting language is a security/scope hazard.
-- **Phase 4 nice-to-haves:** XLSX import/export, DOCX template management (docxtemplater — spec's original intent; current DOCX is generated from scratch with the `docx` lib), attachment upload UI (schema + storage exist), PDF export.
-- **Phase 3 leftovers:** dnd-kit drag-drop row reordering (currently reorder is via Indent/Outdent + context menu / move API), deeper keyboard-tree a11y.
-- **Ops/infra:** Docker images (`infra/docker/Dockerfile.*` + `docker-compose.full.yml`) are written but **never built** — build/verify them when asked. CI is parked at `infra/github-ci.yml` because the local `gh` token lacks the `workflow` scope; after `gh auth refresh -h github.com -s workflow`, move it to `.github/workflows/ci.yml`. OpenAPI schemas are shallow (zod is the source of truth). CSRF token pattern not implemented (cookie is SameSite=strict). `collaboration_updates` table is unused (Hocuspocus stores debounced full snapshots, 2s window; ADR 0006).
+The requested capability set has working vertical slices. Remaining work is production depth rather than missing foundations:
+- Add provider-specific Jira/Azure DevOps/GitHub adapters, webhook retries and secret-vault integration; the current integration registry does not dispatch outbound work.
+- Expand ReqIF round-trip fidelity for every third-party datatype, nested specification and cross-document reference.
+- Add SCIM, SAML, row-grant administration UI and enterprise identity-provider conformance tests; current SSO is OIDC/PKCE.
+- Add configuration merge/rebase semantics and full variant effectivity; current configurations snapshot row versions and rules.
+- Add template upload/selection management screens; template storage and worker rendering already exist.
+- Add antivirus scanning and upload-completion state for attachments.
+- **Ops/infra:** all four application images build successfully. The complete isolated Compose stack has been runtime-smoke-tested through its migration gate with healthy PostgreSQL, Redis, MinIO, API, collaboration, worker and web services; the web image also passes cache/security-header checks. CI is parked at `infra/github-ci.yml` because the local `gh` token lacks the `workflow` scope; after `gh auth refresh -h github.com -s workflow`, move it to `.github/workflows/ci.yml`. OpenAPI schemas are shallow (zod is the source of truth). CSRF token pattern not implemented (cookie is SameSite=strict). `collaboration_updates` table is unused (Hocuspocus stores debounced full snapshots, 2s window; ADR 0006).
 
 ## 5. How to run and verify locally (this machine)
 
@@ -70,6 +73,7 @@ pnpm --filter @docsys/database generate && pnpm --filter @docsys/database build
 
 Per-area checks:
 ```
+pnpm verify                                                            # sequential production gate, excluding e2e
 cd apps/api && npx tsc -p tsconfig.json --noEmit && npx vitest run     # needs DB docsys_test (exists)
 cd apps/worker && npx vitest run
 cd apps/web && npx tsc -p tsconfig.json --noEmit && npx vitest run
@@ -128,7 +132,7 @@ apps/worker         BullMQ purge/compaction + export processor (+ liveness :3003
 apps/web            React/Vite SPA (src/{pages,components,hooks,stores,lib,locales,test})
 packages/database   Prisma schema, migrations, generated-client re-export
 packages/config     zod env schema
-infra/docker        docker-compose.dev.yml (pg/redis/minio), docker-compose.full.yml, Dockerfile.{api,collaboration,worker}
+infra/docker        dev/full Compose; Dockerfile.{api,collaboration,worker,web}; hardened Nginx config
 infra/scripts       scan-forbidden-chars.sh; dev-up/dev-down (.sh + .ps1); seed-admin.mjs
 infra/github-ci.yml parked CI (move to .github/workflows/ci.yml after `gh auth refresh -s workflow`)
 docs/adr, docs/architecture   decisions — read before changing architecture
@@ -140,6 +144,7 @@ tests/performance   collab-load.mjs (50-client Yjs test)
 
 ## 9. Suggested next steps
 
-1. Pick a remaining DOORS feature — **ReqIF export** is the highest interop value and fits the existing export pipeline; **attachment upload UI** unlocks an already-modeled capability; **change-proposal workflow** is the next big DOORS differentiator.
-2. Or harden ops: build and smoke-test the Docker images, activate CI.
+1. Deepen enterprise interoperability: full ReqIF datatype/specification round trips, provider-specific ALM adapters, webhook delivery and secrets-vault integration.
+2. Deepen enterprise governance: SCIM/SAML, row-grant administration, template management, attachment scanning and configuration merge/effectivity semantics.
+3. Activate the parked CI after refreshing the GitHub token with `workflow` scope, then add Compose integration and browser jobs.
 Whatever you pick, keep the ASCII-only + no-comments rules, add `data-testid`s for any new interactive UI, extend the relevant test suite + an e2e, run the four checks in section 5, then commit with a Conventional-Commit message and push to `main`.

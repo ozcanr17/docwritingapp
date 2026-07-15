@@ -37,6 +37,14 @@ export class StorageService implements OnModuleInit {
     });
   }
 
+  async presignedUploadUrl(storageKey: string, expirySeconds = 300): Promise<string> {
+    return this.client.presignedPutObject(this.bucket, storageKey, expirySeconds);
+  }
+
+  async removeObject(storageKey: string): Promise<void> {
+    await this.client.removeObject(this.bucket, storageKey);
+  }
+
   async getObjectBuffer(storageKey: string): Promise<Buffer> {
     const stream = await this.client.getObject(this.bucket, storageKey);
     const chunks: Buffer[] = [];

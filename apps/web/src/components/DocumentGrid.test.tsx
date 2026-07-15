@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@tanstack/react-virtual", () => ({
@@ -7,6 +7,8 @@ vi.mock("@tanstack/react-virtual", () => ({
     getTotalSize: () => options.count * 36,
     getVirtualItems: () =>
       Array.from({ length: options.count }, (_, index) => ({ index, start: index * 36, size: 36, key: index })),
+    measureElement: vi.fn(),
+    scrollToIndex: vi.fn(),
   }),
 }));
 import { OutlineRow } from "../lib/api";
@@ -23,6 +25,10 @@ function makeRow(partial: Partial<OutlineRow> & Pick<OutlineRow, "id" | "parentI
     tags: [],
     action: null,
     expectedResult: null,
+    testResult: null,
+    requirementNo: null,
+    linkedRequirements: [],
+    linkCount: 0,
     ...partial,
   };
 }
@@ -40,7 +46,7 @@ function renderGrid(seed: OutlineRow[]) {
   return render(
     <QueryClientProvider client={client}>
       <div style={{ height: 600 }}>
-        <DocumentGrid documentId="doc-1" />
+        <DocumentGrid documentId="doc-1" documentType="requirement" />
       </div>
     </QueryClientProvider>,
   );
@@ -49,7 +55,7 @@ function renderGrid(seed: OutlineRow[]) {
 describe("DocumentGrid", () => {
   it("renders hierarchical rows with derived display numbers", () => {
     renderGrid(rows);
-    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getAllByText("1").length).toBeGreaterThan(0);
     expect(screen.getByText("Gereksinim A")).toBeInTheDocument();
     expect(screen.getByText("1.2")).toBeInTheDocument();
   });
@@ -57,5 +63,12 @@ describe("DocumentGrid", () => {
   it("shows the empty state for a document without rows", () => {
     renderGrid([]);
     expect(screen.getByTestId("grid-empty")).toBeInTheDocument();
+  });
+
+  it("supports selecting multiple rows with row checkboxes", () => {
+    renderGrid(rows);
+    fireEvent.click(screen.getByTestId("select-row-1"));
+    fireEvent.click(screen.getByTestId("select-row-1.1"));
+    expect(screen.getByTestId("bulk-delete")).toBeInTheDocument();
   });
 });

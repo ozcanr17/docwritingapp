@@ -14,6 +14,7 @@
     "lint": "eslint apps packages --ext .ts,.tsx",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
+    "verify": "pnpm db:validate && pnpm typecheck && pnpm lint && pnpm scan:chars && pnpm --filter @docsys/web test && pnpm --filter @docsys/api test && pnpm --filter @docsys/worker test && pnpm build",
     "db:format": "pnpm --filter @docsys/database format",
     "db:validate": "pnpm --filter @docsys/database validate",
     "db:migrate": "pnpm --filter @docsys/database migrate:dev",

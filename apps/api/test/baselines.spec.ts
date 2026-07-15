@@ -1,7 +1,7 @@
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { PrismaClient } from "@docsys/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp, createOrgWorkspaceDocument, registerActor, resetDatabase, TestActor } from "./helpers";
+import { buildApp, createDocument, createOrgWorkspaceDocument, registerActor, resetDatabase, TestActor } from "./helpers";
 
 describe("baselines and coverage", () => {
   let app: NestFastifyApplication;
@@ -91,11 +91,12 @@ describe("baselines and coverage", () => {
   it("reports requirement coverage from verifying links", async () => {
     const created = await createOrgWorkspaceDocument(app, actor);
     const doc = created.document.id;
-    const makeRow = (payload: Record<string, unknown>) =>
+    const testDocument = await createDocument(app, actor, created.workspace.id, "test", "Verification tests");
+    const makeRow = (payload: Record<string, unknown>, targetDocumentId = doc) =>
       app
         .inject({
           method: "POST",
-          url: `/documents/${doc}/rows`,
+          url: `/documents/${targetDocumentId}/rows`,
           headers: { cookie: actor.cookie, "idempotency-key": crypto.randomUUID() },
           payload,
         })
@@ -103,7 +104,7 @@ describe("baselines and coverage", () => {
 
     const req1 = await makeRow({ rowType: "requirement", title: "Covered req", parentId: null });
     await makeRow({ rowType: "requirement", title: "Uncovered req", parentId: null });
-    const test = await makeRow({ rowType: "test_case", title: "Verifies req1", parentId: null });
+    const test = await makeRow({ rowType: "test_case", title: "Verifies req1", parentId: null }, testDocument.id);
 
     await app.inject({
       method: "POST",

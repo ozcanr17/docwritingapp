@@ -1,20 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, LogOut, Settings, Trash2, Users } from "lucide-react";
-import { useCallback, useState } from "react";
+import { FileText, LogOut, Search, Settings, Trash2, Users } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { DocumentGrid } from "../components/DocumentGrid";
 import { MenuBar } from "../components/MenuBar";
-import { ReportsDialog } from "../components/ReportsDialog";
 import { ResizeHandle } from "../components/ResizeHandle";
-import { RichTextEditor } from "../components/RichTextEditor";
-import { RowDetailPanel } from "../components/RowDetailPanel";
 import { TrashPanel } from "../components/TrashPanel";
 import { TreePanel } from "../components/TreePanel";
 import { useDocumentEvents } from "../hooks/useDocumentEvents";
-import { api } from "../lib/api";
+import { api, DocumentType } from "../lib/api";
 import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
+
+const DocumentGrid = lazy(() => import("../components/DocumentGrid").then((module) => ({ default: module.DocumentGrid })));
+const GlobalSearchDialog = lazy(() => import("../components/GlobalSearchDialog").then((module) => ({ default: module.GlobalSearchDialog })));
+const ReportsDialog = lazy(() => import("../components/ReportsDialog").then((module) => ({ default: module.ReportsDialog })));
+const RichTextEditor = lazy(() => import("../components/RichTextEditor").then((module) => ({ default: module.RichTextEditor })));
+const RowDetailPanel = lazy(() => import("../components/RowDetailPanel").then((module) => ({ default: module.RowDetailPanel })));
+const WorkspaceSettingsDialog = lazy(() => import("../components/WorkspaceSettingsDialog").then((module) => ({ default: module.WorkspaceSettingsDialog })));
 
 interface Organization {
   id: string;
@@ -37,7 +40,9 @@ export function ShellPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"documents" | "trash">("documents");
-  const [report, setReport] = useState<"baselines" | "coverage" | "matrix" | null>(null);
+  const [report, setReport] = useState<"baselines" | "coverage" | "matrix" | "reviews" | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const closeReport = useCallback(() => setReport(null), []);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
@@ -47,6 +52,17 @@ export function ShellPage() {
   const detailWidth = useLayoutStore((s) => s.detailWidth);
   const setTreeWidth = useLayoutStore((s) => s.setTreeWidth);
   const setDetailWidth = useLayoutStore((s) => s.setDetailWidth);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   const profile = useQuery({
     queryKey: ["me"],
@@ -73,7 +89,7 @@ export function ShellPage() {
 
   const selectedDocument = useQuery({
     queryKey: ["document", selectedDocumentId],
-    queryFn: () => api<{ id: string; documentType: string }>(`/documents/${selectedDocumentId}`),
+    queryFn: () => api<{ id: string; documentType: DocumentType }>(`/documents/${selectedDocumentId}`),
     enabled: selectedDocumentId !== null,
   });
   const isTextDocument = selectedDocument.data?.documentType === "general_document";
@@ -109,19 +125,32 @@ export function ShellPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
       <MenuBar
         documentId={selectedDocumentId}
-        isTextDocument={isTextDocument}
+        documentType={selectedDocument.data?.documentType ?? null}
         view={view}
         setView={setView}
         onOpenReport={setReport}
       />
-      {report && selectedDocumentId && (
-        <ReportsDialog documentId={selectedDocumentId} tab={report} onClose={closeReport} />
-      )}
-      <div className="flex flex-1 overflow-hidden">
-      <aside className="flex w-60 flex-col bg-sidebarBackground text-sidebarForeground">
+      <Suspense fallback={null}>
+        {report && selectedDocumentId && <ReportsDialog documentId={selectedDocumentId} tab={report} onClose={closeReport} />}
+        {searchOpen && workspaceId && (
+          <GlobalSearchDialog
+            workspaceId={workspaceId}
+            onClose={() => setSearchOpen(false)}
+            onSelect={(documentId, rowId) => {
+              setView("documents");
+              setSelectedDocumentId(documentId);
+              setSearchOpen(false);
+              window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0);
+            }}
+          />
+        )}
+        {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} onClose={() => setSettingsOpen(false)} />}
+      </Suspense>
+      <div className="flex flex-1 gap-1.5 overflow-hidden p-2 pt-1.5">
+      <aside className="flex w-56 flex-col rounded-xl border border-border bg-sidebarBackground text-sidebarForeground shadow-sm">
         <div className="px-4 py-3 text-xs uppercase tracking-wide opacity-60">
           {workspaces.data?.[0]?.name ?? "—"}
         </div>
@@ -140,7 +169,7 @@ export function ShellPage() {
             onClick={() => setView("trash")}
             testId="nav-trash"
           />
-          <SidebarItem icon={<Settings size={15} />} label={t("settings")} />
+          <SidebarItem icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} />
         </nav>
         <div className="border-t border-white/10 p-3 text-sm">
           <div className="mb-2 truncate opacity-80">{profile.data.displayName}</div>
@@ -158,7 +187,7 @@ export function ShellPage() {
           </button>
         </div>
       </aside>
-      <section className="shrink-0 border-r border-border bg-surface" style={{ width: treeWidth }}>
+      <section className="shrink-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm" style={{ width: treeWidth }}>
         {workspaceId &&
           (view === "trash" ? (
             <TrashPanel workspaceId={workspaceId} />
@@ -171,9 +200,11 @@ export function ShellPage() {
           ))}
       </section>
       <ResizeHandle side="left" ariaLabel="tree" onResize={(dx) => setTreeWidth(treeWidth + dx)} />
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-2 text-sm">
-          <span className="text-mutedForeground">{view === "trash" ? t("trash") : t("documents")}</span>
+      <main className="flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+        <header className="flex items-center justify-between border-b border-border bg-surface/85 px-4 py-2.5 text-sm backdrop-blur-xl">
+          <button className="flex items-center gap-2 rounded-lg px-2 py-1 text-mutedForeground hover:bg-muted" onClick={() => setSearchOpen(true)}>
+            <Search size={14} />{t("globalSearch")} <span className="rounded border border-border px-1.5 text-[10px]">⌘K</span>
+          </button>
           {selectedDocumentId && view === "documents" && (
             <span className="flex items-center gap-2 text-mutedForeground">
               <Users size={14} />
@@ -195,11 +226,16 @@ export function ShellPage() {
           )}
         </header>
         {view === "documents" && selectedDocumentId ? (
-          isTextDocument ? (
-            <RichTextEditor documentId={selectedDocumentId} displayName={profile.data.displayName} />
-          ) : (
-            <DocumentGrid documentId={selectedDocumentId} />
-          )
+          <Suspense fallback={<PanelLoading />}>
+            {isTextDocument ? (
+              <RichTextEditor documentId={selectedDocumentId} displayName={profile.data.displayName} />
+            ) : (
+              <DocumentGrid
+                documentId={selectedDocumentId}
+                documentType={selectedDocument.data?.documentType === "test" ? "test" : "requirement"}
+              />
+            )}
+          </Suspense>
         ) : view === "documents" ? (
           <div className="p-8 text-sm text-mutedForeground">{t("selectDocument")}</div>
         ) : (
@@ -209,18 +245,25 @@ export function ShellPage() {
       {view === "documents" && selectedDocumentId && (detailRowId || linkedRowId) && (
         <>
           <ResizeHandle side="right" ariaLabel="detail" onResize={(dx) => setDetailWidth(detailWidth + dx)} />
-          <aside className="flex shrink-0 flex-col border-l border-border" style={{ width: detailWidth }}>
-            {linkedRowId ? (
-              <RowDetailPanel rowId={linkedRowId} documentId={selectedDocumentId} variant="linked" />
-            ) : detailRowId ? (
-              <RowDetailPanel rowId={detailRowId} documentId={selectedDocumentId} variant="primary" />
-            ) : null}
+          <aside className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm" style={{ width: detailWidth }}>
+            <Suspense fallback={<PanelLoading />}>
+              {linkedRowId ? (
+                <RowDetailPanel rowId={linkedRowId} documentId={selectedDocumentId} variant="linked" />
+              ) : detailRowId ? (
+                <RowDetailPanel rowId={detailRowId} documentId={selectedDocumentId} variant="primary" />
+              ) : null}
+            </Suspense>
           </aside>
         </>
       )}
       </div>
     </div>
   );
+}
+
+function PanelLoading() {
+  const { t } = useTranslation();
+  return <div className="p-6 text-sm text-mutedForeground">{t("loading")}</div>;
 }
 
 function SidebarItem({

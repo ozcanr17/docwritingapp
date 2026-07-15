@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --background: 220 20% 98%;
+  --background: 220 18% 96%;
   --foreground: 224 20% 12%;
   --surface: 0 0% 100%;
   --surface-elevated: 0 0% 100%;
-  --border: 220 14% 88%;
+  --border: 220 13% 86%;
   --muted: 220 14% 94%;
   --muted-foreground: 222 10% 42%;
   --primary: 222 72% 48%;
@@ -18,18 +18,18 @@
   --info: 204 80% 44%;
   --focus-ring: 222 72% 55%;
   --selection: 222 72% 92%;
-  --sidebar-background: 222 22% 14%;
-  --sidebar-foreground: 220 15% 88%;
+  --sidebar-background: 220 16% 97%;
+  --sidebar-foreground: 224 18% 18%;
   --editor-background: 0 0% 100%;
 }
 
 .dark {
-  --background: 224 18% 9%;
-  --foreground: 220 15% 90%;
-  --surface: 224 16% 12%;
-  --surface-elevated: 224 16% 16%;
-  --border: 223 12% 24%;
-  --muted: 223 14% 18%;
+  --background: 225 10% 8%;
+  --foreground: 220 12% 91%;
+  --surface: 224 10% 11%;
+  --surface-elevated: 224 10% 15%;
+  --border: 223 9% 22%;
+  --muted: 223 9% 17%;
   --muted-foreground: 222 8% 62%;
   --primary: 218 80% 62%;
   --primary-foreground: 224 20% 10%;
@@ -39,14 +39,24 @@
   --info: 204 75% 56%;
   --focus-ring: 218 80% 66%;
   --selection: 220 45% 26%;
-  --sidebar-background: 225 20% 7%;
-  --sidebar-foreground: 220 15% 85%;
-  --editor-background: 224 16% 11%;
+  --sidebar-background: 225 9% 10%;
+  --sidebar-foreground: 220 12% 88%;
+  --editor-background: 224 9% 10%;
 }
 
 body {
   @apply bg-background text-foreground antialiased;
-  font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", sans-serif;
+  letter-spacing: -0.008em;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.24);
 }
 
 .tabular-nums {

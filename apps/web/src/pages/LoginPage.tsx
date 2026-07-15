@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, API_URL } from "../lib/api";
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -11,6 +11,7 @@ export function LoginPage() {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [organizationSlug, setOrganizationSlug] = useState("");
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -77,6 +78,15 @@ export function LoginPage() {
         >
           {mode === "login" ? t("login") : t("register")}
         </button>
+        {mode === "login" && (
+          <div className="mt-5 border-t border-border pt-5">
+            <div className="mb-2 text-center text-xs uppercase tracking-wide text-mutedForeground">{t("orUseSso")}</div>
+            <div className="flex gap-2">
+              <input className="min-w-0 flex-1 rounded border border-border bg-surface px-3 py-2 text-sm" value={organizationSlug} placeholder={t("organizationSlug")} onChange={(event) => setOrganizationSlug(event.target.value)} />
+              <button type="button" className="rounded border border-border px-3 text-sm hover:bg-muted" disabled={!organizationSlug.trim()} onClick={() => { window.location.href = `${API_URL}/auth/sso/${encodeURIComponent(organizationSlug.trim())}/start`; }}>{t("sso")}</button>
+            </div>
+          </div>
+        )}
         <button
           data-testid="auth-toggle"
           type="button"

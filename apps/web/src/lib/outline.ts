@@ -1,4 +1,4 @@
-import { OutlineRow, RowType } from "./api";
+import { DocumentType, OutlineRow, RowType } from "./api";
 
 export interface InsertOption {
   number: string;
@@ -15,16 +15,30 @@ function incrementLastSegment(displayNumber: string): string {
   return parts.join(".");
 }
 
-export function insertOptions(rows: OutlineRow[], row: OutlineRow): InsertOption[] {
+export function insertOptions(
+  rows: OutlineRow[],
+  row: OutlineRow,
+  documentType: Exclude<DocumentType, "general_document"> = "requirement",
+): InsertOption[] {
   const options: InsertOption[] = [];
   const children = rows.filter((r) => r.parentId === row.id);
   const lastChild = children[children.length - 1];
-  options.push({
-    number: `${row.displayNumber}.${children.length + 1}`,
-    rowType: row.rowType === "test_case" ? "test_step" : "requirement",
-    parentId: row.id,
-    afterRowId: lastChild?.id,
-  });
+  const childType =
+    documentType === "requirement"
+      ? "requirement"
+      : row.rowType === "test_case"
+        ? "test_step"
+        : row.rowType === "heading"
+          ? "test_case"
+          : null;
+  if (childType) {
+    options.push({
+      number: `${row.displayNumber}.${children.length + 1}`,
+      rowType: childType,
+      parentId: row.id,
+      afterRowId: lastChild?.id,
+    });
+  }
   let current: OutlineRow | undefined = row;
   while (current) {
     options.push({

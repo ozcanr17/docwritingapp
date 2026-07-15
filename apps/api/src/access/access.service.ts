@@ -100,4 +100,20 @@ export class AccessService implements OnModuleInit {
     const allowed = await this.hasPermission(userId, permission, scope);
     if (!allowed) throw new ForbiddenException("Insufficient permissions");
   }
+
+  async assertRowAccess(userId: string, rowId: string, required: "read" | "write" | "manage"): Promise<void> {
+    const grants = await this.prisma.rowAccessGrant.findMany({ where: { rowId } });
+    if (grants.length === 0) return;
+    const grant = grants.find((item) => item.userId === userId);
+    const rank = { read: 1, write: 2, manage: 3 } as const;
+    if (!grant || rank[grant.accessLevel] < rank[required]) throw new ForbiddenException("Row access is restricted");
+  }
+
+  async readableRowIds(userId: string, rowIds: string[]): Promise<Set<string>> {
+    if (rowIds.length === 0) return new Set();
+    const grants = await this.prisma.rowAccessGrant.findMany({ where: { rowId: { in: rowIds } } });
+    const restricted = new Set(grants.map((grant) => grant.rowId));
+    const allowed = new Set(grants.filter((grant) => grant.userId === userId).map((grant) => grant.rowId));
+    return new Set(rowIds.filter((rowId) => !restricted.has(rowId) || allowed.has(rowId)));
+  }
 }

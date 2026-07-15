@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, FileText, Folder as FolderIcon } from "lucide-react";
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentSummary, FolderSummary } from "../lib/api";
 import { ContextMenu, MenuItem } from "./ContextMenu";
@@ -23,15 +23,33 @@ interface MenuState {
   documentId?: string;
 }
 
+type CreateKind = "folder" | "requirementDocument" | "testDocument" | "textDocument";
+
+interface CreateState {
+  folderId: string | null;
+  kind: CreateKind;
+}
+
 export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }: TreePanelProps) {
   const { t } = useTranslation();
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [createState, setCreateState] = useState<CreateState | null>(null);
+  const [createName, setCreateName] = useState("");
 
   const menuItems = (state: MenuState): MenuItem[] => {
     const items: MenuItem[] = [
-      { key: "newFolder", label: t("newFolder"), onSelect: () => createNode(state.folderId, "folder") },
-      { key: "newDocument", label: t("newDocument"), onSelect: () => createNode(state.folderId, "document") },
-      { key: "newTextDocument", label: t("newTextDocument"), onSelect: () => createNode(state.folderId, "textDocument") },
+      { key: "newFolder", label: t("newFolder"), onSelect: () => startCreate(state.folderId, "folder") },
+      {
+        key: "newDocument",
+        label: t("newRequirementDocument"),
+        onSelect: () => startCreate(state.folderId, "requirementDocument"),
+      },
+      {
+        key: "newTestDocument",
+        label: t("newTestDocument"),
+        onSelect: () => startCreate(state.folderId, "testDocument"),
+      },
+      { key: "newTextDocument", label: t("newTextDocument"), onSelect: () => startCreate(state.folderId, "textDocument") },
     ];
     if (state.documentId) {
       items.push({
@@ -48,26 +66,35 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   const invalidateBranch = (parentId: string | null) =>
     queryClient.invalidateQueries({ queryKey: ["tree", workspaceId, parentId] });
 
-  const createNode = (parentId: string | null, kind: "folder" | "document" | "textDocument") => {
-    const promptLabel =
-      kind === "folder" ? t("newFolder") : kind === "textDocument" ? t("newTextDocument") : t("newDocument");
-    const name = window.prompt(promptLabel);
-    if (!name) return;
+  const startCreate = (folderId: string | null, kind: CreateKind) => {
+    setCreateName("");
+    setCreateState({ folderId, kind });
+  };
+
+  const createNode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!createState || !createName.trim()) return;
+    const { folderId, kind } = createState;
+    const name = createName.trim();
     const request =
       kind === "folder"
-        ? api(`/workspaces/${workspaceId}/folders`, {
+        ? api<{ id: string }>(`/workspaces/${workspaceId}/folders`, {
             method: "POST",
-            body: JSON.stringify({ name, parentId }),
+            body: JSON.stringify({ name, parentId: folderId }),
           })
-        : api(`/workspaces/${workspaceId}/documents`, {
+        : api<{ id: string }>(`/workspaces/${workspaceId}/documents`, {
             method: "POST",
             body: JSON.stringify({
               title: name,
-              documentType: kind === "textDocument" ? "general_document" : "requirement",
-              folderId: parentId,
+              documentType:
+                kind === "textDocument" ? "general_document" : kind === "testDocument" ? "test" : "requirement",
+              folderId,
             }),
           });
-    void request.then(() => invalidateBranch(parentId));
+    const created = await request;
+    await invalidateBranch(folderId);
+    setCreateState(null);
+    if (kind !== "folder") onSelectDocument(created.id);
   };
 
   const deleteDocument = async (documentId: string) => {
@@ -92,6 +119,49 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
         onContextMenu={setMenu}
       />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu)} onClose={() => setMenu(null)} />}
+      {createState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
+          <form className="w-full max-w-md rounded border border-border bg-surfaceElevated p-4 shadow-lg" onSubmit={createNode}>
+            <h2 className="mb-3 text-sm font-semibold">
+              {createState.kind === "folder"
+                ? t("newFolder")
+                : createState.kind === "textDocument"
+                  ? t("newTextDocument")
+                  : createState.kind === "testDocument"
+                    ? t("newTestDocument")
+                    : t("newRequirementDocument")}
+            </h2>
+            <label className="block text-xs text-mutedForeground">
+              {t("name")}
+              <input
+                autoFocus
+                data-testid="tree-create-name"
+                className="mt-1 w-full rounded border border-border bg-editorBackground px-2 py-1.5 text-sm text-foreground"
+                value={createName}
+                onChange={(event) => setCreateName(event.target.value)}
+              />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                data-testid="tree-create-cancel"
+                className="rounded px-3 py-1.5 text-sm hover:bg-muted"
+                onClick={() => setCreateState(null)}
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="submit"
+                data-testid="tree-create-submit"
+                className="rounded bg-primary px-3 py-1.5 text-sm text-primaryForeground disabled:opacity-50"
+                disabled={!createName.trim()}
+              >
+                {t("create")}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
@@ -133,7 +203,7 @@ function TreeBranch(props: {
       {data.folders.map((folder) => (
         <li key={folder.id} role="treeitem" aria-expanded={expanded.has(folder.id)}>
           <button
-            className="flex w-full items-center gap-1 px-2 py-1 hover:bg-muted"
+            className="mx-1 flex w-auto items-center gap-1 rounded-lg px-2 py-1.5 hover:bg-muted"
             style={{ paddingLeft: 8 + depth * 14 }}
             onClick={() => toggle(folder.id)}
             onContextMenu={(event) => {
@@ -161,7 +231,7 @@ function TreeBranch(props: {
       {data.documents.map((document) => (
         <li key={document.id} role="treeitem">
           <button
-            className={`flex w-full items-center gap-1 px-2 py-1 hover:bg-muted ${
+            className={`mx-1 flex w-auto items-center gap-1 rounded-lg px-2 py-1.5 hover:bg-muted ${
               selectedDocumentId === document.id ? "bg-selection" : ""
             }`}
             style={{ paddingLeft: 22 + depth * 14 }}

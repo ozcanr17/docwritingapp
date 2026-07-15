@@ -10,7 +10,7 @@ export class RedisService implements OnModuleDestroy {
   constructor() {
     const url = apiEnv().REDIS_URL;
     this.client = new Redis(url, { maxRetriesPerRequest: 2, lazyConnect: false });
-    this.subscriber = new Redis(url, { maxRetriesPerRequest: 2, lazyConnect: false });
+    this.subscriber = new Redis(url, { maxRetriesPerRequest: 2, lazyConnect: false, enableReadyCheck: false });
   }
 
   async onModuleDestroy(): Promise<void> {

@@ -13,4 +13,5 @@ FROM base AS runtime
 ENV NODE_ENV=production
 COPY --from=build /app /app
 USER node
+EXPOSE 3003
 CMD ["node", "apps/worker/dist/main.js"]

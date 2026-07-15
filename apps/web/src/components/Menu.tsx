@@ -34,7 +34,7 @@ export function Menu({ label, entries, testId }: { label: string; entries: MenuE
     <div ref={ref} className="relative">
       <button
         data-testid={testId}
-        className={`rounded px-2.5 py-1 text-sm hover:bg-muted ${open ? "bg-muted" : ""}`}
+        className={`rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-muted ${open ? "bg-muted" : ""}`}
         onClick={() => setOpen((v) => !v)}
       >
         {label}
@@ -42,7 +42,7 @@ export function Menu({ label, entries, testId }: { label: string; entries: MenuE
       {open && (
         <div
           role="menu"
-          className="absolute left-0 top-full z-40 mt-0.5 min-w-52 rounded border border-border bg-surfaceElevated py-1 shadow-lg"
+          className="absolute left-0 top-full z-[70] mt-1 min-w-56 rounded-xl border border-border bg-surfaceElevated p-1.5 shadow-2xl"
         >
           {entries.map((entry) =>
             entry.separator ? (
@@ -53,7 +53,7 @@ export function Menu({ label, entries, testId }: { label: string; entries: MenuE
                 role="menuitem"
                 data-testid={`menuitem-${entry.key}`}
                 disabled={entry.disabled}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-40 ${
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-40 ${
                   entry.danger ? "text-destructive" : "text-foreground"
                 }`}
                 onClick={() => {

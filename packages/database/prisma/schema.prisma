@@ -49,6 +49,7 @@ enum ExportJobType {
   xlsx
   json_backup
   pdf
+  reqif
 }
 
 enum ExportJobStatus {
@@ -90,6 +91,63 @@ enum ThemePreference {
   system
 }
 
+enum SavedViewScope {
+  personal
+  team
+}
+
+enum ExecutionStatus {
+  not_run
+  running
+  passed
+  failed
+  blocked
+  skipped
+}
+
+enum ReviewStatus {
+  draft
+  active
+  approved
+  changes_requested
+  canceled
+}
+
+enum ReviewDecisionType {
+  approved
+  rejected
+  changes_requested
+}
+
+enum ChangeProposalStatus {
+  draft
+  submitted
+  approved
+  rejected
+  applied
+}
+
+enum ConfigurationKind {
+  stream
+  baseline
+  variant
+}
+
+enum RowAccessLevel {
+  read
+  write
+  manage
+}
+
+enum IntegrationType {
+  webhook
+  jira
+  azure_devops
+  github
+  generic_rest
+  assistant
+}
+
 model User {
   id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email           String          @unique
@@ -110,7 +168,16 @@ model User {
   memberRoles             MemberRole[]
   notifications           Notification[]
   exportJobs              ExportJob[]
-  assignedTestCases       TestCaseDetail[]     @relation("TestCaseAssignee")
+  assignedTestCases       TestCaseDetail[]       @relation("TestCaseAssignee")
+  savedViews              SavedView[]            @relation("SavedViewOwner")
+  rowComments             RowComment[]           @relation("CommentAuthor")
+  testExecutions          TestExecution[]        @relation("ExecutionUser")
+  createdReviews          Review[]               @relation("ReviewCreator")
+  reviewDecisions         ReviewDecision[]       @relation("ReviewDecisionUser")
+  changeProposals         ChangeProposal[]       @relation("ProposalRequester")
+  decidedProposals        ChangeProposal[]       @relation("ProposalDecider")
+  configurationCreators   ProductConfiguration[] @relation("ConfigurationCreator")
+  rowAccessGrants         RowAccessGrant[]       @relation("RowAccessUser")
 
   @@index([deletedAt])
   @@map("users")
@@ -146,6 +213,14 @@ model Organization {
   collabUpdates     CollaborationUpdate[]
   notifications     Notification[]
   legalHolds        LegalHold[]
+  savedViews        SavedView[]
+  rowComments       RowComment[]
+  testExecutions    TestExecution[]
+  reviews           Review[]
+  changeProposals   ChangeProposal[]
+  configurations    ProductConfiguration[]
+  rowAccessGrants   RowAccessGrant[]
+  integrations      IntegrationEndpoint[]
 
   @@map("organizations")
 }
@@ -179,11 +254,12 @@ model Workspace {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
-  members     WorkspaceMember[]
-  projects    Project[]
-  folders     Folder[]
-  documents   Document[]
-  memberRoles MemberRole[]
+  members        WorkspaceMember[]
+  projects       Project[]
+  folders        Folder[]
+  documents      Document[]
+  memberRoles    MemberRole[]
+  configurations ProductConfiguration[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, deletedAt])
@@ -377,6 +453,9 @@ model Document {
   collabSnapshots CollaborationSnapshot[]
   collabUpdates   CollaborationUpdate[]
   exportJobs      ExportJob[]
+  savedViews      SavedView[]
+  reviews         Review[]
+  configurations  ProductConfiguration[]
 
   @@index([workspaceId, folderId, deletedAt, rank])
   @@index([organizationId, deletedAt])
@@ -438,13 +517,19 @@ model DocumentRow {
   parent       DocumentRow?  @relation("RowChildren", fields: [parentId], references: [id], onDelete: Restrict)
   children     DocumentRow[] @relation("RowChildren")
 
-  requirementDetail RequirementDetail?
-  testCaseDetail    TestCaseDetail?
-  testStepDetail    TestStepDetail?
-  outgoingLinks     RequirementLink[]  @relation("LinkSource")
-  incomingLinks     RequirementLink[]  @relation("LinkTarget")
-  rowProjects       RowProject[]
-  attachments       Attachment[]
+  requirementDetail  RequirementDetail?
+  testCaseDetail     TestCaseDetail?
+  testStepDetail     TestStepDetail?
+  outgoingLinks      RequirementLink[]   @relation("LinkSource")
+  incomingLinks      RequirementLink[]   @relation("LinkTarget")
+  rowProjects        RowProject[]
+  attachments        Attachment[]
+  comments           RowComment[]
+  testExecutions     TestExecution[]
+  testStepExecutions TestStepExecution[]
+  changeProposals    ChangeProposal[]
+  configurationItems ConfigurationItem[]
+  accessGrants       RowAccessGrant[]
 
   @@index([documentId, parentId, deletedAt, rank])
   @@index([documentId, ancestorPath])
@@ -454,6 +539,7 @@ model DocumentRow {
 
 model RequirementDetail {
   rowId              String   @id @db.Uuid
+  requirementNo      String?
   status             String   @default("draft")
   priority           String?
   rationale          String?
@@ -486,6 +572,7 @@ model TestStepDetail {
   rowId          String   @id @db.Uuid
   action         String?
   expectedResult String?
+  testResult     String?
   createdAt      DateTime @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)
 
@@ -752,4 +839,231 @@ model LegalHold {
   @@index([scopeType, scopeId, releasedAt])
   @@index([organizationId, releasedAt])
   @@map("legal_holds")
+}
+
+model SavedView {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @db.Uuid
+  documentId     String         @db.Uuid
+  ownerId        String         @db.Uuid
+  name           String
+  scope          SavedViewScope @default(personal)
+  filters        Json           @default("[]")
+  sorting        Json           @default("[]")
+  visibleColumns Json           @default("[]")
+  frozenColumns  Json           @default("[]")
+  linkProjection Json           @default("{}")
+  isDefault      Boolean        @default(false)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime?      @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document     @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  owner        User         @relation("SavedViewOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, ownerId, name])
+  @@index([documentId, scope, deletedAt])
+  @@map("saved_views")
+}
+
+model RowComment {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  rowId          String    @db.Uuid
+  authorId       String    @db.Uuid
+  body           String
+  mentions       String[]  @default([])
+  resolvedAt     DateTime? @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  row          DocumentRow  @relation(fields: [rowId], references: [id], onDelete: Restrict)
+  author       User         @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([rowId, deletedAt, createdAt])
+  @@map("row_comments")
+}
+
+model TestExecution {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String          @db.Uuid
+  testCaseRowId  String          @db.Uuid
+  executedById   String          @db.Uuid
+  status         ExecutionStatus @default(not_run)
+  environment    String?
+  buildReference String?
+  iteration      String?
+  notes          String?
+  startedAt      DateTime?       @db.Timestamptz(6)
+  completedAt    DateTime?       @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  testCaseRow  DocumentRow         @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
+  executedBy   User                @relation("ExecutionUser", fields: [executedById], references: [id], onDelete: Restrict)
+  steps        TestStepExecution[]
+
+  @@index([testCaseRowId, createdAt])
+  @@index([organizationId, status])
+  @@map("test_executions")
+}
+
+model TestStepExecution {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  executionId   String          @db.Uuid
+  testStepRowId String          @db.Uuid
+  status        ExecutionStatus @default(not_run)
+  actualResult  String?
+  evidence      Json            @default("[]")
+  executedAt    DateTime?       @db.Timestamptz(6)
+
+  execution   TestExecution @relation(fields: [executionId], references: [id], onDelete: Restrict)
+  testStepRow DocumentRow   @relation(fields: [testStepRowId], references: [id], onDelete: Restrict)
+
+  @@unique([executionId, testStepRowId])
+  @@index([testStepRowId])
+  @@map("test_step_executions")
+}
+
+model Review {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @db.Uuid
+  documentId     String       @db.Uuid
+  createdById    String       @db.Uuid
+  title          String
+  description    String?
+  status         ReviewStatus @default(draft)
+  reviewerIds    String[]     @default([])
+  dueAt          DateTime?    @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document         @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  createdBy    User             @relation("ReviewCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  decisions    ReviewDecision[]
+
+  @@index([documentId, status, createdAt])
+  @@map("reviews")
+}
+
+model ReviewDecision {
+  id         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reviewId   String             @db.Uuid
+  reviewerId String             @db.Uuid
+  decision   ReviewDecisionType
+  comment    String?
+  createdAt  DateTime           @default(now()) @db.Timestamptz(6)
+
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  reviewer User   @relation("ReviewDecisionUser", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@unique([reviewId, reviewerId])
+  @@map("review_decisions")
+}
+
+model ChangeProposal {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String               @db.Uuid
+  rowId          String               @db.Uuid
+  requestedById  String               @db.Uuid
+  decidedById    String?              @db.Uuid
+  title          String
+  reason         String?
+  proposedPatch  Json
+  status         ChangeProposalStatus @default(draft)
+  decisionNote   String?
+  createdAt      DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @db.Timestamptz(6)
+  decidedAt      DateTime?            @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  row          DocumentRow  @relation(fields: [rowId], references: [id], onDelete: Restrict)
+  requestedBy  User         @relation("ProposalRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  decidedBy    User?        @relation("ProposalDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  @@index([rowId, status, createdAt])
+  @@map("change_proposals")
+}
+
+model ProductConfiguration {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String            @db.Uuid
+  workspaceId    String            @db.Uuid
+  documentId     String?           @db.Uuid
+  parentId       String?           @db.Uuid
+  createdById    String            @db.Uuid
+  name           String
+  kind           ConfigurationKind
+  description    String?
+  rules          Json              @default("{}")
+  lockedAt       DateTime?         @db.Timestamptz(6)
+  createdAt      DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime          @updatedAt @db.Timestamptz(6)
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workspace    Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  document     Document?              @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  parent       ProductConfiguration?  @relation("ConfigurationChildren", fields: [parentId], references: [id], onDelete: Restrict)
+  children     ProductConfiguration[] @relation("ConfigurationChildren")
+  createdBy    User                   @relation("ConfigurationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  items        ConfigurationItem[]
+
+  @@unique([workspaceId, name])
+  @@index([documentId, kind])
+  @@map("product_configurations")
+}
+
+model ConfigurationItem {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  configurationId String @db.Uuid
+  rowId           String @db.Uuid
+  rowVersion      Int
+  applicability   Json   @default("{}")
+
+  configuration ProductConfiguration @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  row           DocumentRow          @relation(fields: [rowId], references: [id], onDelete: Restrict)
+
+  @@unique([configurationId, rowId])
+  @@index([rowId])
+  @@map("configuration_items")
+}
+
+model RowAccessGrant {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @db.Uuid
+  rowId          String         @db.Uuid
+  userId         String         @db.Uuid
+  accessLevel    RowAccessLevel
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  row          DocumentRow  @relation(fields: [rowId], references: [id], onDelete: Restrict)
+  user         User         @relation("RowAccessUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([rowId, userId])
+  @@index([userId, accessLevel])
+  @@map("row_access_grants")
+}
+
+model IntegrationEndpoint {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String          @db.Uuid
+  name            String
+  integrationType IntegrationType
+  configuration   Json            @default("{}")
+  enabled         Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime?       @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, name])
+  @@index([organizationId, integrationType, enabled])
+  @@map("integration_endpoints")
 }

@@ -9,6 +9,7 @@ import { apiEnv } from "./env";
 import { EventsModule } from "./events/events.module";
 import { ExportsModule } from "./exports/exports.module";
 import { HealthModule } from "./health/health.module";
+import { LifecycleModule } from "./lifecycle/lifecycle.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RowsModule } from "./rows/rows.module";
 import { StorageModule } from "./storage/storage.module";
@@ -36,6 +37,7 @@ import { TreeModule } from "./tree/tree.module";
     RowsModule,
     ExportsModule,
     BaselinesModule,
+    LifecycleModule,
     HealthModule,
   ],
 })

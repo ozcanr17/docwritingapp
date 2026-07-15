@@ -1,5 +1,5 @@
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
-import { PrismaClient } from "@docsys/database";
+import { DocumentType, PrismaClient } from "@docsys/database";
 
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL =
@@ -58,7 +58,11 @@ export async function registerActor(app: NestFastifyApplication, label: string):
   return { cookie, userId: body.user.id, email };
 }
 
-export async function createOrgWorkspaceDocument(app: NestFastifyApplication, actor: TestActor) {
+export async function createOrgWorkspaceDocument(
+  app: NestFastifyApplication,
+  actor: TestActor,
+  documentType: DocumentType = "requirement",
+) {
   const orgRes = await app.inject({
     method: "POST",
     url: "/organizations",
@@ -77,8 +81,25 @@ export async function createOrgWorkspaceDocument(app: NestFastifyApplication, ac
     method: "POST",
     url: `/workspaces/${workspace.id}/documents`,
     headers: { cookie: actor.cookie },
-    payload: { title: "Spec", documentType: "requirement", folderId: null },
+    payload: { title: "Spec", documentType, folderId: null },
   });
   const document = JSON.parse(docRes.body) as { id: string; version: number };
   return { org, workspace, document };
+}
+
+export async function createDocument(
+  app: NestFastifyApplication,
+  actor: TestActor,
+  workspaceId: string,
+  documentType: DocumentType,
+  title: string,
+) {
+  const response = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspaceId}/documents`,
+    headers: { cookie: actor.cookie },
+    payload: { title, documentType, folderId: null },
+  });
+  if (response.statusCode !== 201) throw new Error(`document create failed: ${response.body}`);
+  return JSON.parse(response.body) as { id: string; version: number };
 }

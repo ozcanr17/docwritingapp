@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createTreeNode } from "./helpers";
 
 test("import CSV, verify hierarchy, then export and download", async ({ page }) => {
   const suffix = Date.now();
@@ -15,9 +16,7 @@ test("import CSV, verify hierarchy, then export and download", async ({ page }) 
   await page.getByTestId("bootstrap-submit").click();
   await expect(page.getByTestId("tree-empty")).toBeVisible();
 
-  page.once("dialog", (dialog) => void dialog.accept("Imported Spec"));
-  await page.locator("section").click({ button: "right" });
-  await page.getByTestId("menu-newDocument").click();
+  await createTreeNode(page, "menu-newDocument", "Imported Spec");
   await page.getByRole("button", { name: "Imported Spec" }).click();
   await expect(page.getByTestId("grid-empty")).toBeVisible();
 

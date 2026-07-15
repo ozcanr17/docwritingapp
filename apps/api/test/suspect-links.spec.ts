@@ -1,7 +1,7 @@
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { PrismaClient } from "@docsys/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp, createOrgWorkspaceDocument, registerActor, resetDatabase, TestActor } from "./helpers";
+import { buildApp, createDocument, createOrgWorkspaceDocument, registerActor, resetDatabase, TestActor } from "./helpers";
 
 describe("suspect links", () => {
   let app: NestFastifyApplication;
@@ -22,10 +22,10 @@ describe("suspect links", () => {
     await prisma.$disconnect();
   });
 
-  async function createRow(payload: Record<string, unknown>) {
+  async function createRow(payload: Record<string, unknown>, targetDocumentId = documentId) {
     const response = await app.inject({
       method: "POST",
-      url: `/documents/${documentId}/rows`,
+      url: `/documents/${targetDocumentId}/rows`,
       headers: { cookie: actor.cookie, "idempotency-key": crypto.randomUUID() },
       payload,
     });
@@ -34,7 +34,9 @@ describe("suspect links", () => {
 
   it("marks a link suspect when a linked row changes and clears it on acknowledge", async () => {
     const requirement = await createRow({ rowType: "requirement", title: "Requirement", parentId: null });
-    const testCase = await createRow({ rowType: "test_case", title: "Test", parentId: null });
+    const sourceDocument = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    const testDocument = await createDocument(app, actor, sourceDocument.workspaceId, "test", "Tests");
+    const testCase = await createRow({ rowType: "test_case", title: "Test", parentId: null }, testDocument.id);
 
     const linkRes = await app.inject({
       method: "POST",

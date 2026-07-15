@@ -7,7 +7,7 @@ import { useToastStore } from "../stores/toasts";
 
 interface ReportsDialogProps {
   documentId: string;
-  tab: "baselines" | "coverage" | "matrix";
+  tab: "baselines" | "coverage" | "matrix" | "reviews";
   onClose: () => void;
 }
 
@@ -40,11 +40,24 @@ interface Coverage {
   uncoveredRows: { id: string; title: string }[];
 }
 
+interface Review {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  dueAt: string | null;
+  reviewers: Array<{ reviewerId: string; reviewer: { displayName: string; email: string } }>;
+  decisions: Array<{ id: string; reviewerId: string; decision: string; comment: string | null }>;
+}
+
 export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
   const [diffRevision, setDiffRevision] = useState<number | null>(null);
+  const [baselineLabel, setBaselineLabel] = useState("");
+  const [baselineFormOpen, setBaselineFormOpen] = useState(false);
+  const [reviewTitle, setReviewTitle] = useState("");
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -77,13 +90,31 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
     queryFn: () => api<MatrixRow[]>(`/documents/${documentId}/traceability`),
     enabled: tab === "matrix",
   });
+  const profile = useQuery({ queryKey: ["me"], queryFn: () => api<{ id: string }>("/auth/me"), enabled: tab === "reviews" });
+  const reviews = useQuery({
+    queryKey: ["reviews", documentId],
+    queryFn: () => api<Review[]>(`/documents/${documentId}/reviews`),
+    enabled: tab === "reviews",
+  });
 
   const createBaseline = useMutation({
     mutationFn: (label: string) => api(`/documents/${documentId}/baselines`, { method: "POST", body: JSON.stringify({ label }) }),
     onSuccess: () => {
+      setBaselineLabel("");
+      setBaselineFormOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["baselines", documentId] });
       pushToast("success", t("createBaseline"));
     },
+    onError: () => pushToast("error", t("genericError")),
+  });
+  const createReview = useMutation({
+    mutationFn: (title: string) => api(`/documents/${documentId}/reviews`, { method: "POST", body: JSON.stringify({ title, reviewerIds: [profile.data?.id], activate: true }) }),
+    onSuccess: () => { setReviewTitle(""); void queryClient.invalidateQueries({ queryKey: ["reviews", documentId] }); },
+    onError: () => pushToast("error", t("genericError")),
+  });
+  const decideReview = useMutation({
+    mutationFn: (input: { id: string; decision: string }) => api(`/reviews/${input.id}/decisions`, { method: "POST", body: JSON.stringify({ decision: input.decision }) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["reviews", documentId] }),
     onError: () => pushToast("error", t("genericError")),
   });
 
@@ -96,7 +127,7 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold">
-            {tab === "baselines" ? t("baselines") : tab === "coverage" ? t("coverageReport") : t("traceabilityMatrix")}
+            {tab === "baselines" ? t("baselines") : tab === "coverage" ? t("coverageReport") : tab === "matrix" ? t("traceabilityMatrix") : t("reviews")}
           </h2>
           <button aria-label={t("close")} onClick={onClose} className="rounded p-1 hover:bg-muted">
             <X size={16} />
@@ -108,13 +139,38 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
             <button
               data-testid="create-baseline"
               className="rounded bg-primary px-3 py-1.5 text-xs text-primaryForeground"
-              onClick={() => {
-                const label = window.prompt(t("baselineLabel"));
-                if (label) createBaseline.mutate(label);
-              }}
+              onClick={() => setBaselineFormOpen(true)}
             >
               {t("createBaseline")}
             </button>
+            {baselineFormOpen && (
+              <form
+                className="flex items-end gap-2 rounded-xl border border-border bg-editorBackground p-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (baselineLabel.trim()) createBaseline.mutate(baselineLabel.trim());
+                }}
+              >
+                <label className="min-w-0 flex-1 text-xs text-mutedForeground">
+                  {t("baselineLabel")}
+                  <input
+                    autoFocus
+                    data-testid="baseline-label-input"
+                    className="mt-1 w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-foreground"
+                    value={baselineLabel}
+                    onChange={(event) => setBaselineLabel(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  data-testid="baseline-create-submit"
+                  className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primaryForeground disabled:opacity-50"
+                  disabled={!baselineLabel.trim()}
+                >
+                  {t("create")}
+                </button>
+              </form>
+            )}
             {baselines.data && baselines.data.length === 0 ? (
               <div className="text-mutedForeground">{t("noBaselines")}</div>
             ) : (
@@ -211,6 +267,28 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
                 </tbody>
               </table>
             )}
+          </div>
+        )}
+
+        {tab === "reviews" && (
+          <div className="space-y-3 text-sm">
+            <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (reviewTitle.trim() && profile.data) createReview.mutate(reviewTitle.trim()); }}>
+              <input className="min-w-0 flex-1 rounded-lg border border-border bg-editorBackground px-3 py-2" value={reviewTitle} placeholder={t("reviewTitle")} onChange={(event) => setReviewTitle(event.target.value)} />
+              <button className="rounded-lg bg-primary px-3 py-2 text-xs text-primaryForeground" disabled={!reviewTitle.trim() || !profile.data}>{t("startReview")}</button>
+            </form>
+            {reviews.data?.map((review) => (
+              <div key={review.id} className="rounded-xl border border-border bg-editorBackground p-3">
+                <div className="flex items-center justify-between"><span className="font-medium">{review.title}</span><span className="rounded bg-muted px-2 py-0.5 text-xs">{review.status}</span></div>
+                <div className="mt-1 text-xs text-mutedForeground">{review.reviewers.map((item) => item.reviewer.displayName).join(", ")}</div>
+                {review.status === "active" && (
+                  <div className="mt-3 flex gap-2">
+                    <button className="rounded-lg bg-success/15 px-2 py-1 text-xs text-success" onClick={() => decideReview.mutate({ id: review.id, decision: "approved" })}>{t("approve")}</button>
+                    <button className="rounded-lg bg-warning/15 px-2 py-1 text-xs text-warning" onClick={() => decideReview.mutate({ id: review.id, decision: "changes_requested" })}>{t("requestChanges")}</button>
+                    <button className="rounded-lg bg-destructive/15 px-2 py-1 text-xs text-destructive" onClick={() => decideReview.mutate({ id: review.id, decision: "rejected" })}>{t("reject")}</button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numberRows, toCsv, toDocx } from "../src/export";
+import { numberRows, toCsv, toDocx, toPdf, toReqif, toXlsx } from "../src/export";
 
 const rawRows = [
   { id: "a", parentId: null, rank: "b", depth: 0, rowType: "heading", title: "Intro", description: null },
@@ -21,8 +21,8 @@ describe("export generation", () => {
   it("produces CSV with a header and escaped cells", () => {
     const csv = toCsv(numberRows(rawRows)).toString("utf8");
     const lines = csv.split("\n");
-    expect(lines[0]).toBe("number,level,type,title,description");
-    expect(lines).toContain("1.1,1,requirement,Login,User logs in");
+    expect(lines[0]).toBe("id,level,type,requirement_no,title,test_step,expected_result,test_result,description");
+    expect(lines).toContain("1.1,1,requirement,,Login,,,,User logs in");
   });
 
   it("escapes commas and quotes in CSV", () => {
@@ -39,5 +39,16 @@ describe("export generation", () => {
     expect(buffer.length).toBeGreaterThan(0);
     // DOCX files are ZIP archives; the magic bytes are "PK".
     expect(buffer.subarray(0, 2).toString("latin1")).toBe("PK");
+  });
+
+  it("produces XLSX, PDF and ReqIF artifacts", async () => {
+    const rows = numberRows(rawRows);
+    const xlsx = await toXlsx("Spec", rows);
+    const pdf = await toPdf("Spec", rows);
+    const reqif = toReqif("Spec", rows, []);
+    expect(xlsx.subarray(0, 2).toString("latin1")).toBe("PK");
+    expect(pdf.subarray(0, 4).toString("latin1")).toBe("%PDF");
+    expect(reqif.toString("utf8")).toContain("<REQ-IF");
+    expect(reqif.toString("utf8")).toContain("REQ-IF-VERSION>1.2");
   });
 });

@@ -55,3 +55,5 @@ jobs:
       - run: bash infra/scripts/scan-forbidden-chars.sh
       - run: pnpm --filter @docsys/api test
       - run: pnpm --filter @docsys/worker test
+      - run: pnpm --filter @docsys/web test
+      - run: pnpm build

@@ -14,6 +14,10 @@ function row(partial: Pick<OutlineRow, "id" | "parentId" | "depth" | "rowType" |
     tags: [],
     action: null,
     expectedResult: null,
+    testResult: null,
+    requirementNo: null,
+    linkedRequirements: [],
+    linkCount: 0,
     ...partial,
   };
 }
@@ -42,6 +46,6 @@ describe("insertOptions", () => {
 
   it("suggests a test step child under a test case", () => {
     const tc = [row({ id: "t", parentId: null, depth: 0, rowType: "test_case", displayNumber: "1" })];
-    expect(insertOptions(tc, tc[0]!)[0]).toMatchObject({ number: "1.1", rowType: "test_step" });
+    expect(insertOptions(tc, tc[0]!, "test")[0]).toMatchObject({ number: "1.1", rowType: "test_step" });
   });
 });

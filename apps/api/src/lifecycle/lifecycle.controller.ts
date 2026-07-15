@@ -1,0 +1,325 @@
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
+import { z } from "zod";
+import { CurrentUser } from "../auth/current-user.decorator";
+import { SessionUser } from "../auth/auth.types";
+import { ZodBodyPipe } from "../common/zod-body.pipe";
+import { LifecycleService } from "./lifecycle.service";
+
+const savedViewSchema = z.object({
+  name: z.string().min(1).max(200),
+  scope: z.enum(["personal", "team"]).default("personal"),
+  filters: z.array(z.record(z.unknown())).default([]),
+  sorting: z.array(z.record(z.unknown())).default([]),
+  visibleColumns: z.array(z.string()).default([]),
+  frozenColumns: z.array(z.string()).default([]),
+  linkProjection: z.record(z.unknown()).default({}),
+  isDefault: z.boolean().default(false),
+});
+
+const commentSchema = z.object({
+  body: z.string().min(1).max(20000),
+  mentionUserIds: z.array(z.string().uuid()).default([]),
+});
+const attachmentSchema = z.object({
+  fileName: z.string().min(1).max(500),
+  contentType: z.string().min(1).max(200),
+  sizeBytes: z.number().int().positive().max(100 * 1024 * 1024),
+  checksum: z.string().max(200).optional(),
+});
+
+const executionSchema = z.object({
+  environment: z.string().max(200).optional(),
+  buildReference: z.string().max(300).optional(),
+  iteration: z.string().max(200).optional(),
+  notes: z.string().max(20000).optional(),
+});
+
+const stepExecutionSchema = z.object({
+  status: z.enum(["not_run", "running", "passed", "failed", "blocked", "skipped"]),
+  actualResult: z.string().max(20000).nullable().optional(),
+});
+
+const reviewSchema = z.object({
+  title: z.string().min(1).max(300),
+  description: z.string().max(10000).optional(),
+  reviewerIds: z.array(z.string().uuid()).min(1),
+  dueAt: z.string().datetime().optional(),
+  activate: z.boolean().default(true),
+});
+
+const decisionSchema = z.object({
+  decision: z.enum(["approved", "rejected", "changes_requested"]),
+  comment: z.string().max(10000).optional(),
+});
+
+const proposalSchema = z.object({
+  title: z.string().min(1).max(300),
+  reason: z.string().max(10000).optional(),
+  proposedPatch: z.record(z.unknown()),
+  submit: z.boolean().default(true),
+});
+
+const proposalDecisionSchema = z.object({
+  approved: z.boolean(),
+  decisionNote: z.string().max(10000).optional(),
+  apply: z.boolean().default(false),
+});
+
+const configurationSchema = z.object({
+  name: z.string().min(1).max(200),
+  kind: z.enum(["stream", "baseline", "variant"]),
+  documentId: z.string().uuid().nullable().optional(),
+  parentId: z.string().uuid().nullable().optional(),
+  description: z.string().max(5000).optional(),
+  rules: z.record(z.unknown()).default({}),
+});
+
+const accessGrantSchema = z.object({
+  userId: z.string().uuid(),
+  accessLevel: z.enum(["read", "write", "manage"]),
+});
+
+const integrationSchema = z.object({
+  name: z.string().min(1).max(200),
+  integrationType: z.enum(["webhook", "jira", "azure_devops", "github", "generic_rest", "assistant"]),
+  configuration: z.record(z.unknown()).default({}),
+  enabled: z.boolean().default(true),
+});
+
+const ssoSchema = z.object({
+  issuer: z.string().url(),
+  clientId: z.string().min(1).max(500),
+  authorizationEndpoint: z.string().url(),
+  tokenEndpoint: z.string().url(),
+  userInfoEndpoint: z.string().url().optional(),
+  scopes: z.array(z.string()).default(["openid", "profile", "email"]),
+  enabled: z.boolean().default(true),
+});
+
+@Controller()
+export class LifecycleController {
+  constructor(private readonly lifecycle: LifecycleService) {}
+
+  @Get("documents/:documentId/views")
+  listViews(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.lifecycle.listViews(user.userId, documentId);
+  }
+
+  @Post("documents/:documentId/views")
+  createView(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(savedViewSchema)) body: z.infer<typeof savedViewSchema>,
+  ) {
+    return this.lifecycle.createView(user.userId, documentId, body);
+  }
+
+  @Delete("views/:viewId")
+  deleteView(@CurrentUser() user: SessionUser, @Param("viewId", ParseUUIDPipe) viewId: string) {
+    return this.lifecycle.deleteView(user.userId, viewId);
+  }
+
+  @Get("workspaces/:workspaceId/search")
+  search(
+    @CurrentUser() user: SessionUser,
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+    @Query("q") query?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.lifecycle.search(user.userId, workspaceId, query ?? "", Math.min(Number(limit ?? 100) || 100, 250));
+  }
+
+  @Get("documents/:documentId/quality")
+  quality(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.lifecycle.quality(user.userId, documentId);
+  }
+
+  @Get("documents/:documentId/dashboard")
+  dashboard(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.lifecycle.dashboard(user.userId, documentId);
+  }
+
+  @Get("documents/:documentId/assistant/suggestions")
+  assistantSuggestions(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.lifecycle.assistantSuggestions(user.userId, documentId);
+  }
+
+  @Get("rows/:rowId/comments")
+  comments(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
+    return this.lifecycle.listComments(user.userId, rowId);
+  }
+
+  @Post("rows/:rowId/comments")
+  addComment(
+    @CurrentUser() user: SessionUser,
+    @Param("rowId", ParseUUIDPipe) rowId: string,
+    @Body(new ZodBodyPipe(commentSchema)) body: z.infer<typeof commentSchema>,
+  ) {
+    return this.lifecycle.addComment(user.userId, rowId, body.body, body.mentionUserIds);
+  }
+
+  @Post("comments/:commentId/resolve")
+  resolveComment(@CurrentUser() user: SessionUser, @Param("commentId", ParseUUIDPipe) commentId: string) {
+    return this.lifecycle.resolveComment(user.userId, commentId);
+  }
+
+  @Get("rows/:rowId/attachments")
+  attachments(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
+    return this.lifecycle.listAttachments(user.userId, rowId);
+  }
+
+  @Post("rows/:rowId/attachments")
+  createAttachment(
+    @CurrentUser() user: SessionUser,
+    @Param("rowId", ParseUUIDPipe) rowId: string,
+    @Body(new ZodBodyPipe(attachmentSchema)) body: z.infer<typeof attachmentSchema>,
+  ) {
+    return this.lifecycle.createAttachment(user.userId, rowId, body);
+  }
+
+  @Get("attachments/:attachmentId/download")
+  downloadAttachment(@CurrentUser() user: SessionUser, @Param("attachmentId", ParseUUIDPipe) attachmentId: string) {
+    return this.lifecycle.downloadAttachment(user.userId, attachmentId);
+  }
+
+  @Delete("attachments/:attachmentId")
+  deleteAttachment(@CurrentUser() user: SessionUser, @Param("attachmentId", ParseUUIDPipe) attachmentId: string) {
+    return this.lifecycle.deleteAttachment(user.userId, attachmentId);
+  }
+
+  @Get("notifications")
+  notifications(@CurrentUser() user: SessionUser) {
+    return this.lifecycle.notifications(user.userId);
+  }
+
+  @Post("notifications/:notificationId/read")
+  readNotification(@CurrentUser() user: SessionUser, @Param("notificationId", ParseUUIDPipe) notificationId: string) {
+    return this.lifecycle.readNotification(user.userId, notificationId);
+  }
+
+  @Get("rows/:rowId/executions")
+  executions(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
+    return this.lifecycle.listExecutions(user.userId, rowId);
+  }
+
+  @Post("rows/:rowId/executions")
+  createExecution(
+    @CurrentUser() user: SessionUser,
+    @Param("rowId", ParseUUIDPipe) rowId: string,
+    @Body(new ZodBodyPipe(executionSchema)) body: z.infer<typeof executionSchema>,
+  ) {
+    return this.lifecycle.createExecution(user.userId, rowId, body);
+  }
+
+  @Patch("executions/:executionId/steps/:stepRowId")
+  updateExecutionStep(
+    @CurrentUser() user: SessionUser,
+    @Param("executionId", ParseUUIDPipe) executionId: string,
+    @Param("stepRowId", ParseUUIDPipe) stepRowId: string,
+    @Body(new ZodBodyPipe(stepExecutionSchema)) body: z.infer<typeof stepExecutionSchema>,
+  ) {
+    return this.lifecycle.updateExecutionStep(user.userId, executionId, stepRowId, body);
+  }
+
+  @Post("executions/:executionId/complete")
+  completeExecution(@CurrentUser() user: SessionUser, @Param("executionId", ParseUUIDPipe) executionId: string) {
+    return this.lifecycle.completeExecution(user.userId, executionId);
+  }
+
+  @Get("documents/:documentId/reviews")
+  reviews(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.lifecycle.listReviews(user.userId, documentId);
+  }
+
+  @Post("documents/:documentId/reviews")
+  createReview(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(reviewSchema)) body: z.infer<typeof reviewSchema>,
+  ) {
+    return this.lifecycle.createReview(user.userId, documentId, body);
+  }
+
+  @Post("reviews/:reviewId/decisions")
+  decideReview(
+    @CurrentUser() user: SessionUser,
+    @Param("reviewId", ParseUUIDPipe) reviewId: string,
+    @Body(new ZodBodyPipe(decisionSchema)) body: z.infer<typeof decisionSchema>,
+  ) {
+    return this.lifecycle.decideReview(user.userId, reviewId, body.decision, body.comment);
+  }
+
+  @Get("rows/:rowId/proposals")
+  proposals(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
+    return this.lifecycle.listProposals(user.userId, rowId);
+  }
+
+  @Post("rows/:rowId/proposals")
+  createProposal(
+    @CurrentUser() user: SessionUser,
+    @Param("rowId", ParseUUIDPipe) rowId: string,
+    @Body(new ZodBodyPipe(proposalSchema)) body: z.infer<typeof proposalSchema>,
+  ) {
+    return this.lifecycle.createProposal(user.userId, rowId, body);
+  }
+
+  @Post("proposals/:proposalId/decision")
+  decideProposal(
+    @CurrentUser() user: SessionUser,
+    @Param("proposalId", ParseUUIDPipe) proposalId: string,
+    @Body(new ZodBodyPipe(proposalDecisionSchema)) body: z.infer<typeof proposalDecisionSchema>,
+  ) {
+    return this.lifecycle.decideProposal(user.userId, proposalId, body);
+  }
+
+  @Get("workspaces/:workspaceId/configurations")
+  configurations(@CurrentUser() user: SessionUser, @Param("workspaceId", ParseUUIDPipe) workspaceId: string) {
+    return this.lifecycle.listConfigurations(user.userId, workspaceId);
+  }
+
+  @Post("workspaces/:workspaceId/configurations")
+  createConfiguration(
+    @CurrentUser() user: SessionUser,
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+    @Body(new ZodBodyPipe(configurationSchema)) body: z.infer<typeof configurationSchema>,
+  ) {
+    return this.lifecycle.createConfiguration(user.userId, workspaceId, body);
+  }
+
+  @Get("rows/:rowId/access")
+  accessGrants(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
+    return this.lifecycle.listAccessGrants(user.userId, rowId);
+  }
+
+  @Post("rows/:rowId/access")
+  grantAccess(
+    @CurrentUser() user: SessionUser,
+    @Param("rowId", ParseUUIDPipe) rowId: string,
+    @Body(new ZodBodyPipe(accessGrantSchema)) body: z.infer<typeof accessGrantSchema>,
+  ) {
+    return this.lifecycle.grantAccess(user.userId, rowId, body.userId, body.accessLevel);
+  }
+
+  @Get("organizations/:orgId/integrations")
+  integrations(@CurrentUser() user: SessionUser, @Param("orgId", ParseUUIDPipe) orgId: string) {
+    return this.lifecycle.listIntegrations(user.userId, orgId);
+  }
+
+  @Post("organizations/:orgId/integrations")
+  createIntegration(
+    @CurrentUser() user: SessionUser,
+    @Param("orgId", ParseUUIDPipe) orgId: string,
+    @Body(new ZodBodyPipe(integrationSchema)) body: z.infer<typeof integrationSchema>,
+  ) {
+    return this.lifecycle.createIntegration(user.userId, orgId, body);
+  }
+
+  @Post("organizations/:orgId/sso")
+  configureSso(
+    @CurrentUser() user: SessionUser,
+    @Param("orgId", ParseUUIDPipe) orgId: string,
+    @Body(new ZodBodyPipe(ssoSchema)) body: z.infer<typeof ssoSchema>,
+  ) {
+    return this.lifecycle.configureSso(user.userId, orgId, body);
+  }
+}

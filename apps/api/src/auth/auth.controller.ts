@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Res } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, Res } from "@nestjs/common";
 import { FastifyReply } from "fastify";
 import { z } from "zod";
 import { ZodBodyPipe } from "../common/zod-body.pipe";
@@ -46,6 +46,25 @@ export class AuthController {
     const result = await this.auth.login(body.email, body.password);
     this.setCookie(reply, result.token);
     return { user: result.user };
+  }
+
+  @Public()
+  @Get("sso/:orgSlug/start")
+  async startSso(@Param("orgSlug") orgSlug: string, @Res() reply: FastifyReply) {
+    const url = await this.auth.startSso(orgSlug);
+    return reply.redirect(url);
+  }
+
+  @Public()
+  @Get("sso/callback")
+  async ssoCallback(
+    @Query("code") code: string,
+    @Query("state") state: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const result = await this.auth.completeSso(code, state);
+    this.setCookie(reply, result.token);
+    return reply.redirect(apiEnv().APP_BASE_URL);
   }
 
   @Post("logout")

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createTreeNode } from "./helpers";
 
 test("test document: add rows, edit test step fields, add a custom column", async ({ page }) => {
   const suffix = Date.now();
@@ -16,9 +17,7 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
   await expect(page.getByTestId("tree-empty")).toBeVisible();
 
   // A test document imported with a test case + steps (expected result column).
-  page.once("dialog", (dialog) => void dialog.accept("Test Plan"));
-  await page.locator("section").click({ button: "right" });
-  await page.getByTestId("menu-newDocument").click();
+  await createTreeNode(page, "menu-newTestDocument", "Test Plan");
   await page.getByRole("button", { name: "Test Plan" }).click();
 
   await page.getByTestId("menubar-file-input").setInputFiles({
@@ -44,13 +43,35 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
   await expectedCell.click();
   await expectedCell.press("Enter");
   await page.getByTestId("cell-input-expectedResult").fill("Login page is displayed");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Control+Enter");
   await expect(page.getByText("Login page is displayed")).toBeVisible();
 
-  // Add a custom column via Insert menu (column name, then type).
-  const answers = ["Coverage", "text"];
-  page.on("dialog", (d) => void d.accept(answers.shift() ?? ""));
+  const resultCell = stepRow.getByTestId("cell-value-testResult");
+  await resultCell.click();
+  await resultCell.press("Enter");
+  await page.getByTestId("cell-input-testResult").fill("Passed");
+  await page.keyboard.press("Control+Enter");
+  await expect(page.getByText("Passed")).toBeVisible();
+
   await page.getByTestId("menu-insert").click();
   await page.getByTestId("menuitem-add-column").click();
-  await expect(page.getByText("Coverage", { exact: true })).toBeVisible();
+  await page.getByTestId("column-name-input").fill("Coverage");
+  await page.getByTestId("column-type-select").selectOption("text");
+  await page.getByTestId("column-create-submit").click();
+  await expect(page.getByRole("columnheader", { name: "Coverage" })).toBeVisible();
+
+  await page.getByTestId("menu-insert").click();
+  await page.getByTestId("menuitem-add-column").click();
+  await page.getByTestId("column-name-input").fill("Platforms");
+  await page.getByTestId("column-type-select").selectOption("multi_select");
+  await page.getByTestId("column-options-input").fill("Web\niOS\nAndroid");
+  await page.getByTestId("column-create-submit").click();
+  const platformCell = stepRow.locator('[data-testid^="cell-value-custom:platforms_"]');
+  await platformCell.scrollIntoViewIfNeeded();
+  await platformCell.click();
+  await platformCell.press("Enter");
+  await page.getByTestId("choice-option-0").check();
+  await page.getByTestId("choice-option-1").check();
+  await page.getByTestId("choice-save").click();
+  await expect(platformCell).toHaveText("Web, iOS");
 });

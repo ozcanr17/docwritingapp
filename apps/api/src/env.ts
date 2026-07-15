@@ -7,6 +7,7 @@ const apiEnvSchema = z.object({
   REDIS_URL: z.string().url(),
   JWT_SECRET: z.string().min(16),
   APP_BASE_URL: z.string().url().default("http://localhost:5173"),
+  API_PUBLIC_URL: z.string().url().default("http://localhost:3001"),
   CORS_ALLOWED_ORIGINS: z.string().default("http://localhost:5173"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   COOKIE_SECURE: z.coerce.boolean().default(false),

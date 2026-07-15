@@ -1,7 +1,7 @@
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { PrismaClient } from "@docsys/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp, createOrgWorkspaceDocument, registerActor, resetDatabase, TestActor } from "./helpers";
+import { buildApp, createDocument, createOrgWorkspaceDocument, registerActor, resetDatabase, TestActor } from "./helpers";
 
 describe("document rows", () => {
   let app: NestFastifyApplication;
@@ -22,10 +22,10 @@ describe("document rows", () => {
     await prisma.$disconnect();
   });
 
-  async function createRow(payload: Record<string, unknown>, idempotencyKey?: string) {
+  async function createRow(payload: Record<string, unknown>, idempotencyKey?: string, targetDocumentId = documentId) {
     const response = await app.inject({
       method: "POST",
-      url: `/documents/${documentId}/rows`,
+      url: `/documents/${targetDocumentId}/rows`,
       headers: { cookie: actor.cookie, ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}) },
       payload,
     });
@@ -45,13 +45,75 @@ describe("document rows", () => {
       headers: { cookie: actor.cookie },
     });
     expect(outline.statusCode).toBe(200);
-    const rows = JSON.parse(outline.body) as Array<{ title: string; displayNumber: string }>;
+    const rows = JSON.parse(outline.body) as Array<{ title: string; displayNumber: string; requirementNo: string | null }>;
     const byTitle = new Map(rows.map((r) => [r.title, r.displayNumber]));
     expect(byTitle.get("Introduction")).toBe("1");
     expect(byTitle.get("Req 1")).toBe("1.1");
     expect(byTitle.get("Req 2")).toBe("1.2");
     expect(byTitle.get("Scope")).toBe("2");
+    expect(rows.find((row) => row.title === "Req 1")?.requirementNo).toBe("REQ-001");
+    expect(rows.find((row) => row.title === "Req 2")?.requirementNo).toBe("REQ-002");
     expect(req1.depth).toBe(1);
+  });
+
+  it("keeps requirement numbers unique inside a document", async () => {
+    const first = await createRow({ rowType: "requirement", title: "Numbered A", parentId: null });
+    const second = await createRow({ rowType: "requirement", title: "Numbered B", parentId: null });
+    const firstUpdate = await app.inject({
+      method: "PATCH",
+      url: `/rows/${first.id}`,
+      headers: { cookie: actor.cookie },
+      payload: { expectedVersion: first.version, requirementDetail: { requirementNo: "SYS-100" } },
+    });
+    expect(firstUpdate.statusCode).toBe(200);
+    const duplicate = await app.inject({
+      method: "PATCH",
+      url: `/rows/${second.id}`,
+      headers: { cookie: actor.cookie },
+      payload: { expectedVersion: second.version, requirementDetail: { requirementNo: "sys-100" } },
+    });
+    expect(duplicate.statusCode).toBe(422);
+  });
+
+  it("enforces document row types and stores test step results", async () => {
+    const sourceDocument = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    const testDocument = await createDocument(app, actor, sourceDocument.workspaceId, "test", "Execution tests");
+    const invalidRequirement = await app.inject({
+      method: "POST",
+      url: `/documents/${testDocument.id}/rows`,
+      headers: { cookie: actor.cookie },
+      payload: { rowType: "requirement", title: "Wrong type", parentId: null },
+    });
+    expect(invalidRequirement.statusCode).toBe(422);
+
+    const testCase = await createRow(
+      { rowType: "test_case", title: "Login", parentId: null },
+      undefined,
+      testDocument.id,
+    );
+    const testStep = await createRow(
+      { rowType: "test_step", title: "Enter credentials", parentId: testCase.id },
+      undefined,
+      testDocument.id,
+    );
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/rows/${testStep.id}`,
+      headers: { cookie: actor.cookie },
+      payload: {
+        expectedVersion: testStep.version,
+        testStepDetail: { action: "Enter valid credentials", expectedResult: "Dashboard opens", testResult: "Passed" },
+      },
+    });
+    expect(update.statusCode).toBe(200);
+
+    const outline = await app.inject({
+      method: "GET",
+      url: `/documents/${testDocument.id}/outline`,
+      headers: { cookie: actor.cookie },
+    });
+    const rows = JSON.parse(outline.body) as Array<{ id: string; testResult: string | null }>;
+    expect(rows.find((row) => row.id === testStep.id)?.testResult).toBe("Passed");
   });
 
   it("returns 409 for stale version updates and does not overwrite", async () => {
@@ -158,7 +220,8 @@ describe("document rows", () => {
 
   it("links a test case to a requirement and soft deletes links with the row", async () => {
     const requirement = await createRow({ rowType: "requirement", title: "Linked Req", parentId: null });
-    const testCase = await createRow({ rowType: "test_case", title: "TC", parentId: null });
+    const testDocument = await createDocument(app, actor, (await prisma.document.findUniqueOrThrow({ where: { id: documentId } })).workspaceId, "test", "Tests");
+    const testCase = await createRow({ rowType: "test_case", title: "TC", parentId: null }, undefined, testDocument.id);
 
     const link = await app.inject({
       method: "POST",
@@ -167,6 +230,37 @@ describe("document rows", () => {
       payload: { targetRowId: requirement.id, linkType: "verifies" },
     });
     expect(link.statusCode).toBe(201);
+
+    const candidates = await app.inject({
+      method: "GET",
+      url: `/documents/${testDocument.id}/link-candidates?q=Linked`,
+      headers: { cookie: actor.cookie },
+    });
+    expect(candidates.statusCode).toBe(200);
+    expect(JSON.parse(candidates.body)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: requirement.id, title: "Linked Req" })]),
+    );
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/rows/${testCase.id}`,
+      headers: { cookie: actor.cookie },
+    });
+    const detailBody = JSON.parse(detail.body) as { outgoingLinks: Array<{ targetRow: { title: string } }> };
+    expect(detailBody.outgoingLinks[0]?.targetRow.title).toBe("Linked Req");
+
+    const testOutline = await app.inject({
+      method: "GET",
+      url: `/documents/${testDocument.id}/outline`,
+      headers: { cookie: actor.cookie },
+    });
+    const testRows = JSON.parse(testOutline.body) as Array<{
+      id: string;
+      linkedRequirements: Array<{ id: string; requirementNo: string; title: string }>;
+    }>;
+    expect(testRows.find((row) => row.id === testCase.id)?.linkedRequirements).toEqual([
+      expect.objectContaining({ id: requirement.id, title: "Linked Req" }),
+    ]);
 
     await app.inject({
       method: "DELETE",

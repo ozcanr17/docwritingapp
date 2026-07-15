@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { Prisma, RowType } from "@docsys/database";
+import { DocumentType, Prisma, RowType } from "@docsys/database";
 import { randomUUID } from "crypto";
 import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
@@ -28,9 +28,9 @@ export interface UpdateRowInput {
   title?: string;
   description?: string | null;
   customFields?: Record<string, unknown>;
-  requirementDetail?: { status?: string; priority?: string | null; rationale?: string | null };
+  requirementDetail?: { requirementNo?: string | null; status?: string; priority?: string | null; rationale?: string | null };
   testCaseDetail?: { status?: string; priority?: string | null; assigneeId?: string | null; tags?: string[] };
-  testStepDetail?: { action?: string | null; expectedResult?: string | null };
+  testStepDetail?: { action?: string | null; expectedResult?: string | null; testResult?: string | null };
 }
 
 @Injectable()
@@ -48,6 +48,7 @@ export class RowsService {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
+    this.assertRowTypeAllowed(document.documentType, input.rowType);
     const row = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
       let ancestorPath = "";
@@ -57,8 +58,11 @@ export class RowsService {
           where: { id: input.parentId, documentId: document.id, deletedAt: null },
         });
         if (!parent) throw new NotFoundException("Parent row not found");
+        this.assertParentAllowed(input.rowType, parent.rowType);
         ancestorPath = `${parent.ancestorPath}${parent.id}/`;
         depth = parent.depth + 1;
+      } else if (input.rowType === "test_step") {
+        throw new UnprocessableEntityException("Test steps must be created under a test case");
       }
       const rank = await this.computeInsertRank(tx, document.id, input.parentId, input.afterRowId);
       const customFields = input.customFields
@@ -81,7 +85,17 @@ export class RowsService {
         },
       });
       if (input.rowType === "requirement") {
-        await tx.requirementDetail.create({ data: { rowId: created.id } });
+        const existingNumbers = new Set(
+          (await tx.requirementDetail.findMany({
+            where: { row: { documentId: document.id } },
+            select: { requirementNo: true },
+          })).map((detail) => detail.requirementNo),
+        );
+        let sequence = existingNumbers.size + 1;
+        while (existingNumbers.has(`REQ-${String(sequence).padStart(3, "0")}`)) sequence += 1;
+        await tx.requirementDetail.create({
+          data: { rowId: created.id, requirementNo: `REQ-${String(sequence).padStart(3, "0")}` },
+        });
       } else if (input.rowType === "test_case") {
         await tx.testCaseDetail.create({ data: { rowId: created.id } });
       } else if (input.rowType === "test_step") {
@@ -116,13 +130,15 @@ export class RowsService {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
-    return this.prisma.documentRow.findMany({
+    const rows = await this.prisma.documentRow.findMany({
       where: { documentId, parentId, deletedAt: null },
       orderBy: { rank: "asc" },
       take: limit,
       skip: offset,
       include: { requirementDetail: true, testCaseDetail: true, testStepDetail: true },
     });
+    const readable = await this.access.readableRowIds(actorId, rows.map((row) => row.id));
+    return rows.filter((row) => readable.has(row.id));
   }
 
   async outline(actorId: string, documentId: string) {
@@ -144,27 +160,79 @@ export class RowsService {
         description: true,
         customFields: true,
         version: true,
-        requirementDetail: { select: { status: true, priority: true } },
+        requirementDetail: { select: { requirementNo: true, status: true, priority: true } },
         testCaseDetail: { select: { status: true, priority: true, tags: true } },
-        testStepDetail: { select: { action: true, expectedResult: true } },
+        testStepDetail: { select: { action: true, expectedResult: true, testResult: true } },
+        outgoingLinks: {
+          where: { deletedAt: null },
+          select: {
+            targetRow: {
+              select: {
+                id: true,
+                rowType: true,
+                title: true,
+                description: true,
+                requirementDetail: { select: { requirementNo: true } },
+                document: { select: { title: true } },
+              },
+            },
+          },
+        },
+        incomingLinks: {
+          where: { deletedAt: null },
+          select: {
+            sourceRow: {
+              select: {
+                id: true,
+                rowType: true,
+                title: true,
+                description: true,
+                requirementDetail: { select: { requirementNo: true } },
+                document: { select: { title: true } },
+              },
+            },
+          },
+        },
       },
     });
-    const flattened = rows.map((row) => ({
-      id: row.id,
-      parentId: row.parentId,
-      rank: row.rank,
-      depth: row.depth,
-      rowType: row.rowType,
-      title: row.title,
-      description: row.description,
-      customFields: row.customFields as Record<string, unknown>,
-      version: row.version,
-      status: row.requirementDetail?.status ?? row.testCaseDetail?.status ?? null,
-      priority: row.requirementDetail?.priority ?? row.testCaseDetail?.priority ?? null,
-      tags: row.testCaseDetail?.tags ?? [],
-      action: row.testStepDetail?.action ?? null,
-      expectedResult: row.testStepDetail?.expectedResult ?? null,
-    }));
+    const readable = await this.access.readableRowIds(actorId, rows.map((row) => row.id));
+    const flattened = rows.filter((row) => readable.has(row.id)).map((row) => {
+      const linked = [...row.outgoingLinks.map((link) => link.targetRow), ...row.incomingLinks.map((link) => link.sourceRow)]
+        .filter((linkedRow) => linkedRow.rowType === "requirement")
+        .filter((linkedRow, index, all) => all.findIndex((candidate) => candidate.id === linkedRow.id) === index)
+        .sort((a, b) =>
+          (a.requirementDetail?.requirementNo ?? a.title).localeCompare(
+            b.requirementDetail?.requirementNo ?? b.title,
+          ),
+        )
+        .map((linkedRow) => ({
+          id: linkedRow.id,
+          requirementNo: linkedRow.requirementDetail?.requirementNo ?? null,
+          title: linkedRow.title,
+          description: linkedRow.description,
+          documentTitle: linkedRow.document.title,
+        }));
+      return {
+        id: row.id,
+        parentId: row.parentId,
+        rank: row.rank,
+        depth: row.depth,
+        rowType: row.rowType,
+        title: row.title,
+        description: row.description,
+        customFields: row.customFields as Record<string, unknown>,
+        version: row.version,
+        requirementNo: row.requirementDetail?.requirementNo ?? null,
+        status: row.requirementDetail?.status ?? row.testCaseDetail?.status ?? null,
+        priority: row.requirementDetail?.priority ?? row.testCaseDetail?.priority ?? null,
+        tags: row.testCaseDetail?.tags ?? [],
+        action: row.testStepDetail?.action ?? null,
+        expectedResult: row.testStepDetail?.expectedResult ?? null,
+        testResult: row.testStepDetail?.testResult ?? null,
+        linkedRequirements: linked,
+        linkCount: row.outgoingLinks.length + row.incomingLinks.length,
+      };
+    });
     return this.numberRows(flattened);
   }
 
@@ -175,15 +243,78 @@ export class RowsService {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
+    await this.access.assertRowAccess(actorId, rowId, "read");
     return this.prisma.documentRow.findUniqueOrThrow({
       where: { id: rowId },
       include: {
         requirementDetail: true,
         testCaseDetail: true,
         testStepDetail: true,
-        outgoingLinks: { where: { deletedAt: null } },
-        incomingLinks: { where: { deletedAt: null } },
+        outgoingLinks: {
+          where: { deletedAt: null },
+          include: {
+            targetRow: {
+              select: {
+                id: true,
+                title: true,
+                rowType: true,
+                requirementDetail: { select: { requirementNo: true } },
+                document: { select: { id: true, title: true, documentType: true } },
+              },
+            },
+          },
+        },
+        incomingLinks: {
+          where: { deletedAt: null },
+          include: {
+            sourceRow: {
+              select: {
+                id: true,
+                title: true,
+                rowType: true,
+                requirementDetail: { select: { requirementNo: true } },
+                document: { select: { id: true, title: true, documentType: true } },
+              },
+            },
+          },
+        },
         rowProjects: { where: { deletedAt: null } },
+      },
+    });
+  }
+
+  async linkCandidates(actorId: string, documentId: string, query: string) {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "row.read", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+    });
+    const normalized = query.trim();
+    return this.prisma.documentRow.findMany({
+      where: {
+        organizationId: document.organizationId,
+        deletedAt: null,
+        document: { workspaceId: document.workspaceId, deletedAt: null },
+        rowType: { in: ["requirement", "test_case", "test_step"] },
+        ...(normalized
+          ? {
+              OR: [
+                { title: { contains: normalized, mode: "insensitive" } },
+                { description: { contains: normalized, mode: "insensitive" } },
+                { document: { title: { contains: normalized, mode: "insensitive" } } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ document: { title: "asc" } }, { depth: "asc" }, { rank: "asc" }],
+      take: 50,
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        rowType: true,
+        requirementDetail: { select: { requirementNo: true } },
+        document: { select: { id: true, title: true, documentType: true } },
       },
     });
   }
@@ -195,7 +326,23 @@ export class RowsService {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
+    await this.access.assertRowAccess(actorId, rowId, "write");
     const updated = await this.prisma.$transaction(async (tx) => {
+      if (input.requirementDetail?.requirementNo !== undefined && row.rowType === "requirement") {
+        const requirementNo = input.requirementDetail.requirementNo?.trim() || null;
+        input.requirementDetail.requirementNo = requirementNo;
+        if (requirementNo) {
+          const duplicate = await tx.requirementDetail.findFirst({
+            where: {
+              requirementNo: { equals: requirementNo, mode: "insensitive" },
+              rowId: { not: rowId },
+              row: { documentId: document.id, deletedAt: null },
+            },
+            select: { rowId: true },
+          });
+          if (duplicate) throw new UnprocessableEntityException("Requirement number must be unique in the document");
+        }
+      }
       const customFields =
         input.customFields !== undefined
           ? validateCustomFields(await this.fieldDefinitions(tx, document.id), {
@@ -274,6 +421,7 @@ export class RowsService {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
+    await this.access.assertRowAccess(actorId, rowId, "write");
     const moved = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
       const current = await tx.documentRow.findFirst({ where: { id: rowId, deletedAt: null } });
@@ -287,11 +435,14 @@ export class RowsService {
           where: { id: newParentId, documentId: document.id, deletedAt: null },
         });
         if (!parent) throw new NotFoundException("Target parent not found");
+        this.assertParentAllowed(current.rowType, parent.rowType);
         if (parent.id === current.id || `${parent.ancestorPath}${parent.id}/`.startsWith(oldPrefix)) {
           throw new UnprocessableEntityException("Move would create a cycle");
         }
         newAncestorPath = `${parent.ancestorPath}${parent.id}/`;
         newDepth = parent.depth + 1;
+      } else if (current.rowType === "test_step") {
+        throw new UnprocessableEntityException("Test steps must stay under a test case");
       }
       const rank = await this.computeInsertRank(tx, document.id, newParentId, afterRowId, current.id);
       await tx.documentRow.update({
@@ -344,6 +495,7 @@ export class RowsService {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
+    await this.access.assertRowAccess(actorId, rowId, "write");
     const correlationId = randomUUID();
     await this.prisma.$transaction(async (tx) => {
       const deletedAt = new Date();
@@ -432,6 +584,120 @@ export class RowsService {
     return { ok: true };
   }
 
+  async copyRows(actorId: string, documentId: string, rowIds: string[], newParentId: string | null) {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "row.write", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+    });
+    const selected = await this.prisma.documentRow.findMany({
+      where: { id: { in: rowIds }, documentId, deletedAt: null },
+    });
+    if (selected.length !== new Set(rowIds).size) throw new NotFoundException("One or more rows were not found");
+    const selectedSet = new Set(rowIds);
+    const roots = selected.filter((row) => {
+      const ancestors = row.ancestorPath.split("/").filter(Boolean);
+      return !ancestors.some((ancestorId) => selectedSet.has(ancestorId));
+    });
+    if (newParentId) {
+      const parent = await this.prisma.documentRow.findFirst({ where: { id: newParentId, documentId, deletedAt: null } });
+      if (!parent) throw new NotFoundException("Target parent not found");
+      for (const root of roots) this.assertParentAllowed(root.rowType, parent.rowType);
+    } else if (roots.some((row) => row.rowType === "test_step")) {
+      throw new UnprocessableEntityException("Test steps must stay under a test case");
+    }
+    const sourceRows = await this.prisma.documentRow.findMany({
+      where: {
+        documentId,
+        deletedAt: null,
+        OR: roots.flatMap((root) => [
+          { id: root.id },
+          { ancestorPath: { startsWith: `${root.ancestorPath}${root.id}/` } },
+        ]),
+      },
+      orderBy: [{ depth: "asc" }, { rank: "asc" }],
+      include: { requirementDetail: true, testCaseDetail: true, testStepDetail: true },
+    });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
+      const idMap = new Map<string, { id: string; ancestorPath: string; depth: number }>();
+      let requirementSequence = await tx.requirementDetail.count({ where: { row: { documentId } } });
+      let afterRowId: string | undefined;
+      for (const source of sourceRows) {
+        const isRoot = roots.some((root) => root.id === source.id);
+        const mappedParent = source.parentId ? idMap.get(source.parentId) : undefined;
+        const parentId = isRoot ? newParentId : mappedParent?.id ?? null;
+        const parent = parentId
+          ? mappedParent ?? (await tx.documentRow.findUnique({ where: { id: parentId }, select: { id: true, ancestorPath: true, depth: true } })) ?? undefined
+          : undefined;
+        const rank = isRoot
+          ? await this.computeInsertRank(tx, documentId, newParentId, afterRowId)
+          : source.rank;
+        const created = await tx.documentRow.create({
+          data: {
+            organizationId: document.organizationId,
+            documentId,
+            parentId,
+            rank,
+            ancestorPath: parent ? `${parent.ancestorPath}${parent.id}/` : "",
+            depth: parent ? parent.depth + 1 : 0,
+            rowType: source.rowType,
+            title: source.title,
+            description: source.description,
+            customFields: source.customFields as Prisma.InputJsonValue,
+            createdById: actorId,
+            updatedById: actorId,
+          },
+        });
+        idMap.set(source.id, { id: created.id, ancestorPath: created.ancestorPath, depth: created.depth });
+        if (isRoot) afterRowId = created.id;
+        if (source.rowType === "requirement") {
+          requirementSequence += 1;
+          await tx.requirementDetail.create({
+            data: {
+              rowId: created.id,
+              requirementNo: `REQ-${String(requirementSequence).padStart(3, "0")}`,
+              status: source.requirementDetail?.status,
+              priority: source.requirementDetail?.priority,
+              rationale: source.requirementDetail?.rationale,
+              verificationMethod: source.requirementDetail?.verificationMethod,
+            },
+          });
+        } else if (source.rowType === "test_case") {
+          await tx.testCaseDetail.create({
+            data: {
+              rowId: created.id,
+              status: source.testCaseDetail?.status,
+              priority: source.testCaseDetail?.priority,
+              assigneeId: source.testCaseDetail?.assigneeId,
+              tags: source.testCaseDetail?.tags,
+            },
+          });
+        } else if (source.rowType === "test_step") {
+          await tx.testStepDetail.create({
+            data: {
+              rowId: created.id,
+              action: source.testStepDetail?.action,
+              expectedResult: source.testStepDetail?.expectedResult,
+              testResult: source.testStepDetail?.testResult,
+            },
+          });
+        }
+      }
+      await this.audit.record(tx, {
+        organizationId: document.organizationId,
+        workspaceId: document.workspaceId,
+        actorId,
+        action: "rows.copied",
+        entityType: "document",
+        entityId: document.id,
+        documentId,
+        metadata: { sourceRowIds: roots.map((row) => row.id), copiedRows: idMap.size, newParentId },
+      });
+      return { copiedRows: idMap.size, rootIds: roots.map((root) => idMap.get(root.id)?.id).filter(Boolean) };
+    });
+  }
+
   async createLink(actorId: string, sourceRowId: string, targetRowId: string, linkType: "verifies" | "relates_to" | "derives_from" | "duplicates") {
     const source = await this.requireRow(sourceRowId);
     const target = await this.requireRow(targetRowId);
@@ -448,6 +714,8 @@ export class RowsService {
       organizationId: targetDoc.organizationId,
       workspaceId: targetDoc.workspaceId,
     });
+    await this.access.assertRowAccess(actorId, sourceRowId, "write");
+    await this.access.assertRowAccess(actorId, targetRowId, "read");
     return this.prisma.$transaction(async (tx) => {
       const link = await tx.requirementLink.upsert({
         where: { sourceRowId_targetRowId_linkType: { sourceRowId, targetRowId, linkType } },
@@ -713,6 +981,31 @@ export class RowsService {
 
   private async fieldDefinitions(tx: Prisma.TransactionClient, documentId: string) {
     return tx.customFieldDefinition.findMany({ where: { documentId, deletedAt: null } });
+  }
+
+  private assertRowTypeAllowed(documentType: DocumentType, rowType: RowType) {
+    const allowed: Record<DocumentType, RowType[]> = {
+      requirement: ["heading", "requirement", "note"],
+      test: ["heading", "test_case", "test_step", "note"],
+      general_document: [],
+    };
+    if (!allowed[documentType].includes(rowType)) {
+      throw new UnprocessableEntityException("Row type is not allowed in this document type");
+    }
+  }
+
+  private assertParentAllowed(rowType: RowType, parentType: RowType) {
+    const valid =
+      rowType === "test_step"
+        ? parentType === "test_case"
+        : rowType === "heading"
+          ? parentType === "heading"
+          : rowType === "requirement"
+            ? parentType === "heading" || parentType === "requirement"
+            : rowType === "test_case"
+              ? parentType === "heading"
+            : true;
+    if (!valid) throw new UnprocessableEntityException("Row type is not allowed under this parent");
   }
 
   private numberRows<T extends { id: string; parentId: string | null; rank: string }>(rows: T[]) {

@@ -33,6 +33,7 @@ const updateRowSchema = z.object({
   customFields: z.record(z.unknown()).optional(),
   requirementDetail: z
     .object({
+      requirementNo: z.string().max(120).nullable().optional(),
       status: z.string().max(60).optional(),
       priority: z.string().max(60).nullable().optional(),
       rationale: z.string().max(10000).nullable().optional(),
@@ -50,6 +51,7 @@ const updateRowSchema = z.object({
     .object({
       action: z.string().max(100000).nullable().optional(),
       expectedResult: z.string().max(100000).nullable().optional(),
+      testResult: z.string().max(100000).nullable().optional(),
     })
     .optional(),
 });
@@ -61,6 +63,10 @@ const moveRowSchema = z.object({
 });
 
 const deleteRowSchema = z.object({ reason: z.string().max(1000).optional() });
+const copyRowsSchema = z.object({
+  rowIds: z.array(z.string().uuid()).min(1).max(200),
+  newParentId: z.string().uuid().nullable().default(null),
+});
 
 const createLinkSchema = z.object({
   targetRowId: z.string().uuid(),
@@ -139,6 +145,15 @@ export class RowsController {
     return this.rows.outline(user.userId, documentId);
   }
 
+  @Get("documents/:documentId/link-candidates")
+  linkCandidates(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Query("q") query?: string,
+  ) {
+    return this.rows.linkCandidates(user.userId, documentId, query ?? "");
+  }
+
   @Get("rows/:rowId")
   getRow(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
     return this.rows.getRow(user.userId, rowId);
@@ -177,6 +192,15 @@ export class RowsController {
   @Post("rows/:rowId/restore")
   restoreRow(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
     return this.rows.restoreRow(user.userId, rowId);
+  }
+
+  @Post("documents/:documentId/rows/copy")
+  copyRows(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(copyRowsSchema)) body: z.infer<typeof copyRowsSchema>,
+  ) {
+    return this.rows.copyRows(user.userId, documentId, body.rowIds, body.newParentId);
   }
 
   @Post("rows/:rowId/links")
