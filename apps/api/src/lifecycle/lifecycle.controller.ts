@@ -220,6 +220,11 @@ export class LifecycleController {
     return this.lifecycle.listExecutions(user.userId, rowId);
   }
 
+  @Get("documents/:documentId/executions")
+  documentExecutions(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.lifecycle.listDocumentExecutions(user.userId, documentId);
+  }
+
   @Post("rows/:rowId/executions")
   createExecution(
     @CurrentUser() user: SessionUser,
@@ -242,6 +247,20 @@ export class LifecycleController {
   @Post("executions/:executionId/complete")
   completeExecution(@CurrentUser() user: SessionUser, @Param("executionId", ParseUUIDPipe) executionId: string) {
     return this.lifecycle.completeExecution(user.userId, executionId);
+  }
+
+  @Post("executions/:executionId/stop")
+  stopExecution(@CurrentUser() user: SessionUser, @Param("executionId", ParseUUIDPipe) executionId: string) {
+    return this.lifecycle.stopExecution(user.userId, executionId);
+  }
+
+  @Patch("test-steps/:rowId/status")
+  updateTestStepStatus(
+    @CurrentUser() user: SessionUser,
+    @Param("rowId", ParseUUIDPipe) rowId: string,
+    @Body(new ZodBodyPipe(stepExecutionSchema.pick({ status: true }))) body: z.infer<typeof stepExecutionSchema>,
+  ) {
+    return this.lifecycle.updateTestStepStatus(user.userId, rowId, body.status);
   }
 
   @Get("documents/:documentId/reviews")

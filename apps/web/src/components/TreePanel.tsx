@@ -21,6 +21,19 @@ interface MenuState {
   y: number;
   folderId: string | null;
   documentId?: string;
+  version?: number;
+}
+
+interface MoveState {
+  kind: "folder" | "document";
+  id: string;
+  version: number;
+  currentFolderId: string | null;
+}
+
+interface DeleteState {
+  kind: "folder" | "document";
+  id: string;
 }
 
 type CreateKind = "folder" | "requirementDocument" | "testDocument" | "textDocument";
@@ -35,6 +48,13 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [createState, setCreateState] = useState<CreateState | null>(null);
   const [createName, setCreateName] = useState("");
+  const [moveState, setMoveState] = useState<MoveState | null>(null);
+  const [moveTarget, setMoveTarget] = useState<string>("");
+  const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
+  const { data: folders = [] } = useQuery({
+    queryKey: ["folders", workspaceId],
+    queryFn: () => api<Array<FolderSummary & { ancestorPath: string; depth: number }>>(`/workspaces/${workspaceId}/folders`),
+  });
 
   const menuItems = (state: MenuState): MenuItem[] => {
     const items: MenuItem[] = [
@@ -53,10 +73,27 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
     ];
     if (state.documentId) {
       items.push({
+        key: "move",
+        label: t("moveAction"),
+        onSelect: () => startMove("document", state.documentId as string, state.version as number, state.folderId),
+      });
+      items.push({
         key: "delete",
         label: t("deleteAction"),
         danger: true,
-        onSelect: () => void deleteDocument(state.documentId as string),
+        onSelect: () => setDeleteState({ kind: "document", id: state.documentId as string }),
+      });
+    } else if (state.folderId) {
+      items.push({
+        key: "move",
+        label: t("moveAction"),
+        onSelect: () => startMove("folder", state.folderId as string, state.version as number, state.folderId),
+      });
+      items.push({
+        key: "delete",
+        label: t("deleteAction"),
+        danger: true,
+        onSelect: () => setDeleteState({ kind: "folder", id: state.folderId as string }),
       });
     }
     return items;
@@ -69,6 +106,11 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   const startCreate = (folderId: string | null, kind: CreateKind) => {
     setCreateName("");
     setCreateState({ folderId, kind });
+  };
+
+  const startMove = (kind: MoveState["kind"], id: string, version: number, currentFolderId: string | null) => {
+    setMoveTarget(kind === "folder" ? "" : currentFolderId ?? "");
+    setMoveState({ kind, id, version, currentFolderId });
   };
 
   const createNode = async (event: FormEvent) => {
@@ -102,6 +144,42 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
     await queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] });
   };
 
+  const confirmDelete = async () => {
+    if (!deleteState) return;
+    if (deleteState.kind === "folder") {
+      await api(`/folders/${deleteState.id}`, { method: "DELETE", body: JSON.stringify({}) });
+    } else {
+      await deleteDocument(deleteState.id);
+    }
+    setDeleteState(null);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] }),
+      queryClient.invalidateQueries({ queryKey: ["folders", workspaceId] }),
+    ]);
+  };
+
+  const moveNode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!moveState) return;
+    const target = moveTarget || null;
+    if (moveState.kind === "folder") {
+      await api(`/folders/${moveState.id}/move`, {
+        method: "POST",
+        body: JSON.stringify({ newParentId: target, expectedVersion: moveState.version }),
+      });
+    } else {
+      await api(`/documents/${moveState.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ folderId: target, expectedVersion: moveState.version }),
+      });
+    }
+    setMoveState(null);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] }),
+      queryClient.invalidateQueries({ queryKey: ["folders", workspaceId] }),
+    ]);
+  };
+
   return (
     <div
       className="h-full overflow-auto py-2 text-sm"
@@ -120,7 +198,7 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
       />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu)} onClose={() => setMenu(null)} />}
       {createState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
           <form className="w-full max-w-md rounded border border-border bg-surfaceElevated p-4 shadow-lg" onSubmit={createNode}>
             <h2 className="mb-3 text-sm font-semibold">
               {createState.kind === "folder"
@@ -160,6 +238,38 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
               </button>
             </div>
           </form>
+        </div>
+      )}
+      {moveState && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
+          <form className="w-full max-w-md rounded-xl border border-border bg-surfaceElevated p-4 shadow-xl" onSubmit={moveNode}>
+            <h2 className="mb-3 text-sm font-semibold">{t("moveToFolder")}</h2>
+            <label className="block text-xs text-mutedForeground">
+              {t("folder")}
+              <select autoFocus className="mt-1 w-full rounded border border-border bg-editorBackground px-2 py-2 text-sm text-foreground" value={moveTarget} onChange={(event) => setMoveTarget(event.target.value)}>
+                <option value="">{t("rootFolder")}</option>
+                {folders.filter((folder) => moveState.kind !== "folder" || (folder.id !== moveState.id && !folder.ancestorPath.includes(`${moveState.id}/`))).map((folder) => (
+                  <option key={folder.id} value={folder.id}>{`${"  ".repeat(folder.depth)}${folder.name}`}</option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className="rounded px-3 py-1.5 text-sm hover:bg-muted" onClick={() => setMoveState(null)}>{t("cancel")}</button>
+              <button type="submit" className="rounded bg-primary px-3 py-1.5 text-sm text-primaryForeground">{t("moveAction")}</button>
+            </div>
+          </form>
+        </div>
+      )}
+      {deleteState && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" role="alertdialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surfaceElevated p-4 shadow-xl">
+            <h2 className="text-sm font-semibold">{deleteState.kind === "folder" ? t("deleteFolderTitle") : t("deleteDocumentTitle")}</h2>
+            <p className="mt-2 text-sm text-mutedForeground">{deleteState.kind === "folder" ? t("deleteFolderMessage") : t("deleteDocumentMessage")}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className="rounded px-3 py-1.5 text-sm hover:bg-muted" onClick={() => setDeleteState(null)}>{t("cancel")}</button>
+              <button type="button" className="rounded bg-danger px-3 py-1.5 text-sm text-white" onClick={() => void confirmDelete()}>{t("deleteAction")}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -209,7 +319,7 @@ function TreeBranch(props: {
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onContextMenu({ x: event.clientX, y: event.clientY, folderId: folder.id });
+              onContextMenu({ x: event.clientX, y: event.clientY, folderId: folder.id, version: folder.version });
             }}
           >
             {expanded.has(folder.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -244,6 +354,7 @@ function TreeBranch(props: {
                 y: event.clientY,
                 folderId: document.folderId,
                 documentId: document.id,
+                version: document.version,
               });
             }}
           >

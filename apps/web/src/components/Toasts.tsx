@@ -10,7 +10,7 @@ export function Toasts() {
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
   return (
-    <div aria-live="polite" className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+    <div aria-live="polite" className="fixed bottom-4 right-4 z-[250] flex flex-col gap-2">
       {toasts.map((toast) => (
         <button
           key={toast.id}

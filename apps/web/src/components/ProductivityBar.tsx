@@ -1,5 +1,5 @@
 import { CornerDownRight, LayoutDashboard, Pin, Plus, Save, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DashboardSummary, OutlineRow, SavedView } from "../lib/api";
 import { GridColumn } from "../lib/columns";
@@ -22,6 +22,8 @@ interface ProductivityBarProps {
   onDeleteView: (id: string) => void;
   onAddObject: () => void;
   onAddObjectBelow: () => void;
+  onAddBlankObject: () => void;
+  onAddBlankObjectBelow: () => void;
   canAddObjectBelow: boolean;
 }
 
@@ -32,6 +34,28 @@ export function ProductivityBar(props: ProductivityBarProps) {
   const [viewName, setViewName] = useState("");
   const [scope, setScope] = useState<"personal" | "team">("personal");
   const [activeViewId, setActiveViewId] = useState("");
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!saveOpen && !dashboardOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!barRef.current?.contains(event.target as Node)) {
+        setSaveOpen(false);
+        setDashboardOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSaveOpen(false);
+        setDashboardOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [dashboardOpen, saveOpen]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!viewName.trim()) return;
@@ -40,7 +64,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
     setSaveOpen(false);
   };
   return (
-    <div className="relative flex flex-wrap items-center gap-2 border-b border-border bg-surface/90 px-3 py-2 text-xs backdrop-blur-xl">
+    <div ref={barRef} className="relative z-20 flex flex-wrap items-center gap-2 border-b border-border bg-surface/90 px-3 py-2 text-xs backdrop-blur-xl">
       <div className="flex items-center rounded-lg border border-border bg-editorBackground p-0.5">
         <button
           data-testid="add-object"
@@ -52,6 +76,14 @@ export function ProductivityBar(props: ProductivityBarProps) {
           {t("addObject")}
         </button>
         <button
+          data-testid="add-blank-object"
+          className="border-l border-border px-2 py-1.5 text-mutedForeground hover:bg-muted hover:text-foreground"
+          title={t("addBlankObjectHelp")}
+          onClick={props.onAddBlankObject}
+        >
+          {t("blankObject")}
+        </button>
+        <button
           data-testid="add-object-below"
           className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
           title={`${t("addObjectBelow")} · Shift+Insert`}
@@ -60,6 +92,15 @@ export function ProductivityBar(props: ProductivityBarProps) {
         >
           <CornerDownRight size={14} />
           {t("addObjectBelow")}
+        </button>
+        <button
+          data-testid="add-blank-object-below"
+          className="border-l border-border px-2 py-1.5 text-mutedForeground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          title={t("addBlankObjectBelowHelp")}
+          disabled={!props.canAddObjectBelow}
+          onClick={props.onAddBlankObjectBelow}
+        >
+          {t("blankObject")}
         </button>
       </div>
       <label className="flex min-w-52 flex-1 items-center gap-2 rounded-lg border border-border bg-editorBackground px-2.5 py-1.5">
@@ -87,7 +128,6 @@ export function ProductivityBar(props: ProductivityBarProps) {
         <option value="">{t("allObjectTypes")}</option>
         <option value="heading">{t("typeHeading")}</option>
         <option value="requirement">{t("typeRequirement")}</option>
-        <option value="test_case">{t("typeTestCase")}</option>
         <option value="test_step">{t("typeTestStep")}</option>
         <option value="note">{t("typeNote")}</option>
       </select>
@@ -137,14 +177,14 @@ export function ProductivityBar(props: ProductivityBarProps) {
         {props.views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
       </select>
       {activeViewId && <button className="rounded-lg border border-border p-1.5 text-destructive hover:bg-muted" title={t("deleteView")} onClick={() => { props.onDeleteView(activeViewId); setActiveViewId(""); }}><Trash2 size={14} /></button>}
-      <button className="rounded-lg border border-border p-1.5 hover:bg-muted" title={t("saveView")} onClick={() => setSaveOpen(true)}>
+      <button className="rounded-lg border border-border p-1.5 hover:bg-muted" title={t("saveView")} onClick={() => { setSaveOpen((current) => !current); setDashboardOpen(false); }}>
         <Save size={14} />
       </button>
       <button
         data-testid="dashboard-toggle"
         className="rounded-lg border border-border p-1.5 hover:bg-muted"
         title={t("dashboard")}
-        onClick={() => setDashboardOpen((current) => !current)}
+        onClick={() => { setDashboardOpen((current) => !current); setSaveOpen(false); }}
       >
         <LayoutDashboard size={14} />
       </button>
@@ -170,7 +210,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
         </form>
       )}
       {dashboardOpen && props.dashboard && (
-        <div data-testid="dashboard-widgets" className="absolute right-3 top-full z-30 mt-1 grid w-[34rem] grid-cols-3 gap-2 rounded-xl border border-border bg-surfaceElevated p-3 shadow-2xl">
+        <div data-testid="dashboard-widgets" className="absolute right-3 top-full z-40 mt-1 grid w-[34rem] grid-cols-3 gap-2 rounded-xl border border-border bg-surfaceElevated p-3 shadow-2xl">
           <Widget label={t("qualityScore")} value={`${props.dashboard.qualityScore}%`} />
           <Widget label={t("coverageReport")} value={`${props.dashboard.coveredRequirements}/${props.dashboard.requirements}`} />
           <Widget label={t("suspectLinks")} value={props.dashboard.suspectLinks} />

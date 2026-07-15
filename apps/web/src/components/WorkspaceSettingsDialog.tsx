@@ -36,7 +36,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, onClose }
     onError: () => toast("error", t("genericError")),
   });
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="w-[42rem] rounded-2xl border border-border bg-surfaceElevated p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{t("workspaceSettings")}</h2><button onClick={onClose}><X size={17} /></button></div>
         <div className="mb-4 flex gap-1 rounded-xl bg-muted p-1">

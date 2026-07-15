@@ -26,6 +26,13 @@ const createRowSchema = z.object({
   customFields: z.record(z.unknown()).optional(),
 });
 
+const createTestTemplateSchema = z.object({
+  name: z.string().min(1).max(1000),
+  parentId: z.string().uuid().nullable().default(null),
+  sectionTitles: z.array(z.string().min(1).max(200)).length(4),
+  defaultContent: z.string().min(1).max(1000),
+});
+
 const updateRowSchema = z.object({
   expectedVersion: z.number().int().positive(),
   numberingStart: z.number().int().positive().nullable().optional(),
@@ -50,6 +57,7 @@ const updateRowSchema = z.object({
     .optional(),
   testStepDetail: z
     .object({
+      stepNumber: z.number().int().positive().nullable().optional(),
       action: z.string().max(100000).nullable().optional(),
       expectedResult: z.string().max(100000).nullable().optional(),
       testResult: z.string().max(100000).nullable().optional(),
@@ -129,6 +137,15 @@ export class RowsController {
         customFields: body.customFields,
       }),
     );
+  }
+
+  @Post("documents/:documentId/test-templates")
+  createTestTemplate(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(createTestTemplateSchema)) body: z.infer<typeof createTestTemplateSchema>,
+  ) {
+    return this.rows.createTestTemplate(user.userId, documentId, body.name, body.parentId, body.sectionTitles, body.defaultContent);
   }
 
   @Get("documents/:documentId/rows")

@@ -26,4 +26,21 @@ describe("ContextMenu", () => {
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("opens upward when the menu would exceed the viewport", () => {
+    const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON: () => ({}),
+    });
+    render(<ContextMenu x={20} y={700} onClose={vi.fn()} items={[{ key: "one", label: "One", onSelect: vi.fn() }]} />);
+    expect(screen.getByTestId("context-menu")).toHaveStyle({ top: "500px" });
+    bounds.mockRestore();
+  });
 });

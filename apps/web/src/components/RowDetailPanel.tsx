@@ -68,7 +68,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   const { data: executions = [] } = useQuery({
     queryKey: ["executions", rowId],
     queryFn: () => api<TestExecution[]>(`/rows/${rowId}/executions`),
-    enabled: row?.rowType === "test_case",
+    enabled: row?.document.documentType === "test" && (row.rowType === "test_case" || row.rowType === "heading"),
   });
   const { data: proposals = [] } = useQuery({
     queryKey: ["proposals", rowId],
@@ -153,6 +153,11 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   });
   const completeExecution = useMutation({
     mutationFn: (executionId: string) => api(`/executions/${executionId}/complete`, { method: "POST" }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["executions", rowId] }),
+    onError: () => pushToast("error", t("genericError")),
+  });
+  const stopExecution = useMutation({
+    mutationFn: (executionId: string) => api(`/executions/${executionId}/stop`, { method: "POST" }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["executions", rowId] }),
     onError: () => pushToast("error", t("genericError")),
   });
@@ -374,7 +379,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
           </form>
         </div>
 
-        {row.rowType === "test_case" && (
+        {row.document.documentType === "test" && (row.rowType === "test_case" || row.rowType === "heading") && (
           <div>
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs uppercase text-mutedForeground"><Play size={13} />{t("testExecutions")}</div>
@@ -414,7 +419,10 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
                         </select>
                       </label>
                     ))}
-                    <button className="mt-1 w-full rounded bg-primary px-2 py-1 text-xs text-primaryForeground" onClick={() => completeExecution.mutate(execution.id)}>{t("completeExecution")}</button>
+                    <div className="mt-1 grid grid-cols-2 gap-2">
+                      <button className="rounded bg-primary px-2 py-1 text-xs text-primaryForeground" onClick={() => completeExecution.mutate(execution.id)}>{t("completeExecution")}</button>
+                      <button className="rounded bg-destructive/10 px-2 py-1 text-xs text-destructive" onClick={() => stopExecution.mutate(execution.id)}>{t("stopRun")}</button>
+                    </div>
                   </div>
                 )}
               </div>

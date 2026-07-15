@@ -5,7 +5,7 @@ import { SessionUser } from "../auth/auth.types";
 import { ZodBodyPipe } from "../common/zod-body.pipe";
 import { BaselinesService } from "./baselines.service";
 
-const createBaselineSchema = z.object({ label: z.string().min(1).max(200) });
+const createBaselineSchema = z.object({ label: z.string().max(200).optional() });
 
 @Controller()
 export class BaselinesController {

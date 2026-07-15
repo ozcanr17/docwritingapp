@@ -27,7 +27,7 @@ export function GlobalSearchDialog({ workspaceId, onClose, onSelect }: { workspa
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-[70] flex justify-center bg-black/40 pt-[12vh]" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] flex justify-center bg-black/40 pt-[12vh]" onClick={onClose}>
       <div className="h-fit max-h-[70vh] w-[42rem] overflow-hidden rounded-2xl border border-border bg-surfaceElevated shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <Search size={18} className="text-mutedForeground" />

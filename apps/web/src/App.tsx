@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ChunkErrorBoundary } from "./components/ChunkErrorBoundary";
@@ -29,8 +29,41 @@ export function App() {
       </BrowserRouter>
       <Toasts />
       <DesktopUpdate />
+      <AutomaticTooltips />
     </QueryClientProvider>
   );
+}
+
+function AutomaticTooltips() {
+  useEffect(() => {
+    const labelFor = (element: HTMLElement) => {
+      const accessible = element.getAttribute("aria-label")?.trim();
+      if (accessible) return accessible;
+      if (element instanceof HTMLSelectElement) return element.selectedOptions[0]?.textContent?.trim() ?? "";
+      return element.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    };
+    const enhance = (root: ParentNode) => {
+      root.querySelectorAll<HTMLElement>("button:not([title]), [role='menuitem']:not([title]), select:not([title])").forEach((element) => {
+        const label = labelFor(element);
+        if (label) element.title = label;
+      });
+    };
+    enhance(document);
+    const observer = new MutationObserver((records) => {
+      records.forEach((record) => record.addedNodes.forEach((node) => {
+        if (node instanceof HTMLElement) {
+          if (node.matches("button:not([title]), [role='menuitem']:not([title]), select:not([title])")) {
+            const label = labelFor(node);
+            if (label) node.title = label;
+          }
+          enhance(node);
+        }
+      }));
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+  return null;
 }
 
 function SkipLink() {

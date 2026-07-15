@@ -145,6 +145,9 @@ export interface OutlineRow {
   }>;
   linkCount: number;
   version: number;
+  updatedAt: string;
+  updatedById: string | null;
+  changeState: "baseline" | "saved_self" | "saved_other";
   displayNumber: string;
   stepNumber: number | null;
 }
@@ -206,9 +209,10 @@ export interface RowDetail {
   description: string | null;
   version: number;
   customFields: Record<string, unknown>;
+  document: { id: string; title: string; documentType: DocumentType };
   requirementDetail: { requirementNo: string | null; status: string; priority: string | null; rationale: string | null } | null;
   testCaseDetail: { status: string; priority: string | null; assigneeId: string | null; tags: string[] } | null;
-  testStepDetail: { action: string | null; expectedResult: string | null; testResult: string | null } | null;
+  testStepDetail: { stepNumber: number | null; action: string | null; expectedResult: string | null; testResult: string | null } | null;
   outgoingLinks: RequirementLink[];
   incomingLinks: RequirementLink[];
   rowProjects: { id: string; projectId: string }[];

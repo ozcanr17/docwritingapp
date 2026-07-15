@@ -5,11 +5,11 @@ import { useTranslation } from "react-i18next";
 import { api, UserProfile } from "../lib/api";
 import { useToastStore } from "../stores/toasts";
 
-export function ProfileDialog({ userId, currentUserId, onClose }: { userId: string; currentUserId: string; onClose: () => void }) {
+export function ProfileDialog({ userId, currentUserId, allowEdit = true, onClose }: { userId: string; currentUserId: string; allowEdit?: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
-  const editable = userId === currentUserId;
+  const editable = allowEdit && userId === currentUserId;
   const [form, setForm] = useState<Omit<UserProfile, "id">>({ email: "", displayName: "", firstName: null, lastName: null, jobTitle: null, department: null, phone: null, bio: null });
   const profile = useQuery({ queryKey: ["user-profile", userId], queryFn: () => api<UserProfile>(`/auth/users/${userId}`) });
 
@@ -34,7 +34,7 @@ export function ProfileDialog({ userId, currentUserId, onClose }: { userId: stri
   const submit = (event: FormEvent) => { event.preventDefault(); if (editable && form.email && form.displayName) save.mutate(); };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <form role="dialog" aria-modal="true" aria-labelledby="profile-title" className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-2xl border border-border bg-surfaceElevated p-6 shadow-2xl" onSubmit={submit}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">

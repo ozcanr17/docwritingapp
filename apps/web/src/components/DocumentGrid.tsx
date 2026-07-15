@@ -1,16 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Link2, Settings2, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Link2, Settings2, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ApiError, DashboardSummary, DocumentType, FieldDefinition, OutlineRow, SavedView } from "../lib/api";
+import { api, ApiError, CustomFieldType, DashboardSummary, DocumentType, FieldDefinition, OutlineRow, SavedView } from "../lib/api";
 import { cellValue, columnsForDocument, GridColumn, isCellEditable, totalWidth } from "../lib/columns";
 import { useColumnStore } from "../stores/columns";
+import { useEditHistoryStore } from "../stores/editHistory";
 import { useSelectionStore } from "../stores/selection";
 import { useToastStore } from "../stores/toasts";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import { BulkActionInput, BulkActionsDialog } from "./BulkActionsDialog";
 import { ProductivityBar } from "./ProductivityBar";
+import { AddColumnDialog } from "./AddColumnDialog";
 
 interface GridProps {
   documentId: string;
@@ -23,10 +25,17 @@ interface MenuState {
   row: OutlineRow | null;
 }
 
+interface ColumnMenuState {
+  x: number;
+  y: number;
+  column: GridColumn;
+}
+
 interface EditState {
   rowId: string;
   columnKey: string;
   value: string;
+  numberingStart?: string;
 }
 
 const rowTypeLabelKeys: Record<OutlineRow["rowType"], string> = {
@@ -37,11 +46,13 @@ const rowTypeLabelKeys: Record<OutlineRow["rowType"], string> = {
   note: "typeNote",
 };
 
-function buildPatchPayload(column: GridColumn, row: OutlineRow, value: string): Record<string, unknown> {
+function buildPatchPayload(column: GridColumn, row: OutlineRow, value: string, numberingStart?: string | null): Record<string, unknown> {
   const base = { expectedVersion: row.version };
   switch (column.kind) {
     case "title":
-      return { ...base, title: value };
+      return { ...base, title: value, ...(numberingStart !== undefined ? { numberingStart: numberingStart === null ? null : Number(numberingStart) } : {}) };
+    case "stepNumber":
+      return { ...base, testStepDetail: { stepNumber: value.trim() ? Number(value) : null } };
     case "description":
       return { ...base, description: value };
     case "requirementNo":
@@ -73,6 +84,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
+  const pushHistory = useEditHistoryStore((s) => s.push);
   const setSelectedRow = useSelectionStore((s) => s.setRow);
   const selectOnly = useSelectionStore((s) => s.selectOnly);
   const toggleRow = useSelectionStore((s) => s.toggleRow);
@@ -82,17 +94,27 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   const openDetail = useSelectionStore((s) => s.openDetail);
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);
   const selectedRowIds = useSelectionStore((s) => s.selectedRowIds);
-  const isHidden = useColumnStore((s) => s.isHidden);
+  const hiddenByDocument = useColumnStore((s) => s.hidden);
+  const storedHidden = hiddenByDocument[documentId] ?? [];
   const widthOf = useColumnStore((s) => s.widthOf);
   const setWidth = useColumnStore((s) => s.setWidth);
+  const hideColumn = useColumnStore((s) => s.hide);
+  const showColumn = useColumnStore((s) => s.show);
+  const placeColumn = useColumnStore((s) => s.place);
   const storedWidths = useColumnStore((s) => s.widths[documentId]);
+  const orderByDocument = useColumnStore((s) => s.order);
+  const storedOrder = orderByDocument[documentId] ?? [];
   const scrollRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [columnMenu, setColumnMenu] = useState<ColumnMenuState | null>(null);
+  const [addColumnAt, setAddColumnAt] = useState<{ anchor: GridColumn; side: "left" | "right" } | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<OutlineRow | null>(null);
   const [numberingTarget, setNumberingTarget] = useState<OutlineRow | null>(null);
   const [numberingStart, setNumberingStart] = useState("");
+  const [templateParentId, setTemplateParentId] = useState<string | null | undefined>(undefined);
+  const [templateName, setTemplateName] = useState("");
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [rowTypeFilter, setRowTypeFilter] = useState<OutlineRow["rowType"] | "">("");
@@ -105,6 +127,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
     separator: " : ",
     sortBy: "requirementNo",
   });
+  const [collapsedRowIds, setCollapsedRowIds] = useState<string[]>([]);
 
   const outlineKey = ["outline", documentId];
   const { data: rows = [], isLoading } = useQuery({
@@ -126,15 +149,36 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
 
   const columns = useMemo(
     () =>
-      columnsForDocument(documentType, fields)
-        .filter((c) => !isHidden(documentId, c.key))
+      [...columnsForDocument(documentType, fields)]
+        .sort((a, b) => {
+          const ai = storedOrder.indexOf(a.key);
+          const bi = storedOrder.indexOf(b.key);
+          if (ai === -1 && bi === -1) return 0;
+          if (ai === -1) return 1;
+          if (bi === -1) return -1;
+          return ai - bi;
+        })
+        .filter((c) => !storedHidden.includes(c.key))
         .filter((c) => viewVisibleColumns === null || viewVisibleColumns.includes(c.key))
         .map((c) => ({ ...c, width: storedWidths?.[c.key] ?? c.width })),
-    [documentType, fields, isHidden, documentId, storedWidths, viewVisibleColumns],
+    [documentType, fields, storedHidden, storedWidths, storedOrder, viewVisibleColumns],
   );
+  const allColumnKeys = useMemo(() => columnsForDocument(documentType, fields).map((column) => column.key), [documentType, fields]);
+  const collapsedRows = useMemo(() => new Set(collapsedRowIds), [collapsedRowIds]);
   const displayedRows = useMemo(() => {
     const normalized = searchQuery.trim().toLocaleLowerCase();
-    const byType = rowTypeFilter ? rows.filter((row) => row.rowType === rowTypeFilter) : rows;
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const hierarchyRows = normalized
+      ? rows
+      : rows.filter((row) => {
+          let parentId = row.parentId;
+          while (parentId) {
+            if (collapsedRows.has(parentId)) return false;
+            parentId = byId.get(parentId)?.parentId ?? null;
+          }
+          return true;
+        });
+    const byType = rowTypeFilter ? hierarchyRows.filter((row) => row.rowType === rowTypeFilter) : hierarchyRows;
     const filtered = normalized
       ? byType.filter((row) =>
           [
@@ -157,11 +201,11 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
       const compared = cellValue(column, a).localeCompare(cellValue(column, b), undefined, { numeric: true, sensitivity: "base" });
       return sortDirection === "asc" ? compared : -compared;
     });
-  }, [rows, rowTypeFilter, searchQuery, sortKey, sortDirection, columns]);
+  }, [rows, rowTypeFilter, searchQuery, sortKey, sortDirection, columns, collapsedRows]);
   const template = columns.map((c) => `${c.width}px`).join(" ");
-  const gridWidth = `${parseInt(totalWidth(columns), 10) + 40}px`;
-  const gridTemplate = `40px ${template}`;
-  const frozenOffsets = columns.map((_, index) => 40 + columns.slice(0, index).reduce((sum, column) => sum + column.width + 8, 0));
+  const gridWidth = totalWidth(columns);
+  const gridTemplate = template;
+  const frozenOffsets = columns.map((_, index) => columns.slice(0, index).reduce((sum, column) => sum + column.width + 8, 0));
   const selectedRootRowIds = useMemo(() => {
     const selected = new Set(selectedRowIds);
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -179,7 +223,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   const virtualizer = useVirtualizer({
     count: displayedRows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 48,
+    estimateSize: () => 56,
     overscan: 20,
     initialRect: { width: 1000, height: 600 },
   });
@@ -246,16 +290,91 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         headers: { "idempotency-key": crypto.randomUUID() },
         body: JSON.stringify({ ...input, title: "" }),
       }),
+    onSuccess: (created) => pushHistory(documentId, { kind: "create", rowId: created.id }),
     onSettled: invalidate,
     onError: handleMutationError,
   });
 
   const saveCell = useMutation({
-    mutationFn: (input: { column: GridColumn; row: OutlineRow; value: string }) =>
+    mutationFn: (input: { column: GridColumn; row: OutlineRow; value: string; numberingStart?: string | null }) =>
       api<OutlineRow>(`/rows/${input.row.id}`, {
         method: "PATCH",
-        body: JSON.stringify(buildPatchPayload(input.column, input.row, input.value)),
+        body: JSON.stringify(buildPatchPayload(input.column, input.row, input.value, input.numberingStart)),
       }),
+    onSuccess: (_, input) => pushHistory(documentId, {
+      kind: "cell",
+      rowId: input.row.id,
+      columnKey: input.column.key,
+      beforeValue: cellValue(input.column, input.row),
+      afterValue: input.value,
+      ...(input.numberingStart !== undefined
+        ? {
+            beforeNumbering: input.row.numberingStart === null ? null : String(input.row.numberingStart),
+            afterNumbering: input.numberingStart,
+          }
+        : {}),
+    }),
+    onSettled: invalidate,
+    onError: handleMutationError,
+  });
+
+  const createTestTemplate = useMutation({
+    mutationFn: (input: { name: string; parentId: string | null }) =>
+      api<{ root: { id: string } }>(`/documents/${documentId}/test-templates`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: input.name,
+          parentId: input.parentId,
+          sectionTitles: [t("preconditions"), t("testInputs"), t("assumptionsAndConstraints"), t("testStepsHeading")],
+          defaultContent: t("noneDefault"),
+        }),
+      }),
+    onSuccess: (created) => {
+      pushHistory(documentId, { kind: "create", rowId: created.root.id });
+      setTemplateParentId(undefined);
+      setTemplateName("");
+      void invalidate();
+    },
+    onError: handleMutationError,
+  });
+
+  const addColumn = useMutation({
+    mutationFn: (input: { displayName: string; fieldType: CustomFieldType; allowedValues: string[] }) =>
+      api<FieldDefinition>(`/documents/${documentId}/fields`, {
+        method: "POST",
+        body: JSON.stringify({
+          fieldKey: `field_${Date.now().toString(36)}`,
+          displayName: input.displayName,
+          fieldType: input.fieldType,
+          allowedValues: input.allowedValues,
+        }),
+      }),
+    onSuccess: async (field) => {
+      if (addColumnAt) {
+        const key = `custom:${field.fieldKey}`;
+        showColumn(documentId, key);
+        placeColumn(documentId, key, addColumnAt.anchor.key, addColumnAt.side, [...allColumnKeys, key]);
+      }
+      setAddColumnAt(null);
+      await queryClient.invalidateQueries({ queryKey: ["fields", documentId] });
+    },
+    onError: handleMutationError,
+  });
+
+  const updateStepStatus = useMutation({
+    mutationFn: (input: { rowId: string; status: string }) => api(`/test-steps/${input.rowId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: input.status }),
+    }),
+    onSuccess: (_, input) => {
+      const row = rows.find((candidate) => candidate.id === input.rowId);
+      if (row) pushHistory(documentId, {
+        kind: "status",
+        rowId: row.id,
+        beforeStatus: row.testResult ?? "not_run",
+        afterStatus: input.status,
+      });
+    },
     onSettled: invalidate,
     onError: handleMutationError,
   });
@@ -271,6 +390,18 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           expectedVersion: input.row.version,
         }),
       }),
+    onSuccess: (_, input) => {
+      const siblings = rows.filter((candidate) => candidate.parentId === input.row.parentId);
+      const index = siblings.findIndex((candidate) => candidate.id === input.row.id);
+      pushHistory(documentId, {
+        kind: "move",
+        rowId: input.row.id,
+        beforeParentId: input.row.parentId,
+        beforeAfterRowId: index > 0 ? siblings[index - 1]?.id : undefined,
+        afterParentId: input.newParentId,
+        afterAfterRowId: input.afterRowId,
+      });
+    },
     onSettled: invalidate,
     onError: handleMutationError,
   });
@@ -278,7 +409,10 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   const deleteRow = useMutation({
     mutationFn: (input: { row: OutlineRow; childStrategy: "delete_subtree" | "promote_children" }) =>
       api(`/rows/${input.row.id}`, { method: "DELETE", body: JSON.stringify({ childStrategy: input.childStrategy }) }),
-    onSuccess: () => setDeleteTarget(null),
+    onSuccess: (_, input) => {
+      if (input.childStrategy === "delete_subtree") pushHistory(documentId, { kind: "delete", rowId: input.row.id });
+      setDeleteTarget(null);
+    },
     onSettled: invalidate,
     onError: handleMutationError,
   });
@@ -289,7 +423,18 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         method: "PATCH",
         body: JSON.stringify({ expectedVersion: input.row.version, numberingStart: input.numberingStart }),
       }),
-    onSuccess: () => setNumberingTarget(null),
+    onSuccess: (_, input) => {
+      pushHistory(documentId, {
+        kind: "cell",
+        rowId: input.row.id,
+        columnKey: "title",
+        beforeValue: input.row.title,
+        afterValue: input.row.title,
+        beforeNumbering: input.row.numberingStart === null ? null : String(input.row.numberingStart),
+        afterNumbering: input.numberingStart === null ? null : String(input.numberingStart),
+      });
+      setNumberingTarget(null);
+    },
     onSettled: invalidate,
     onError: handleMutationError,
   });
@@ -373,31 +518,12 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
     if (parent) moveRow.mutate({ row, newParentId: parent.parentId, afterRowId: parent.id });
   };
 
-  const childTypeFor = (row: OutlineRow): OutlineRow["rowType"] | null => {
-    if (documentType === "requirement") {
-      if (row.rowType === "heading" || row.rowType === "requirement") return "requirement";
-      return null;
-    }
-    if (row.rowType === "heading") {
-      let parentId = row.parentId;
-      while (parentId) {
-        const parent = rows.find((candidate) => candidate.id === parentId);
-        if (!parent) break;
-        if (parent.rowType === "test_case") return "test_step";
-        parentId = parent.parentId;
-      }
-      return "test_case";
-    }
-    if (row.rowType === "test_case") return "test_step";
-    return null;
-  };
-
   const addObject = (row = rows.find((candidate) => candidate.id === selectedRowId)) => {
     if (!row) {
-      createRow.mutate({ parentId: null, rowType: documentType === "requirement" ? "requirement" : "test_case" });
+      createRow.mutate({ parentId: null, rowType: "heading" });
       return;
     }
-    createRow.mutate({ parentId: row.parentId, afterRowId: row.id, rowType: row.rowType });
+    createRow.mutate({ parentId: row.parentId, afterRowId: row.id, rowType: "heading" });
   };
 
   const addObjectBelow = (row = rows.find((candidate) => candidate.id === selectedRowId)) => {
@@ -405,16 +531,118 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
       createRow.mutate({ parentId: null, rowType: "heading" });
       return;
     }
-    const rowType = childTypeFor(row);
-    if (!rowType) return;
+    if (row.rowType !== "heading" && row.rowType !== "test_case") return;
     const children = rows.filter((candidate) => candidate.parentId === row.id);
-    createRow.mutate({ parentId: row.id, afterRowId: children.at(-1)?.id, rowType });
+    createRow.mutate({ parentId: row.id, afterRowId: children.at(-1)?.id, rowType: "heading" });
+  };
+
+  const addBlankObject = (row = rows.find((candidate) => candidate.id === selectedRowId)) => {
+    createRow.mutate({ parentId: row?.parentId ?? null, afterRowId: row?.id, rowType: "note" });
+  };
+
+  const addBlankObjectBelow = (row = rows.find((candidate) => candidate.id === selectedRowId)) => {
+    if (!row || (row.rowType !== "heading" && row.rowType !== "test_case")) return;
+    const children = rows.filter((candidate) => candidate.parentId === row.id);
+    createRow.mutate({ parentId: row.id, afterRowId: children.at(-1)?.id, rowType: "note" });
   };
 
   const openNumbering = (row: OutlineRow) => {
     setNumberingTarget(row);
     setNumberingStart(String(row.numberingStart ?? Number(row.displayNumber.split(".").at(-1) ?? 1)));
   };
+
+  const toggleCollapsed = (rowId: string) => {
+    setCollapsedRowIds((current) => current.includes(rowId) ? current.filter((id) => id !== rowId) : [...current, rowId]);
+  };
+
+  const executeHistory = async (direction: "undo" | "redo") => {
+    const history = useEditHistoryStore.getState();
+    if (history.busy[documentId]) return;
+    history.setBusy(documentId, true);
+    const command = direction === "undo" ? history.takeUndo(documentId) : history.takeRedo(documentId);
+    if (!command) {
+      history.setBusy(documentId, false);
+      return;
+    }
+    try {
+      const currentRows = await api<OutlineRow[]>(`/documents/${documentId}/outline`);
+      const currentRow = currentRows.find((row) => row.id === command.rowId);
+      if (command.kind === "cell") {
+        if (!currentRow) throw new Error("row unavailable");
+        const column = columns.find((candidate) => candidate.key === command.columnKey);
+        if (!column) throw new Error("column unavailable");
+        const expectedValue = direction === "undo" ? command.afterValue : command.beforeValue;
+        if (cellValue(column, currentRow) !== expectedValue) throw new Error("row changed");
+        const value = direction === "undo" ? command.beforeValue : command.afterValue;
+        const numberingStart = direction === "undo" ? command.beforeNumbering : command.afterNumbering;
+        await api(`/rows/${command.rowId}`, {
+          method: "PATCH",
+          body: JSON.stringify(buildPatchPayload(column, currentRow, value, numberingStart)),
+        });
+      }
+      if (command.kind === "create") {
+        if (direction === "undo") {
+          if (!currentRow) throw new Error("row unavailable");
+          await api(`/rows/${command.rowId}`, { method: "DELETE", body: JSON.stringify({ childStrategy: "delete_subtree" }) });
+        } else {
+          await api(`/rows/${command.rowId}/restore`, { method: "POST" });
+        }
+      }
+      if (command.kind === "delete") {
+        if (direction === "undo") await api(`/rows/${command.rowId}/restore`, { method: "POST" });
+        else {
+          if (!currentRow) throw new Error("row unavailable");
+          await api(`/rows/${command.rowId}`, { method: "DELETE", body: JSON.stringify({ childStrategy: "delete_subtree" }) });
+        }
+      }
+      if (command.kind === "status") {
+        if (!currentRow) throw new Error("row unavailable");
+        const expectedStatus = direction === "undo" ? command.afterStatus : command.beforeStatus;
+        if ((currentRow.testResult ?? "not_run") !== expectedStatus) throw new Error("status changed");
+        await api(`/test-steps/${command.rowId}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: direction === "undo" ? command.beforeStatus : command.afterStatus }),
+        });
+      }
+      if (command.kind === "move") {
+        if (!currentRow) throw new Error("row unavailable");
+        const expectedParentId = direction === "undo" ? command.afterParentId : command.beforeParentId;
+        if (currentRow.parentId !== expectedParentId) throw new Error("row moved");
+        await api(`/rows/${command.rowId}/move`, {
+          method: "POST",
+          headers: { "idempotency-key": crypto.randomUUID() },
+          body: JSON.stringify({
+            newParentId: direction === "undo" ? command.beforeParentId : command.afterParentId,
+            afterRowId: direction === "undo" ? command.beforeAfterRowId : command.afterAfterRowId,
+            expectedVersion: currentRow.version,
+          }),
+        });
+      }
+      await invalidate();
+    } catch (error) {
+      const current = useEditHistoryStore.getState();
+      if (direction === "undo") current.rollbackUndo(documentId, command);
+      else current.rollbackRedo(documentId, command);
+      handleMutationError(error);
+    } finally {
+      useEditHistoryStore.getState().setBusy(documentId, false);
+    }
+  };
+
+  useEffect(() => {
+    const onUndo = (event: Event) => {
+      if ((event as CustomEvent<{ documentId: string }>).detail.documentId === documentId) void executeHistory("undo");
+    };
+    const onRedo = (event: Event) => {
+      if ((event as CustomEvent<{ documentId: string }>).detail.documentId === documentId) void executeHistory("redo");
+    };
+    window.addEventListener("docsys:undo", onUndo);
+    window.addEventListener("docsys:redo", onRedo);
+    return () => {
+      window.removeEventListener("docsys:undo", onUndo);
+      window.removeEventListener("docsys:redo", onRedo);
+    };
+  });
 
   useEffect(() => {
     const requestDelete = () => {
@@ -425,15 +653,26 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
     return () => window.removeEventListener("docsys:delete-selected-row", requestDelete);
   }, [rows, selectedRowId]);
 
+  useEffect(() => {
+    const requestTemplate = (event: Event) => {
+      const detail = (event as CustomEvent<{ parentId?: string | null }>).detail;
+      setTemplateParentId(detail?.parentId ?? null);
+    };
+    window.addEventListener("docsys:add-test-template", requestTemplate);
+    return () => window.removeEventListener("docsys:add-test-template", requestTemplate);
+  }, []);
+
   const menuItems = (row: OutlineRow | null): MenuItem[] => {
     const addUnder = (rowType: OutlineRow["rowType"], parentId: string | null, afterRowId?: string) =>
       createRow.mutate({ parentId, afterRowId, rowType });
     if (!row) {
       return [
         { key: "heading", label: t("addHeading"), onSelect: () => addUnder("heading", null) },
+        { key: "blank", label: t("addBlankObject"), onSelect: () => addUnder("note", null) },
         documentType === "requirement"
           ? { key: "requirement", label: t("addRequirement"), onSelect: () => addUnder("requirement", null) }
-          : { key: "testCase", label: t("addTestCase"), onSelect: () => addUnder("test_case", null) },
+          : { key: "testStep", label: t("addTestStep"), onSelect: () => addUnder("test_step", null) },
+        ...(documentType === "test" ? [{ key: "testTemplate", label: t("addTestTemplate"), onSelect: () => setTemplateParentId(null) }] : []),
       ];
     }
     return [
@@ -446,29 +685,48 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         },
       },
       { key: "addObject", label: t("addObject"), shortcut: "Insert", onSelect: () => addObject(row) },
+      { key: "addBlankObject", label: t("addBlankObject"), onSelect: () => addBlankObject(row) },
       {
         key: "addObjectBelow",
         label: t("addObjectBelow"),
         shortcut: "Shift+Insert",
-        disabled: childTypeFor(row) === null,
+        disabled: row.rowType !== "heading" && row.rowType !== "test_case",
         onSelect: () => addObjectBelow(row),
+      },
+      {
+        key: "addBlankObjectBelow",
+        label: t("addBlankObjectBelow"),
+        disabled: row.rowType !== "heading" && row.rowType !== "test_case",
+        onSelect: () => addBlankObjectBelow(row),
       },
       ...(row.rowType === "heading"
         ? [
             { key: "subheading", label: t("addChildHeading"), onSelect: () => addUnder("heading", row.id) },
             documentType === "requirement"
               ? { key: "requirement", label: t("addRequirement"), onSelect: () => addUnder("requirement", row.id) }
-              : childTypeFor(row) === "test_step"
-                ? { key: "testStep", label: t("addTestStep"), onSelect: () => addUnder("test_step", row.id) }
-                : { key: "testCase", label: t("addTestCase"), onSelect: () => addUnder("test_case", row.id) },
+              : { key: "testStep", label: t("addTestStep"), onSelect: () => addUnder("test_step", row.id) },
+            ...(documentType === "test" ? [{ key: "testTemplate", label: t("addTestTemplateBelow"), onSelect: () => setTemplateParentId(row.id) }] : []),
           ]
         : []),
       ...(row.rowType === "test_case"
         ? [{ key: "testStep", label: t("addTestStep"), onSelect: () => addUnder("test_step", row.id) }]
         : []),
+      ...(row.rowType === "test_step"
+        ? [{ key: "testStepAfter", label: t("addTestStepAfter"), onSelect: () => addUnder("test_step", row.parentId, row.id) }]
+        : []),
       { key: "heading", label: t("addSiblingHeading"), onSelect: () => addUnder("heading", row.parentId, row.id) },
       ...((row.rowType === "heading" || row.rowType === "test_case")
         ? [{ key: "numbering", label: t("setNumbering"), onSelect: () => openNumbering(row) }]
+        : []),
+      ...(rows.some((candidate) => candidate.parentId === row.id)
+        ? [{ key: "collapse", label: t(collapsedRows.has(row.id) ? "expandObject" : "collapseObject"), onSelect: () => toggleCollapsed(row.id) }]
+        : []),
+      ...(row.rowType === "test_step"
+        ? (["not_run", "running", "passed", "failed", "blocked", "skipped"] as const).map((status) => ({
+            key: `status-${status}`,
+            label: `${t("testResult")}: ${t(`executionStatus.${status}`)}`,
+            onSelect: () => updateStepStatus.mutate({ rowId: row.id, status }),
+          }))
         : []),
       { key: "indent", label: t("indent"), onSelect: () => indent(row) },
       { key: "outdent", label: t("outdent"), onSelect: () => outdent(row) },
@@ -487,8 +745,8 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
 
   const commitEdit = (row: OutlineRow, column: GridColumn, explicitValue?: string) => {
     const value = explicitValue ?? editing?.value;
-    if (value !== undefined && value !== cellValue(column, row)) {
-      saveCell.mutate({ column, row, value });
+    if (value !== undefined && (value !== cellValue(column, row) || editing?.numberingStart !== undefined)) {
+      saveCell.mutate({ column, row, value, numberingStart: editing?.numberingStart });
     }
     setEditing(null);
   };
@@ -520,7 +778,9 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         onDeleteView={(id) => deleteView.mutate(id)}
         onAddObject={() => addObject()}
         onAddObjectBelow={() => addObjectBelow()}
-        canAddObjectBelow={!selectedGridRow || childTypeFor(selectedGridRow) !== null}
+        onAddBlankObject={() => addBlankObject()}
+        onAddBlankObjectBelow={() => addBlankObjectBelow()}
+        canAddObjectBelow={!selectedGridRow || selectedGridRow.rowType === "heading" || selectedGridRow.rowType === "test_case"}
       />
       {selectedRowIds.length > 1 && (
         <div className="flex items-center gap-3 border-b border-border bg-surface/95 px-4 py-2 text-sm shadow-sm backdrop-blur-xl">
@@ -561,6 +821,14 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
             moveSelection(-1);
           }
           const selected = rows.find((row) => row.id === selectedRowId);
+          if (event.key === "ArrowLeft" && selected && rows.some((row) => row.parentId === selected.id)) {
+            event.preventDefault();
+            setCollapsedRowIds((current) => current.includes(selected.id) ? current : [...current, selected.id]);
+          }
+          if (event.key === "ArrowRight" && selected && collapsedRows.has(selected.id)) {
+            event.preventDefault();
+            setCollapsedRowIds((current) => current.filter((id) => id !== selected.id));
+          }
           if (event.key === "Insert") {
             event.preventDefault();
             if (event.shiftKey) addObjectBelow(selected);
@@ -580,6 +848,11 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
             event.preventDefault();
             document.querySelector<HTMLInputElement>('[data-testid="grid-search"]')?.focus();
           }
+          if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+            event.preventDefault();
+            selectAll(displayedRows.map((row) => row.id));
+          }
+          if (event.key === "Escape") clearRows();
         }}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -591,16 +864,6 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           className="sticky top-0 z-10 grid gap-2 border-b border-border bg-surface/95 px-4 text-xs font-medium uppercase tracking-wide text-mutedForeground backdrop-blur-xl"
           style={{ gridTemplateColumns: gridTemplate, width: gridWidth }}
         >
-          <div role="columnheader" className="sticky left-0 z-20 flex items-center justify-center bg-surface/95">
-            <input
-              type="checkbox"
-              data-testid="select-all-rows"
-              aria-label={t("selectAllRows")}
-              checked={displayedRows.length > 0 && displayedRows.every((row) => selectedRowIds.includes(row.id))}
-              onChange={(event) => (event.target.checked ? selectAll(displayedRows.map((row) => row.id)) : clearRows())}
-              className="h-4 w-4 rounded border-border accent-primary"
-            />
-          </div>
           {columns.map((column, columnIndex) => (
             <div
               role="columnheader"
@@ -608,7 +871,15 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
               className={`relative flex items-center gap-1 overflow-hidden py-2 pr-2 ${columnIndex < frozenCount ? "sticky z-20 bg-surface/95" : ""}`}
               style={columnIndex < frozenCount ? { left: frozenOffsets[columnIndex] } : undefined}
             >
-              <span className="truncate">{column.kind === "custom" ? column.labelKey : t(column.labelKey)}</span>
+              <button
+                className="min-w-0 flex-1 truncate text-left"
+                onClick={(event) => {
+                  const bounds = event.currentTarget.getBoundingClientRect();
+                  setColumnMenu({ x: bounds.left, y: bounds.bottom + 2, column });
+                }}
+              >
+                {column.kind === "custom" ? column.labelKey : t(column.labelKey)}
+              </button>
               <div
                 role="separator"
                 aria-orientation="vertical"
@@ -639,6 +910,14 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const row = displayedRows[virtualRow.index];
               if (!row) return null;
+              const activeColumn = editing?.rowId === row.id ? columns.find((column) => column.key === editing.columnKey) : undefined;
+              const hasUnsavedChange = Boolean(
+                editing &&
+                activeColumn &&
+                (editing.value !== cellValue(activeColumn, row) || editing.numberingStart !== undefined),
+              );
+              const visibleChangeState = hasUnsavedChange ? "unsaved" : row.changeState ?? "saved_other";
+              const hasChildren = rows.some((candidate) => candidate.parentId === row.id);
               return (
                 <div
                   ref={virtualizer.measureElement}
@@ -646,7 +925,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
                   key={row.id}
                   data-testid={`grid-row-${row.displayNumber}`}
                   draggable={editing?.rowId !== row.id}
-                  className={`absolute left-0 grid min-h-12 items-stretch gap-2 border-b border-border px-4 py-1.5 text-sm transition-colors hover:bg-muted/70 ${
+                  className={`absolute left-0 grid min-h-14 items-stretch gap-2 border-b border-border px-4 py-1.5 text-sm transition-colors hover:bg-muted/70 ${
                     selectedRowIds.includes(row.id) ? "bg-selection" : ""
                   }`}
                   style={{
@@ -656,6 +935,8 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
                     zIndex: editing?.rowId === row.id ? 20 : 0,
                   }}
                   onClick={(event) => {
+                    const target = event.target as HTMLElement;
+                    if (!target.closest("input, textarea, select, [data-cell-editor]")) scrollRef.current?.focus({ preventScroll: true });
                     if (event.shiftKey) selectRange(displayedRows.map((candidate) => candidate.id), row.id);
                     else if (event.metaKey || event.ctrlKey) toggleRow(row.id);
                     else selectOnly(row.id);
@@ -679,33 +960,57 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
                     if (dragged && dragged.id !== row.id) moveRow.mutate({ row: dragged, newParentId: row.parentId, afterRowId: row.id });
                   }}
                 >
-                  <div className="sticky left-0 z-10 flex items-center justify-center bg-inherit">
-                    <input
-                      type="checkbox"
-                      data-testid={`select-row-${row.displayNumber}`}
-                      aria-label={t("selectRowId", { id: row.objectNumber })}
-                      checked={selectedRowIds.includes(row.id)}
-                      onChange={() => toggleRow(row.id)}
-                      onClick={(event) => event.stopPropagation()}
-                      className="h-4 w-4 rounded border-border accent-primary"
-                    />
-                  </div>
+                  <div
+                    data-testid={`row-change-state-${row.objectNumber}`}
+                    title={t(`rowChangeState.${visibleChangeState}`)}
+                    className={`absolute inset-y-0 left-0 z-30 w-1 ${
+                      hasUnsavedChange
+                        ? "bg-warning"
+                        : row.changeState === "baseline"
+                          ? "bg-success"
+                          : row.changeState === "saved_other"
+                            ? "bg-orange-500"
+                            : "bg-primary"
+                    }`}
+                  />
                   {columns.map((column, columnIndex) => (
                     <div
                       key={column.key}
-                      className={columnIndex < frozenCount ? "sticky z-10 bg-inherit" : ""}
+                      className={`relative ${columnIndex < frozenCount ? "sticky z-10 bg-inherit" : ""}`}
                       style={columnIndex < frozenCount ? { left: frozenOffsets[columnIndex] } : undefined}
                     >
+                      {column.kind === "title" && hasChildren && (
+                        <button
+                          type="button"
+                          draggable={false}
+                          data-testid={`toggle-row-${row.objectNumber}`}
+                          aria-label={t(collapsedRows.has(row.id) ? "expandObject" : "collapseObject")}
+                          className="absolute top-2 z-20 rounded p-0.5 text-mutedForeground hover:bg-muted hover:text-foreground"
+                          style={{ left: row.depth * 18 + 2 }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleCollapsed(row.id);
+                          }}
+                        >
+                          {collapsedRows.has(row.id) ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      )}
                       <GridCell
                         column={column}
                         row={row}
                         editing={editing?.rowId === row.id && editing.columnKey === column.key ? editing : null}
                         linkProjection={linkProjection}
-                        onStartEdit={() =>
-                          isCellEditable(column, row) &&
-                          setEditing({ rowId: row.id, columnKey: column.key, value: cellValue(column, row) })
-                        }
-                        onChange={(value) => setEditing({ rowId: row.id, columnKey: column.key, value })}
+                        selected={selectedRowIds.includes(row.id)}
+                        titleLeadingOffset={hasChildren ? 18 : 0}
+                        onStartEdit={() => {
+                          if (column.kind === "linkedRequirements") {
+                            openDetail(row.id);
+                            return;
+                          }
+                          if (isCellEditable(column, row)) setEditing({ rowId: row.id, columnKey: column.key, value: cellValue(column, row) });
+                        }}
+                        onChange={(value) => setEditing((current) => current ? { ...current, value } : current)}
+                        onNumberingChange={(value) => setEditing((current) => current ? { ...current, numberingStart: value } : current)}
                         onCommit={(value) => commitEdit(row, column, value)}
                         onCancel={() => setEditing(null)}
                       />
@@ -718,8 +1023,13 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         )}
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
+      {columnMenu && <ContextMenu x={columnMenu.x} y={columnMenu.y} onClose={() => setColumnMenu(null)} items={[
+        { key: "left", label: t("addColumnLeft"), onSelect: () => setAddColumnAt({ anchor: columnMenu.column, side: "left" }) },
+        { key: "right", label: t("addColumnRight"), onSelect: () => setAddColumnAt({ anchor: columnMenu.column, side: "right" }) },
+        { key: "hide", label: t("hideColumn"), disabled: columnMenu.column.key === "number", onSelect: () => hideColumn(documentId, columnMenu.column.key) },
+      ]} />}
       {confirmBulkDelete && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm">
+        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 backdrop-blur-sm">
           <div role="dialog" aria-modal="true" className="w-full max-w-sm rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -772,6 +1082,17 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           onSubmit={(input) => runBulkAction.mutate(input)}
         />
       )}
+      {templateParentId !== undefined && (
+        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+          <form className="w-full max-w-sm rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl" onSubmit={(event) => { event.preventDefault(); if (templateName.trim()) createTestTemplate.mutate({ name: templateName.trim(), parentId: templateParentId }); }}>
+            <h2 className="font-semibold">{t("addTestTemplate")}</h2>
+            <p className="mt-1 text-sm text-mutedForeground">{t("testTemplateHelp")}</p>
+            <label className="mt-4 block text-sm">{t("testName")}<input autoFocus className="mt-1 w-full rounded-lg border border-border bg-editorBackground px-3 py-2" value={templateName} onChange={(event) => setTemplateName(event.target.value)} /></label>
+            <div className="mt-5 flex justify-end gap-2"><button type="button" className="rounded-lg px-3 py-2 text-sm hover:bg-muted" onClick={() => setTemplateParentId(undefined)}>{t("cancel")}</button><button disabled={!templateName.trim() || createTestTemplate.isPending} className="rounded-lg bg-primary px-3 py-2 text-sm text-primaryForeground disabled:opacity-50">{t("create")}</button></div>
+          </form>
+        </div>
+      )}
+      {addColumnAt && <AddColumnDialog onClose={() => setAddColumnAt(null)} onSubmit={(input) => addColumn.mutate(input)} />}
     </div>
   );
 }
@@ -791,7 +1112,7 @@ function DeleteRowDialog({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+    <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
       <div role="dialog" aria-modal="true" aria-labelledby="delete-row-title" className="w-full max-w-md rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -830,7 +1151,7 @@ function NumberingDialog({
   const { t } = useTranslation();
   const valid = Number.isInteger(Number(value)) && Number(value) > 0;
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+    <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
       <form
         role="dialog"
         aria-modal="true"
@@ -859,8 +1180,11 @@ function GridCell({
   row,
   editing,
   linkProjection,
+  selected,
+  titleLeadingOffset,
   onStartEdit,
   onChange,
+  onNumberingChange,
   onCommit,
   onCancel,
 }: {
@@ -868,8 +1192,11 @@ function GridCell({
   row: OutlineRow;
   editing: EditState | null;
   linkProjection: { fields: string[]; separator: string; sortBy: string };
+  selected: boolean;
+  titleLeadingOffset: number;
   onStartEdit: () => void;
   onChange: (value: string) => void;
+  onNumberingChange: (value: string) => void;
   onCommit: (value?: string) => void;
   onCancel: () => void;
 }) {
@@ -911,6 +1238,54 @@ function GridCell({
         />
       );
     }
+    if (column.kind === "title" && (row.rowType === "heading" || row.rowType === "test_case")) {
+      const displayedSegment = row.displayNumber.split(".").at(-1) ?? "1";
+      return (
+        <div
+          data-cell-editor
+          className="flex min-h-10 items-start gap-2"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onCommit(editing.value);
+          }}
+        >
+          <input
+            data-testid="inline-numbering-start"
+            aria-label={t("numberingStart")}
+            type="number"
+            min={1}
+            step={1}
+            className="min-h-10 w-20 rounded border border-border bg-surface px-2 py-2 tabular-nums"
+            value={editing.numberingStart ?? displayedSegment}
+            onChange={(event) => onNumberingChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") onCancel();
+              if (event.key === "Enter") onCommit(editing.value);
+              if (event.key === "Tab") {
+                event.preventDefault();
+                onCommit(editing.value);
+              }
+            }}
+          />
+          <input
+            autoFocus
+            data-testid={`cell-input-${column.key}`}
+            className="min-h-10 min-w-0 flex-1 rounded border border-border bg-surface px-2 py-2"
+            value={editing.value}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") onCancel();
+              if (event.key === "Enter") onCommit(event.currentTarget.value);
+              if (event.key === "Tab") {
+                event.preventDefault();
+                onCommit(event.currentTarget.value);
+              }
+            }}
+          />
+        </div>
+      );
+    }
     const multiline =
       column.kind === "description" ||
       column.kind === "action" ||
@@ -921,14 +1296,24 @@ function GridCell({
       return (
         <textarea
           autoFocus
+          data-cell-editor
           data-testid={`cell-input-${column.key}`}
-          className="min-h-20 w-full resize-y rounded-md border border-border bg-surface px-2 py-1.5"
+          className="min-h-24 w-full resize-y rounded-md border border-border bg-surface px-2 py-2"
           value={editing.value}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
           onChange={(event) => onChange(event.target.value)}
           onBlur={(event) => onCommit(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") onCancel();
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) event.currentTarget.blur();
+            if (event.key === "Tab") {
+              event.preventDefault();
+              onCommit(event.currentTarget.value);
+            }
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              onCommit(event.currentTarget.value);
+            }
           }}
         />
       );
@@ -936,34 +1321,58 @@ function GridCell({
     return (
       <input
         autoFocus
+        data-cell-editor
         data-testid={`cell-input-${column.key}`}
-        className="w-full rounded border border-border bg-surface px-2 py-1"
+        className="min-h-10 w-full rounded border border-border bg-surface px-2 py-2"
         value={editing.value}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
         onChange={(e) => onChange(e.target.value)}
         onBlur={(event) => onCommit(event.currentTarget.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Enter") onCommit(e.currentTarget.value);
+          if (e.key === "Tab") {
+            e.preventDefault();
+            onCommit(e.currentTarget.value);
+          }
           if (e.key === "Escape") onCancel();
         }}
       />
     );
   }
 
-  const placeholder = column.kind === "title" ? "—" : " ";
+  const placeholder = "";
   const numberedTitle = column.kind === "title" && (row.rowType === "heading" || row.rowType === "test_case");
+  const columnLabel = column.kind === "custom" ? column.labelKey : t(column.labelKey);
+  const cellHelp = column.kind === "linkedRequirements"
+    ? t("editLinkedRequirements")
+    : t("editCellValue", { column: columnLabel });
   return (
     <button
       data-testid={`cell-value-${column.key}`}
-      className={`block w-full whitespace-pre-wrap break-words py-1 text-left leading-5 ${
+      title={editable ? cellHelp : columnLabel}
+      aria-label={!display && editable ? cellHelp : undefined}
+      className={`relative block min-h-10 w-full whitespace-pre-wrap break-words py-2 text-left leading-5 ${
         numberedTitle ? "font-semibold text-foreground" : ""
-      } ${editable ? "" : "cursor-default text-mutedForeground"}`}
-      style={column.kind === "title" ? { paddingLeft: row.depth * 16 } : undefined}
+      } ${editable ? "rounded px-1 transition-colors hover:bg-primary/5 hover:ring-1 hover:ring-primary/20" : "cursor-default text-mutedForeground"}`}
+      style={column.kind === "title" ? { paddingLeft: row.depth * 18 + 4 + titleLeadingOffset } : undefined}
+      onClick={() => {
+        if (selected && editable) onStartEdit();
+      }}
       onDoubleClick={onStartEdit}
       onKeyDown={(e) => {
         if ((e.key === "F2" || e.key === "Enter") && editable) onStartEdit();
       }}
     >
-      {numberedTitle ? `${row.displayNumber} ${display || placeholder}` : display || placeholder}
+      {column.kind === "title" && row.depth > 0 && Array.from({ length: row.depth }, (_, index) => (
+        <span
+          key={index}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-1 border-l border-primary/15"
+          style={{ left: index * 18 + 9 }}
+        />
+      ))}
+      {column.kind === "stepNumber" && display ? `${display}.` : numberedTitle ? `${row.displayNumber} ${display || placeholder}` : display || placeholder}
     </button>
   );
 }
@@ -993,7 +1402,7 @@ function ChoiceEditor({
     );
   };
   return (
-    <div data-testid="choice-editor" className="relative z-30 self-start">
+    <div data-cell-editor data-testid="choice-editor" className="relative z-30 min-h-10 self-start" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
       <div className="absolute left-0 top-0 min-w-56 rounded-xl border border-border bg-surfaceElevated p-2 shadow-2xl">
         <div className="max-h-52 space-y-1 overflow-auto">
           {options.map((option) => (

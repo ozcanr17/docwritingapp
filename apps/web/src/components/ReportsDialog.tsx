@@ -7,7 +7,7 @@ import { useToastStore } from "../stores/toasts";
 
 interface ReportsDialogProps {
   documentId: string;
-  tab: "baselines" | "coverage" | "matrix" | "reviews";
+  tab: "baselines" | "coverage" | "matrix" | "reviews" | "runs";
   onClose: () => void;
 }
 
@@ -20,9 +20,21 @@ interface MatrixRow {
 interface Baseline {
   id: string;
   revisionNumber: number;
-  label: string;
+  semanticVersion: string;
+  label: string | null;
   createdAt: string;
   rowCount: number;
+}
+
+interface TestExecution {
+  id: string;
+  status: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  environment: string | null;
+  testCaseRow: { id: string; title: string; objectNumber: number };
+  executedBy: { id: string; displayName: string };
+  steps: Array<{ id: string; status: string }>;
 }
 
 interface Diff {
@@ -96,15 +108,26 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
     queryFn: () => api<Review[]>(`/documents/${documentId}/reviews`),
     enabled: tab === "reviews",
   });
+  const runs = useQuery({
+    queryKey: ["test-runs", documentId],
+    queryFn: () => api<TestExecution[]>(`/documents/${documentId}/executions`),
+    enabled: tab === "runs",
+  });
 
   const createBaseline = useMutation({
-    mutationFn: (label: string) => api(`/documents/${documentId}/baselines`, { method: "POST", body: JSON.stringify({ label }) }),
+    mutationFn: (label: string) => api(`/documents/${documentId}/baselines`, { method: "POST", body: JSON.stringify({ label: label || undefined }) }),
     onSuccess: () => {
       setBaselineLabel("");
       setBaselineFormOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["baselines", documentId] });
+      void queryClient.invalidateQueries({ queryKey: ["outline", documentId] });
       pushToast("success", t("createBaseline"));
     },
+    onError: () => pushToast("error", t("genericError")),
+  });
+  const stopRun = useMutation({
+    mutationFn: (id: string) => api(`/executions/${id}/stop`, { method: "POST" }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["test-runs", documentId] }),
     onError: () => pushToast("error", t("genericError")),
   });
   const createReview = useMutation({
@@ -119,7 +142,7 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40" onClick={onClose}>
       <div
         data-testid="reports-dialog"
         className="max-h-[80vh] w-[36rem] overflow-auto rounded border border-border bg-surface p-5 shadow-xl"
@@ -127,7 +150,7 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold">
-            {tab === "baselines" ? t("baselines") : tab === "coverage" ? t("coverageReport") : tab === "matrix" ? t("traceabilityMatrix") : t("reviews")}
+            {tab === "baselines" ? t("baselines") : tab === "coverage" ? t("coverageReport") : tab === "matrix" ? t("traceabilityMatrix") : tab === "runs" ? t("testRuns") : t("reviews")}
           </h2>
           <button aria-label={t("close")} onClick={onClose} className="rounded p-1 hover:bg-muted">
             <X size={16} />
@@ -148,7 +171,7 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
                 className="flex items-end gap-2 rounded-xl border border-border bg-editorBackground p-3"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  if (baselineLabel.trim()) createBaseline.mutate(baselineLabel.trim());
+                  createBaseline.mutate(baselineLabel.trim());
                 }}
               >
                 <label className="min-w-0 flex-1 text-xs text-mutedForeground">
@@ -165,7 +188,7 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
                   type="submit"
                   data-testid="baseline-create-submit"
                   className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primaryForeground disabled:opacity-50"
-                  disabled={!baselineLabel.trim()}
+                  disabled={createBaseline.isPending}
                 >
                   {t("create")}
                 </button>
@@ -178,7 +201,7 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
                 {baselines.data?.map((b) => (
                   <li key={b.id} className="flex items-center justify-between py-2">
                     <span>
-                      <span className="tabular-nums text-mutedForeground">#{b.revisionNumber}</span> {b.label}
+                      <span className="font-medium tabular-nums">v{b.semanticVersion}</span>{b.label ? ` — ${b.label}` : ""}
                       <span className="ml-2 text-xs text-mutedForeground">({b.rowCount})</span>
                     </span>
                     <button
@@ -287,6 +310,26 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
                     <button className="rounded-lg bg-destructive/15 px-2 py-1 text-xs text-destructive" onClick={() => decideReview.mutate({ id: review.id, decision: "rejected" })}>{t("reject")}</button>
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === "runs" && (
+          <div className="space-y-2 text-sm">
+            {runs.data?.length === 0 && <div className="text-mutedForeground">{t("noTestRuns")}</div>}
+            {runs.data?.map((run) => (
+              <div key={run.id} className="rounded-xl border border-border bg-editorBackground p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">#{run.testCaseRow.objectNumber} {run.testCaseRow.title || t("untitledTest")}</div>
+                    <div className="mt-1 text-xs text-mutedForeground">{run.executedBy.displayName} · {run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</div>
+                  </div>
+                  <span className="rounded bg-muted px-2 py-1 text-xs">{t(`executionStatus.${run.status}`)}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between text-xs text-mutedForeground">
+                  <span>{t("testStepProgress", { completed: run.steps.filter((step) => !["not_run", "running"].includes(step.status)).length, total: run.steps.length })}</span>
+                  {run.status === "running" && <button className="rounded bg-destructive/10 px-2 py-1 text-destructive hover:bg-destructive/20" onClick={() => stopRun.mutate(run.id)}>{t("stopRun")}</button>}
+                </div>
               </div>
             ))}
           </div>

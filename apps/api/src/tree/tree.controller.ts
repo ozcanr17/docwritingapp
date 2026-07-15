@@ -27,6 +27,7 @@ const updateDocumentSchema = z.object({
   expectedVersion: z.number().int().positive(),
   title: z.string().min(1).max(500).optional(),
   columnConfig: z.array(z.record(z.unknown())).optional(),
+  folderId: z.string().uuid().nullable().optional(),
 });
 
 @Controller()
@@ -49,6 +50,11 @@ export class TreeController {
     @Query("parentId") parentId?: string,
   ) {
     return this.tree.listFolderChildren(user.userId, workspaceId, parentId ?? null);
+  }
+
+  @Get("workspaces/:workspaceId/folders")
+  listFolders(@CurrentUser() user: SessionUser, @Param("workspaceId", ParseUUIDPipe) workspaceId: string) {
+    return this.tree.listFolders(user.userId, workspaceId);
   }
 
   @Get("workspaces/:workspaceId/trash")
@@ -111,6 +117,7 @@ export class TreeController {
     return this.tree.updateDocument(user.userId, documentId, body.expectedVersion, {
       title: body.title,
       columnConfig: body.columnConfig as never,
+      folderId: body.folderId,
     });
   }
 

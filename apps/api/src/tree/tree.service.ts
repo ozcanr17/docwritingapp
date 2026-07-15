@@ -86,6 +86,19 @@ export class TreeService {
     return { folders, documents };
   }
 
+  async listFolders(actorId: string, workspaceId: string) {
+    const workspace = await this.requireWorkspace(workspaceId);
+    await this.access.assertPermission(actorId, "document.read", {
+      organizationId: workspace.organizationId,
+      workspaceId,
+    });
+    return this.prisma.folder.findMany({
+      where: { workspaceId, deletedAt: null },
+      orderBy: [{ depth: "asc" }, { rank: "asc" }],
+      select: { id: true, name: true, parentId: true, ancestorPath: true, depth: true, version: true },
+    });
+  }
+
   async renameFolder(actorId: string, folderId: string, name: string, expectedVersion: number) {
     const folder = await this.requireFolder(folderId);
     await this.access.assertPermission(actorId, "document.manage", {
@@ -309,7 +322,7 @@ export class TreeService {
     actorId: string,
     documentId: string,
     expectedVersion: number,
-    patch: { title?: string; columnConfig?: Prisma.InputJsonValue },
+    patch: { title?: string; columnConfig?: Prisma.InputJsonValue; folderId?: string | null },
   ) {
     const document = await this.requireDocument(documentId);
     await this.access.assertPermission(actorId, "document.manage", {
@@ -317,11 +330,27 @@ export class TreeService {
       workspaceId: document.workspaceId,
     });
     const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.workspaceId}::text, 0))`;
+      let rank: string | undefined;
+      if (patch.folderId !== undefined && patch.folderId !== document.folderId) {
+        if (patch.folderId) {
+          const folder = await tx.folder.findFirst({
+            where: { id: patch.folderId, workspaceId: document.workspaceId, deletedAt: null },
+          });
+          if (!folder) throw new NotFoundException("Target folder not found");
+        }
+        const sibling = await tx.document.findFirst({
+          where: { workspaceId: document.workspaceId, folderId: patch.folderId, deletedAt: null, id: { not: documentId } },
+          orderBy: { rank: "desc" },
+        });
+        rank = rankBetween(sibling?.rank ?? null, null);
+      }
       const result = await tx.document.updateMany({
         where: { id: documentId, version: expectedVersion, deletedAt: null },
         data: {
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.columnConfig !== undefined ? { columnConfig: patch.columnConfig } : {}),
+          ...(patch.folderId !== undefined ? { folderId: patch.folderId, ...(rank ? { rank } : {}) } : {}),
           version: { increment: 1 },
           updatedById: actorId,
         },
@@ -337,8 +366,8 @@ export class TreeService {
         entityType: "document",
         entityId: documentId,
         documentId,
-        previousData: { title: document.title },
-        nextData: { title: patch.title ?? document.title, columnConfigChanged: patch.columnConfig !== undefined },
+        previousData: { title: document.title, folderId: document.folderId },
+        nextData: { title: patch.title ?? document.title, folderId: patch.folderId ?? document.folderId, columnConfigChanged: patch.columnConfig !== undefined },
       });
       return tx.document.findUniqueOrThrow({ where: { id: documentId } });
     });

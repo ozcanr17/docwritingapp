@@ -93,4 +93,17 @@ describe("tenancy and isolation", () => {
     });
     expect(rowWrite.statusCode).toBe(403);
   });
+
+  it("moves documents between folders and soft-deletes folder trees", async () => {
+    const owner = await registerActor(app, "tree-owner");
+    const { workspace, document } = await createOrgWorkspaceDocument(app, owner);
+    const folderResponse = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/folders`, headers: { cookie: owner.cookie }, payload: { name: "Archive", parentId: null } });
+    const folder = JSON.parse(folderResponse.body) as { id: string };
+    const moved = await app.inject({ method: "PATCH", url: `/documents/${document.id}`, headers: { cookie: owner.cookie }, payload: { expectedVersion: document.version, folderId: folder.id } });
+    expect(moved.statusCode).toBe(200);
+    expect(JSON.parse(moved.body).folderId).toBe(folder.id);
+    const deleted = await app.inject({ method: "DELETE", url: `/folders/${folder.id}`, headers: { cookie: owner.cookie }, payload: {} });
+    expect(deleted.statusCode).toBe(200);
+    expect(await prisma.document.findUniqueOrThrow({ where: { id: document.id } })).toEqual(expect.objectContaining({ deletedAt: expect.any(Date) }));
+  });
 });

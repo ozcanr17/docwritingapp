@@ -40,10 +40,10 @@ export function builtInColumns(documentType: Exclude<DocumentType, "general_docu
   return [
     NUMBER_COLUMN,
     { key: "title", labelKey: "testTitle", kind: "title", width: 320, editable: true },
-    { key: "stepNumber", labelKey: "stepNumber", kind: "stepNumber", width: 96, editable: false, appliesTo: ["test_step"] },
+    { key: "stepNumber", labelKey: "stepNumber", kind: "stepNumber", width: 96, editable: true, appliesTo: ["test_step"] },
     { key: "action", labelKey: "testStep", kind: "action", width: 320, editable: true, appliesTo: ["test_step"] },
     { key: "expectedResult", labelKey: "expectedResult", kind: "expectedResult", width: 320, editable: true, appliesTo: ["test_step"] },
-    { key: "linkedRequirements", labelKey: "linkedRequirements", kind: "linkedRequirements", width: 320, editable: false },
+    { key: "linkedRequirements", labelKey: "linkedRequirements", kind: "linkedRequirements", width: 320, editable: true },
     { key: "testResult", labelKey: "testResult", kind: "testResult", width: 240, editable: true, appliesTo: ["test_step"] },
     DESCRIPTION_COLUMN,
   ];
@@ -81,7 +81,7 @@ export function cellValue(column: GridColumn, row: OutlineRow): string {
     case "number":
       return String(row.objectNumber);
     case "stepNumber":
-      return row.stepNumber === null ? "" : `${row.stepNumber}.`;
+      return row.stepNumber === null ? "" : String(row.stepNumber);
     case "requirementNo":
       return row.requirementNo ?? "";
     case "title":
@@ -110,6 +110,6 @@ export function cellValue(column: GridColumn, row: OutlineRow): string {
 
 export function isCellEditable(column: GridColumn, row: OutlineRow): boolean {
   if (!column.editable) return false;
-  if (column.appliesTo && !column.appliesTo.includes(row.rowType)) return false;
+  void row;
   return true;
 }

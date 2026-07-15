@@ -38,4 +38,26 @@ describe("document tabs", () => {
     useDocumentTabsStore.getState().focus("requirement");
     expect(useDocumentTabsStore.getState()).toMatchObject({ activeId: "requirement", secondaryId: "test" });
   });
+
+  it("pins tabs ahead of unpinned documents and preserves the state", () => {
+    useDocumentTabsStore.getState().open(requirement);
+    useDocumentTabsStore.getState().open(test);
+    useDocumentTabsStore.getState().togglePin("test");
+    expect(useDocumentTabsStore.getState().tabs.map((tab) => [tab.id, tab.pinned])).toEqual([
+      ["test", true],
+      ["requirement", undefined],
+    ]);
+    useDocumentTabsStore.getState().open({ ...test, title: "Updated Tests" });
+    expect(useDocumentTabsStore.getState().tabs[0]).toMatchObject({ title: "Updated Tests", pinned: true });
+  });
+
+  it("reorders tabs within the same pin group", () => {
+    useDocumentTabsStore.getState().open(requirement);
+    useDocumentTabsStore.getState().open(test);
+    useDocumentTabsStore.getState().reorder("test", "requirement");
+    expect(useDocumentTabsStore.getState().tabs.map((tab) => tab.id)).toEqual(["test", "requirement"]);
+    useDocumentTabsStore.getState().togglePin("test");
+    useDocumentTabsStore.getState().reorder("requirement", "test");
+    expect(useDocumentTabsStore.getState().tabs.map((tab) => tab.id)).toEqual(["test", "requirement"]);
+  });
 });

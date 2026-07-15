@@ -31,7 +31,7 @@ export interface UpdateRowInput {
   customFields?: Record<string, unknown>;
   requirementDetail?: { requirementNo?: string | null; status?: string; priority?: string | null; rationale?: string | null };
   testCaseDetail?: { status?: string; priority?: string | null; assigneeId?: string | null; tags?: string[] };
-  testStepDetail?: { action?: string | null; expectedResult?: string | null; testResult?: string | null };
+  testStepDetail?: { stepNumber?: number | null; action?: string | null; expectedResult?: string | null; testResult?: string | null };
 }
 
 @Injectable()
@@ -67,8 +67,6 @@ export class RowsService {
         this.assertParentAllowed(input.rowType, parent.rowType);
         ancestorPath = `${parent.ancestorPath}${parent.id}/`;
         depth = parent.depth + 1;
-      } else if (input.rowType === "test_step") {
-        throw new UnprocessableEntityException("Test steps must be created under a test case");
       }
       const rank = await this.computeInsertRank(tx, document.id, input.parentId, input.afterRowId);
       const customFields = input.customFields
@@ -131,6 +129,127 @@ export class RowsService {
     return row;
   }
 
+  async createTestTemplate(actorId: string, documentId: string, name: string, parentId: string | null, sectionTitles: string[], defaultContent: string) {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "row.write", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+    });
+    if (document.documentType !== "test") throw new UnprocessableEntityException("Test templates require a test document");
+    const created = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
+      let rootPath = "";
+      let rootDepth = 0;
+      if (parentId) {
+        const parent = await tx.documentRow.findFirst({ where: { id: parentId, documentId, deletedAt: null } });
+        if (!parent) throw new NotFoundException("Parent row not found");
+        if (parent.rowType !== "heading") throw new UnprocessableEntityException("Test templates can only be nested under headings");
+        rootPath = `${parent.ancestorPath}${parent.id}/`;
+        rootDepth = parent.depth + 1;
+      }
+      const counter = await tx.document.update({
+        where: { id: documentId },
+        data: { nextObjectNumber: { increment: 9 } },
+        select: { nextObjectNumber: true },
+      });
+      let objectNumber = counter.nextObjectNumber - 9;
+      const rootRank = await this.computeInsertRank(tx, documentId, parentId, undefined);
+      const root = await tx.documentRow.create({
+        data: {
+          organizationId: document.organizationId,
+          documentId,
+          objectNumber: objectNumber++,
+          parentId,
+          rank: rootRank,
+          ancestorPath: rootPath,
+          depth: rootDepth,
+          rowType: "heading",
+          title: name,
+          createdById: actorId,
+          updatedById: actorId,
+        },
+      });
+      let previousRank: string | null = null;
+      const sections = [];
+      for (const title of sectionTitles) {
+        const rank = rankBetween(previousRank, null);
+        const section = await tx.documentRow.create({
+          data: {
+            organizationId: document.organizationId,
+            documentId,
+            objectNumber: objectNumber++,
+            parentId: root.id,
+            rank,
+            ancestorPath: `${root.ancestorPath}${root.id}/`,
+            depth: root.depth + 1,
+            rowType: "heading",
+            title,
+            createdById: actorId,
+            updatedById: actorId,
+          },
+        });
+        sections.push(section);
+        previousRank = rank;
+      }
+      const placeholderRows = [];
+      for (const section of sections.slice(0, 3)) {
+        const placeholder = await tx.documentRow.create({
+          data: {
+            organizationId: document.organizationId,
+            documentId,
+            objectNumber: objectNumber++,
+            parentId: section.id,
+            rank: rankBetween(null, null),
+            ancestorPath: `${section.ancestorPath}${section.id}/`,
+            depth: section.depth + 1,
+            rowType: "note",
+            title: defaultContent,
+            createdById: actorId,
+            updatedById: actorId,
+          },
+        });
+        placeholderRows.push(placeholder);
+      }
+      const stepParent = sections.at(-1) as (typeof sections)[number];
+      const step = await tx.documentRow.create({
+        data: {
+          organizationId: document.organizationId,
+          documentId,
+          objectNumber,
+          parentId: stepParent.id,
+          rank: rankBetween(null, null),
+          ancestorPath: `${stepParent.ancestorPath}${stepParent.id}/`,
+          depth: stepParent.depth + 1,
+          rowType: "test_step",
+          title: "",
+          createdById: actorId,
+          updatedById: actorId,
+        },
+      });
+      await tx.testStepDetail.create({ data: { rowId: step.id } });
+      await this.audit.record(tx, {
+        organizationId: document.organizationId,
+        workspaceId: document.workspaceId,
+        actorId,
+        action: "test_template.created",
+        entityType: "document_row",
+        entityId: root.id,
+        documentId,
+        nextData: { name, parentId, sectionTitles, defaultContent, stepId: step.id },
+      });
+      return { root, sections, placeholderRows, step };
+    });
+    await this.events.publish({
+      type: "row.created",
+      documentId,
+      organizationId: document.organizationId,
+      entityId: created.root.id,
+      version: created.root.version,
+      actorId,
+    });
+    return created;
+  }
+
   async listChildren(actorId: string, documentId: string, parentId: string | null, limit: number, offset: number) {
     const document = await this.requireDocument(documentId);
     await this.access.assertPermission(actorId, "row.read", {
@@ -154,7 +273,7 @@ export class RowsService {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
-    const rows = await this.prisma.documentRow.findMany({
+    const [rows, latestBaseline] = await Promise.all([this.prisma.documentRow.findMany({
       where: { documentId, deletedAt: null },
       orderBy: [{ depth: "asc" }, { rank: "asc" }],
       select: {
@@ -169,9 +288,11 @@ export class RowsService {
         description: true,
         customFields: true,
         version: true,
+        updatedAt: true,
+        updatedById: true,
         requirementDetail: { select: { requirementNo: true, status: true, priority: true } },
         testCaseDetail: { select: { status: true, priority: true, tags: true } },
-        testStepDetail: { select: { action: true, expectedResult: true, testResult: true } },
+        testStepDetail: { select: { stepNumber: true, action: true, expectedResult: true, testResult: true } },
         outgoingLinks: {
           where: { deletedAt: null },
           select: {
@@ -203,7 +324,15 @@ export class RowsService {
           },
         },
       },
-    });
+    }), this.prisma.documentRevision.findFirst({
+      where: { documentId },
+      orderBy: { revisionNumber: "desc" },
+      select: { createdAt: true, summary: true },
+    })]);
+    const baselineRowIds = new Set(
+      ((latestBaseline?.summary as { rows?: Array<{ id?: string }> } | undefined)?.rows ?? [])
+        .flatMap((snapshot) => typeof snapshot.id === "string" ? [snapshot.id] : []),
+    );
     const readable = await this.access.readableRowIds(actorId, rows.map((row) => row.id));
     const flattened = rows.filter((row) => readable.has(row.id)).map((row) => {
       const linked = [...row.outgoingLinks.map((link) => link.targetRow), ...row.incomingLinks.map((link) => link.sourceRow)]
@@ -233,6 +362,13 @@ export class RowsService {
         description: row.description,
         customFields: row.customFields as Record<string, unknown>,
         version: row.version,
+        updatedAt: row.updatedAt,
+        updatedById: row.updatedById,
+        changeState: latestBaseline && baselineRowIds.has(row.id) && row.updatedAt <= latestBaseline.createdAt
+          ? "baseline"
+          : row.updatedById === actorId
+            ? "saved_self"
+            : "saved_other",
         requirementNo: row.requirementDetail?.requirementNo ?? null,
         status: row.requirementDetail?.status ?? row.testCaseDetail?.status ?? null,
         priority: row.requirementDetail?.priority ?? row.testCaseDetail?.priority ?? null,
@@ -240,6 +376,7 @@ export class RowsService {
         action: row.testStepDetail?.action ?? null,
         expectedResult: row.testStepDetail?.expectedResult ?? null,
         testResult: row.testStepDetail?.testResult ?? null,
+        configuredStepNumber: row.testStepDetail?.stepNumber ?? null,
         linkedRequirements: linked,
         linkCount: row.outgoingLinks.length + row.incomingLinks.length,
       };
@@ -247,11 +384,13 @@ export class RowsService {
     const numbered = this.numberRows(flattened);
     const stepNumbers = new Map<string, number>();
     return numbered.map((row) => {
-      if (row.rowType !== "test_step") return { ...row, stepNumber: null };
+      const { configuredStepNumber, ...result } = row;
+      if (row.rowType !== "test_step") return { ...result, stepNumber: configuredStepNumber };
       const key = row.parentId ?? "root";
-      const stepNumber = (stepNumbers.get(key) ?? 0) + 1;
+      const derivedStepNumber = (stepNumbers.get(key) ?? 0) + 1;
+      const stepNumber = configuredStepNumber ?? derivedStepNumber;
       stepNumbers.set(key, stepNumber);
-      return { ...row, stepNumber };
+      return { ...result, stepNumber };
     });
   }
 
@@ -266,6 +405,7 @@ export class RowsService {
     return this.prisma.documentRow.findUniqueOrThrow({
       where: { id: rowId },
       include: {
+        document: { select: { id: true, title: true, documentType: true } },
         requirementDetail: true,
         testCaseDetail: true,
         testStepDetail: true,
@@ -350,7 +490,7 @@ export class RowsService {
       throw new UnprocessableEntityException("Only headings and test cases can start numbering");
     }
     const updated = await this.prisma.$transaction(async (tx) => {
-      if (input.requirementDetail?.requirementNo !== undefined && row.rowType === "requirement") {
+      if (input.requirementDetail?.requirementNo !== undefined) {
         const requirementNo = input.requirementDetail.requirementNo?.trim() || null;
         input.requirementDetail.requirementNo = requirementNo;
         if (requirementNo) {
@@ -387,14 +527,14 @@ export class RowsService {
         const current = await tx.documentRow.findFirst({ where: { id: rowId } });
         throw new ConflictException(current);
       }
-      if (input.requirementDetail && row.rowType === "requirement") {
-        await tx.requirementDetail.update({ where: { rowId }, data: input.requirementDetail });
+      if (input.requirementDetail) {
+        await tx.requirementDetail.upsert({ where: { rowId }, create: { rowId, ...input.requirementDetail }, update: input.requirementDetail });
       }
-      if (input.testCaseDetail && row.rowType === "test_case") {
-        await tx.testCaseDetail.update({ where: { rowId }, data: input.testCaseDetail });
+      if (input.testCaseDetail) {
+        await tx.testCaseDetail.upsert({ where: { rowId }, create: { rowId, ...input.testCaseDetail }, update: input.testCaseDetail });
       }
-      if (input.testStepDetail && row.rowType === "test_step") {
-        await tx.testStepDetail.update({ where: { rowId }, data: input.testStepDetail });
+      if (input.testStepDetail) {
+        await tx.testStepDetail.upsert({ where: { rowId }, create: { rowId, ...input.testStepDetail }, update: input.testStepDetail });
       }
       const suspectResult = await tx.requirementLink.updateMany({
         where: {
@@ -464,8 +604,6 @@ export class RowsService {
         }
         newAncestorPath = `${parent.ancestorPath}${parent.id}/`;
         newDepth = parent.depth + 1;
-      } else if (current.rowType === "test_step") {
-        throw new UnprocessableEntityException("Test steps must stay under a test case");
       }
       const rank = await this.computeInsertRank(tx, document.id, newParentId, afterRowId, current.id);
       await tx.documentRow.update({
@@ -689,8 +827,6 @@ export class RowsService {
       const parent = await this.prisma.documentRow.findFirst({ where: { id: newParentId, documentId, deletedAt: null } });
       if (!parent) throw new NotFoundException("Target parent not found");
       for (const root of roots) this.assertParentAllowed(root.rowType, parent.rowType);
-    } else if (roots.some((row) => row.rowType === "test_step")) {
-      throw new UnprocessableEntityException("Test steps must stay under a test case");
     }
     const sourceRows = await this.prisma.documentRow.findMany({
       where: {

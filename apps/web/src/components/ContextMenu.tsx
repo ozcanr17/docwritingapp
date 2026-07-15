@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface MenuItem {
   key: string;
@@ -18,6 +19,19 @@ interface ContextMenuProps {
 
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: x, top: y });
+
+  useLayoutEffect(() => {
+    const menu = ref.current;
+    if (!menu) return;
+    const margin = 8;
+    const bounds = menu.getBoundingClientRect();
+    const left = Math.max(margin, Math.min(x, window.innerWidth - bounds.width - margin));
+    const top = y + bounds.height > window.innerHeight - margin
+      ? Math.max(margin, y - bounds.height)
+      : Math.max(margin, y);
+    setPosition({ left, top });
+  }, [items.length, x, y]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -35,12 +49,13 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       ref={ref}
+      data-testid="context-menu"
       role="menu"
-      style={{ top: y, left: x }}
-      className="fixed z-50 min-w-48 rounded border border-border bg-surfaceElevated py-1 shadow-lg"
+      style={position}
+      className="fixed z-[150] max-h-[calc(100vh-1rem)] min-w-48 overflow-y-auto rounded-xl border border-border bg-surfaceElevated py-1.5 shadow-2xl"
     >
       {items.map((item) => (
         <button
@@ -60,6 +75,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
           {item.shortcut && <kbd className="text-[10px] text-mutedForeground">{item.shortcut}</kbd>}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }

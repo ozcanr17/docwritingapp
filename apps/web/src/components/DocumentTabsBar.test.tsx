@@ -12,12 +12,36 @@ describe("DocumentTabsBar", () => {
     const activate = vi.fn();
     const close = vi.fn();
     const split = vi.fn();
-    render(<DocumentTabsBar tabs={tabs} activeId="requirements" secondaryId={null} onActivate={activate} onClose={close} onSecondaryChange={split} onOpenWindow={vi.fn()} />);
+    render(<DocumentTabsBar tabs={tabs} activeId="requirements" secondaryId={null} onActivate={activate} onClose={close} onSecondaryChange={split} onOpenWindow={vi.fn()} onTogglePin={vi.fn()} onReorder={vi.fn()} />);
     fireEvent.click(screen.getByTestId("document-tab-tests"));
     expect(activate).toHaveBeenCalledWith("tests");
-    fireEvent.change(screen.getByTestId("split-document-select"), { target: { value: "tests" } });
+    fireEvent.contextMenu(screen.getByTestId("document-tab-tests"), { clientX: 120, clientY: 40 });
+    fireEvent.click(screen.getByTestId("menu-split"));
     expect(split).toHaveBeenCalledWith("tests");
     fireEvent.click(screen.getByTestId("close-document-tab-tests"));
     expect(close).toHaveBeenCalledWith("tests");
+  });
+
+  it("opens split and window actions from each tab", () => {
+    const split = vi.fn();
+    const openWindow = vi.fn();
+    const togglePin = vi.fn();
+    render(<DocumentTabsBar tabs={tabs} activeId="requirements" secondaryId={null} onActivate={vi.fn()} onClose={vi.fn()} onSecondaryChange={split} onOpenWindow={openWindow} onTogglePin={togglePin} onReorder={vi.fn()} />);
+    fireEvent.contextMenu(screen.getByTestId("document-tab-tests"), { clientX: 120, clientY: 40 });
+    fireEvent.click(screen.getByTestId("menu-split"));
+    expect(split).toHaveBeenCalledWith("tests");
+    fireEvent.contextMenu(screen.getByTestId("document-tab-tests"), { clientX: 120, clientY: 40 });
+    fireEvent.click(screen.getByTestId("menu-window"));
+    expect(openWindow).toHaveBeenCalledWith("tests");
+    fireEvent.contextMenu(screen.getByTestId("document-tab-tests"), { clientX: 120, clientY: 40 });
+    fireEvent.click(screen.getByTestId("menu-pin"));
+    expect(togglePin).toHaveBeenCalledWith("tests");
+  });
+
+  it("does not render an options button and supports keyboard context menus", () => {
+    render(<DocumentTabsBar tabs={tabs} activeId="requirements" secondaryId={null} onActivate={vi.fn()} onClose={vi.fn()} onSecondaryChange={vi.fn()} onOpenWindow={vi.fn()} onTogglePin={vi.fn()} onReorder={vi.fn()} />);
+    expect(screen.queryByTestId("document-tab-options-tests")).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId("document-tab-tests"), { key: "F10", shiftKey: true });
+    expect(screen.getByTestId("menu-window")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, LogOut, Search, Settings, Trash2, Users } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { FileText, LogOut, Redo2, Search, Settings, Trash2, Undo2, Users } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { MenuBar } from "../components/MenuBar";
@@ -12,6 +12,7 @@ import { useDocumentEvents } from "../hooks/useDocumentEvents";
 import { api, DocumentSummary, DocumentType, setSessionToken, UserProfile } from "../lib/api";
 import { openDocumentWindow } from "../lib/documentWindows";
 import { DocumentTab, useDocumentTabsStore } from "../stores/documentTabs";
+import { useEditHistoryStore } from "../stores/editHistory";
 import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
 
@@ -33,15 +34,22 @@ interface Workspace {
   name: string;
 }
 
+function initials(displayName: string): string {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  return `${parts[0]?.charAt(0) ?? "?"}${parts.length > 1 ? parts.at(-1)?.charAt(0) ?? "" : ""}`.toLocaleUpperCase();
+}
+
 export function ShellPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"documents" | "trash">("documents");
-  const [report, setReport] = useState<"baselines" | "coverage" | "matrix" | "reviews" | null>(null);
+  const [report, setReport] = useState<"baselines" | "coverage" | "matrix" | "reviews" | "runs" | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [profileUserId, setProfileUserId] = useState<string | null>(null);
+  const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
+  const [presenceOpen, setPresenceOpen] = useState(false);
+  const presenceCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeReport = useCallback(() => setReport(null), []);
   const tabs = useDocumentTabsStore((s) => s.tabs);
   const activeDocumentId = useDocumentTabsStore((s) => s.activeId);
@@ -50,9 +58,16 @@ export function ShellPage() {
   const activateDocumentTab = useDocumentTabsStore((s) => s.activate);
   const closeDocumentTab = useDocumentTabsStore((s) => s.close);
   const setSecondaryDocument = useDocumentTabsStore((s) => s.setSecondary);
+  const togglePinnedDocument = useDocumentTabsStore((s) => s.togglePin);
+  const reorderDocumentTabs = useDocumentTabsStore((s) => s.reorder);
   const focusDocumentPane = useDocumentTabsStore((s) => s.focus);
   const resetDocumentTabs = useDocumentTabsStore((s) => s.reset);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
+  const undoCount = useEditHistoryStore((s) => selectedDocumentId ? s.documents[selectedDocumentId]?.undo.length ?? 0 : 0);
+  const redoCount = useEditHistoryStore((s) => selectedDocumentId ? s.documents[selectedDocumentId]?.redo.length ?? 0 : 0);
+  const historyBusy = useEditHistoryStore((s) => selectedDocumentId ? Boolean(s.busy[selectedDocumentId]) : false);
+  const clearEditHistory = useEditHistoryStore((s) => s.clear);
+  const resetEditHistory = useEditHistoryStore((s) => s.reset);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
   const detailRowId = useSelectionStore((s) => s.detailRowId);
   const linkedRowId = useSelectionStore((s) => s.linkedRowId);
@@ -74,9 +89,10 @@ export function ShellPage() {
   }, [openDocumentTab, setSelectedDocumentId]);
 
   const closeDocument = useCallback((id: string) => {
+    clearEditHistory(id);
     closeDocumentTab(id);
     setSelectedDocumentId(useDocumentTabsStore.getState().activeId);
-  }, [closeDocumentTab, setSelectedDocumentId]);
+  }, [clearEditHistory, closeDocumentTab, setSelectedDocumentId]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -101,13 +117,27 @@ export function ShellPage() {
           closeDocument(activeId);
         }
       }
+      const target = event.target as HTMLElement | null;
+      const editingText = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+      if (!editingText && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        const documentId = useDocumentTabsStore.getState().activeId;
+        if (documentId) window.dispatchEvent(new CustomEvent(event.shiftKey ? "docsys:redo" : "docsys:undo", { detail: { documentId } }));
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [activateDocument, closeDocument]);
 
   useEffect(() => {
-    const openProfile = (event: Event) => setProfileUserId((event as CustomEvent<{ userId: string }>).detail.userId);
+    setPresenceOpen(false);
+    return () => {
+      if (presenceCloseTimer.current) clearTimeout(presenceCloseTimer.current);
+    };
+  }, [selectedDocumentId]);
+
+  useEffect(() => {
+    const openProfile = (event: Event) => setProfileTarget({ userId: (event as CustomEvent<{ userId: string }>).detail.userId, allowEdit: false });
     window.addEventListener("docsys:open-profile", openProfile);
     return () => window.removeEventListener("docsys:open-profile", openProfile);
   }, []);
@@ -168,8 +198,14 @@ export function ShellPage() {
     },
   });
 
+  useEffect(() => {
+    if (profile.isError) {
+      resetEditHistory();
+      navigate("/login", { replace: true });
+    }
+  }, [navigate, profile.isError, resetEditHistory]);
+
   if (profile.isError) {
-    navigate("/login");
     return null;
   }
   if (!profile.data || organizations.isLoading) {
@@ -203,7 +239,7 @@ export function ShellPage() {
           />
         )}
         {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} onClose={() => setSettingsOpen(false)} />}
-        {profileUserId && <ProfileDialog userId={profileUserId} currentUserId={profile.data.id} onClose={() => setProfileUserId(null)} />}
+        {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
       </Suspense>
       <div className="flex flex-1 gap-1.5 overflow-hidden p-2 pt-1.5">
       <aside
@@ -245,7 +281,7 @@ export function ShellPage() {
         </section>
         <div className="border-t border-white/10 p-3 text-sm">
           <div className="flex items-center gap-1">
-            <button data-testid="open-profile" className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left hover:bg-white/10" onClick={() => setProfileUserId(profile.data.id)}>{profile.data.displayName}</button>
+            <button data-testid="open-profile" className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left hover:bg-white/10" onClick={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}>{profile.data.displayName}</button>
           <button
             data-testid="logout"
             aria-label={t("logout")}
@@ -255,6 +291,7 @@ export function ShellPage() {
               await api("/auth/logout", { method: "POST" });
               setSessionToken(null);
               resetDocumentTabs();
+              resetEditHistory();
               queryClient.clear();
               navigate("/login");
             }}
@@ -273,34 +310,65 @@ export function ShellPage() {
           onActivate={activateDocument}
           onClose={closeDocument}
           onSecondaryChange={setSecondaryDocument}
+          onTogglePin={togglePinnedDocument}
+          onReorder={reorderDocumentTabs}
           onOpenWindow={(id) => {
             const tab = tabs.find((item) => item.id === id);
             if (tab) void openDocumentWindow(id, tab.title);
           }}
         />
-        <header className="flex items-center justify-between border-b border-border bg-surface/85 px-4 py-2.5 text-sm backdrop-blur-xl">
-          <button className="flex items-center gap-2 rounded-lg px-2 py-1 text-mutedForeground hover:bg-muted" onClick={() => setSearchOpen(true)}>
-            <Search size={14} />{t("globalSearch")} <span className="rounded border border-border px-1.5 text-[10px]">⌘K</span>
-          </button>
+        <header className="relative z-20 flex items-center justify-between border-b border-border bg-surface/85 px-4 py-2.5 text-sm backdrop-blur-xl">
+          <div className="flex items-center gap-1">
+            <button title={t("globalSearchHelp")} className="flex items-center gap-2 rounded-lg px-2 py-1 text-mutedForeground hover:bg-muted" onClick={() => setSearchOpen(true)}>
+              <Search size={14} />{t("globalSearch")} <span className="rounded border border-border px-1.5 text-[10px]">⌘K</span>
+            </button>
+            <span className="mx-1 h-5 border-l border-border" />
+            <button data-testid="undo-action" title={`${t("undoLastChange")} · Ctrl/Cmd+Z`} aria-label={t("undoLastChange")} disabled={!selectedDocumentId || undoCount === 0 || historyBusy} className="rounded-lg p-1.5 text-mutedForeground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35" onClick={() => selectedDocumentId && window.dispatchEvent(new CustomEvent("docsys:undo", { detail: { documentId: selectedDocumentId } }))}>
+              <Undo2 size={15} />
+            </button>
+            <button data-testid="redo-action" title={`${t("redoLastChange")} · Ctrl/Cmd+Shift+Z`} aria-label={t("redoLastChange")} disabled={!selectedDocumentId || redoCount === 0 || historyBusy} className="rounded-lg p-1.5 text-mutedForeground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35" onClick={() => selectedDocumentId && window.dispatchEvent(new CustomEvent("docsys:redo", { detail: { documentId: selectedDocumentId } }))}>
+              <Redo2 size={15} />
+            </button>
+          </div>
           {selectedDocumentId && view === "documents" && (
-            <span className="flex items-center gap-2 text-mutedForeground">
+            <div className="flex items-center gap-2 text-mutedForeground">
               <Users size={14} />
-              <span data-testid="presence-count">
-                {t("onlineUsers")}: {presence.length}
-              </span>
+              <div
+                className="relative"
+                onMouseEnter={() => {
+                  if (presenceCloseTimer.current) clearTimeout(presenceCloseTimer.current);
+                  setPresenceOpen(true);
+                }}
+                onMouseLeave={() => {
+                  presenceCloseTimer.current = setTimeout(() => setPresenceOpen(false), 140);
+                }}
+              >
+                <span data-testid="presence-count" title={t("showOnlineUsers")} className="block rounded-md px-1.5 py-1">{t("onlineUsers")}: {presence.length}</span>
+                {presenceOpen && (
+                  <div data-testid="presence-popover" className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-surfaceElevated p-2 shadow-2xl">
+                    <div className="px-2 pb-1.5 pt-1 text-xs font-medium text-mutedForeground">{t("onlineEditors")}</div>
+                    {presence.map((person) => (
+                      <button key={person.userId} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-muted" title={t("openUserProfile", { name: person.displayName })} onClick={() => { setPresenceOpen(false); setProfileTarget({ userId: person.userId, allowEdit: false }); }}>
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/30 bg-surface p-0.5"><span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primaryForeground">{initials(person.displayName)}</span></span>
+                        <span className="min-w-0 flex-1 truncate font-medium text-foreground">{person.displayName}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <span className="flex gap-1">
                 {presence.slice(0, 8).map((p) => (
                   <button
                     key={p.userId}
                     title={p.displayName}
-                    className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs text-primaryForeground"
-                    onClick={() => setProfileUserId(p.userId)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/30 bg-surface p-0.5 shadow-sm ring-1 ring-primary/15"
+                    onClick={() => setProfileTarget({ userId: p.userId, allowEdit: false })}
                   >
-                    {p.displayName.charAt(0).toUpperCase()}
+                    <span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primaryForeground">{initials(p.displayName)}</span>
                   </button>
                 ))}
               </span>
-            </span>
+            </div>
           )}
         </header>
         {view === "documents" && selectedDocumentId ? (

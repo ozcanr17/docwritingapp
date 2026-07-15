@@ -59,6 +59,21 @@ describe("lifecycle capabilities", () => {
     expect(JSON.parse(complete.body).status).toBe("passed");
   });
 
+  it("runs heading-based tests and updates step status from the row", async () => {
+    const testDocument = await createDocument(app, actor, workspaceId, "test", "Heading execution");
+    const template = await app.inject({ method: "POST", url: `/documents/${testDocument.id}/test-templates`, headers: { cookie: actor.cookie }, payload: { name: "Login", parentId: null, sectionTitles: ["Preconditions", "Inputs", "Constraints", "Steps"], defaultContent: "None." } });
+    const created = JSON.parse(template.body) as { root: { id: string }; step: { id: string } };
+    const executionResponse = await app.inject({ method: "POST", url: `/rows/${created.root.id}/executions`, headers: { cookie: actor.cookie }, payload: {} });
+    expect(executionResponse.statusCode).toBe(201);
+    const status = await app.inject({ method: "PATCH", url: `/test-steps/${created.step.id}/status`, headers: { cookie: actor.cookie }, payload: { status: "passed" } });
+    expect(status.statusCode).toBe(200);
+    const runs = await app.inject({ method: "GET", url: `/documents/${testDocument.id}/executions`, headers: { cookie: actor.cookie } });
+    expect(JSON.parse(runs.body)[0]).toEqual(expect.objectContaining({ status: "running", testCaseRow: expect.objectContaining({ title: "Login" }) }));
+    const execution = JSON.parse(executionResponse.body) as { id: string };
+    const stopped = await app.inject({ method: "POST", url: `/executions/${execution.id}/stop`, headers: { cookie: actor.cookie } });
+    expect(JSON.parse(stopped.body).status).toBe("skipped");
+  });
+
   it("sanitizes attachment names and verifies uploaded object metadata", async () => {
     const rowResponse = await app.inject({
       method: "POST",

@@ -580,6 +580,7 @@ model TestCaseDetail {
 
 model TestStepDetail {
   rowId          String   @id @db.Uuid
+  stepNumber     Int?
   action         String?
   expectedResult String?
   testResult     String?
@@ -771,6 +772,7 @@ model DocumentRevision {
   organizationId String   @db.Uuid
   documentId     String   @db.Uuid
   revisionNumber Int
+  semanticVersion String
   label          String?
   snapshotKey    String?
   summary        Json     @default("{}")
@@ -781,6 +783,7 @@ model DocumentRevision {
   document     Document     @relation(fields: [documentId], references: [id], onDelete: Restrict)
 
   @@unique([documentId, revisionNumber])
+  @@unique([documentId, semanticVersion])
   @@map("document_revisions")
 }
 

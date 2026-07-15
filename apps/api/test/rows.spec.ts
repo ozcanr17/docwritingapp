@@ -106,7 +106,7 @@ describe("document rows", () => {
       headers: { cookie: actor.cookie },
       payload: {
         expectedVersion: testStep.version,
-        testStepDetail: { action: "Enter valid credentials", expectedResult: "Dashboard opens", testResult: "Passed" },
+        testStepDetail: { stepNumber: 7, action: "Enter valid credentials", expectedResult: "Dashboard opens", testResult: "Passed" },
       },
     });
     expect(update.statusCode).toBe(200);
@@ -116,8 +116,63 @@ describe("document rows", () => {
       url: `/documents/${testDocument.id}/outline`,
       headers: { cookie: actor.cookie },
     });
-    const rows = JSON.parse(outline.body) as Array<{ id: string; testResult: string | null }>;
+    const rows = JSON.parse(outline.body) as Array<{ id: string; stepNumber: number | null; testResult: string | null }>;
     expect(rows.find((row) => row.id === testStep.id)?.testResult).toBe("Passed");
+    expect(rows.find((row) => row.id === testStep.id)?.stepNumber).toBe(7);
+  });
+
+  it("creates heading-based test templates and permits root test steps", async () => {
+    const sourceDocument = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    const testDocument = await createDocument(app, actor, sourceDocument.workspaceId, "test", "Template tests");
+    const rootStep = await createRow({ rowType: "test_step", title: "Independent step", parentId: null }, undefined, testDocument.id);
+    expect(rootStep.depth).toBe(0);
+    const response = await app.inject({
+      method: "POST",
+      url: `/documents/${testDocument.id}/test-templates`,
+      headers: { cookie: actor.cookie },
+      payload: { name: "Authentication", parentId: null, sectionTitles: ["Preconditions", "Inputs", "Constraints", "Steps"], defaultContent: "None." },
+    });
+    expect(response.statusCode).toBe(201);
+    const outline = await app.inject({ method: "GET", url: `/documents/${testDocument.id}/outline`, headers: { cookie: actor.cookie } });
+    const rows = JSON.parse(outline.body) as Array<{ rowType: string; title: string; displayNumber: string }>;
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ rowType: "heading", title: "Authentication" }),
+      expect.objectContaining({ rowType: "heading", title: "Preconditions" }),
+      expect.objectContaining({ rowType: "test_step", title: "" }),
+      expect.objectContaining({ rowType: "note", title: "None." }),
+    ]));
+    expect(rows.filter((row) => row.rowType === "note" && row.title === "None.")).toHaveLength(3);
+    const created = JSON.parse(response.body) as { root: { id: string } };
+    const removeTemplate = await app.inject({
+      method: "DELETE",
+      url: `/rows/${created.root.id}`,
+      headers: { cookie: actor.cookie },
+      payload: { childStrategy: "delete_subtree" },
+    });
+    expect(removeTemplate.statusCode).toBe(200);
+    const removedOutline = await app.inject({ method: "GET", url: `/documents/${testDocument.id}/outline`, headers: { cookie: actor.cookie } });
+    expect(JSON.parse(removedOutline.body)).toHaveLength(1);
+    const restoreTemplate = await app.inject({ method: "POST", url: `/rows/${created.root.id}/restore`, headers: { cookie: actor.cookie } });
+    expect(restoreTemplate.statusCode).toBe(201);
+    const restoredOutline = await app.inject({ method: "GET", url: `/documents/${testDocument.id}/outline`, headers: { cookie: actor.cookie } });
+    expect(JSON.parse(restoredOutline.body)).toHaveLength(10);
+  });
+
+  it("stores semantic cell values on headings and blank objects", async () => {
+    const sourceDocument = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    const testDocument = await createDocument(app, actor, sourceDocument.workspaceId, "test", "Flexible cells");
+    const heading = await createRow({ rowType: "heading", title: "Editable heading", parentId: null }, undefined, testDocument.id);
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/rows/${heading.id}`,
+      headers: { cookie: actor.cookie },
+      payload: { expectedVersion: heading.version, testStepDetail: { action: "Heading action", expectedResult: "Heading result" } },
+    });
+    expect(update.statusCode).toBe(200);
+    const outline = await app.inject({ method: "GET", url: `/documents/${testDocument.id}/outline`, headers: { cookie: actor.cookie } });
+    expect(JSON.parse(outline.body)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: heading.id, action: "Heading action", expectedResult: "Heading result" }),
+    ]));
   });
 
   it("returns 409 for stale version updates and does not overwrite", async () => {

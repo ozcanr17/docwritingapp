@@ -44,10 +44,20 @@ describe("baselines and coverage", () => {
       payload: { label: "Release 1.0" },
     });
     expect(baseline.statusCode).toBe(201);
-    const created = JSON.parse(baseline.body) as { revisionNumber: number; rowCount: number };
+    const created = JSON.parse(baseline.body) as { revisionNumber: number; semanticVersion: string; rowCount: number };
     expect(created.rowCount).toBe(3);
+    expect(created.semanticVersion).toBe("1.0");
 
-    // Modify one, delete one, add one after the baseline.
+    const baselineOutline = await app.inject({
+      method: "GET",
+      url: `/documents/${documentId}/outline`,
+      headers: { cookie: actor.cookie },
+    });
+    expect(JSON.parse(baselineOutline.body)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: keep.id, changeState: "baseline" }),
+      expect.objectContaining({ id: toChange.id, changeState: "baseline" }),
+    ]));
+
     await app.inject({
       method: "PATCH",
       url: `/rows/${toChange.id}`,
@@ -61,6 +71,15 @@ describe("baselines and coverage", () => {
       payload: {},
     });
     const added = await createRow({ rowType: "requirement", title: "New requirement", parentId: null });
+
+    const changedOutline = JSON.parse((await app.inject({
+      method: "GET",
+      url: `/documents/${documentId}/outline`,
+      headers: { cookie: actor.cookie },
+    })).body) as Array<{ id: string; changeState: string }>;
+    expect(changedOutline.find((row) => row.id === keep.id)?.changeState).toBe("baseline");
+    expect(changedOutline.find((row) => row.id === toChange.id)?.changeState).toBe("saved_self");
+    expect(changedOutline.find((row) => row.id === added.id)?.changeState).toBe("saved_self");
 
     const diff = await app.inject({
       method: "GET",
@@ -86,6 +105,8 @@ describe("baselines and coverage", () => {
       headers: { cookie: actor.cookie },
     });
     expect(JSON.parse(list.body)).toHaveLength(1);
+    const next = await app.inject({ method: "POST", url: `/documents/${documentId}/baselines`, headers: { cookie: actor.cookie }, payload: {} });
+    expect(JSON.parse(next.body).semanticVersion).toBe("1.1");
   });
 
   it("reports requirement coverage from verifying links", async () => {

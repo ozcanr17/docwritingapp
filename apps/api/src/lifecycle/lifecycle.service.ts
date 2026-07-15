@@ -472,10 +472,26 @@ export class LifecycleService {
     });
   }
 
+  async listDocumentExecutions(actorId: string, documentId: string) {
+    const document = await this.requireDocument(documentId);
+    await this.assertDocument(actorId, document, "row.read");
+    return this.prisma.testExecution.findMany({
+      where: { testCaseRow: { documentId, deletedAt: null } },
+      orderBy: { createdAt: "desc" },
+      include: {
+        testCaseRow: { select: { id: true, title: true, objectNumber: true } },
+        executedBy: { select: { id: true, displayName: true } },
+        steps: { include: { testStepRow: { select: { id: true, title: true, testStepDetail: true } } } },
+      },
+    });
+  }
+
   async createExecution(actorId: string, testCaseRowId: string, input: ExecutionInput) {
     const context = await this.requireRowContext(testCaseRowId);
     await this.assertDocument(actorId, context.document, "row.write");
-    if (context.row.rowType !== "test_case") throw new UnprocessableEntityException("Executions can only be created for test cases");
+    if (context.document.documentType !== "test" || (context.row.rowType !== "heading" && context.row.rowType !== "test_case")) {
+      throw new UnprocessableEntityException("Executions can only be created for test headings");
+    }
     const steps = await this.prisma.documentRow.findMany({
       where: {
         documentId: context.document.id,
@@ -485,6 +501,7 @@ export class LifecycleService {
       },
       orderBy: { rank: "asc" },
     });
+    if (steps.length === 0) throw new UnprocessableEntityException("The test heading does not contain test steps");
     return this.prisma.$transaction(async (tx) => {
       const execution = await tx.testExecution.create({
         data: {
@@ -523,9 +540,47 @@ export class LifecycleService {
   ) {
     const execution = await this.requireExecution(executionId);
     await this.assertDocument(actorId, execution.testCaseRow.document, "row.write");
-    return this.prisma.testStepExecution.update({
-      where: { executionId_testStepRowId: { executionId, testStepRowId: stepRowId } },
-      data: { status: input.status, actualResult: input.actualResult, executedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.testStepExecution.update({
+        where: { executionId_testStepRowId: { executionId, testStepRowId: stepRowId } },
+        data: { status: input.status, actualResult: input.actualResult, executedAt: new Date() },
+      });
+      await tx.testStepDetail.update({ where: { rowId: stepRowId }, data: { testResult: input.status } });
+      await this.audit.record(tx, {
+        organizationId: execution.testCaseRow.document.organizationId,
+        workspaceId: execution.testCaseRow.document.workspaceId,
+        actorId,
+        action: "test_step.status_updated",
+        entityType: "document_row",
+        entityId: stepRowId,
+        documentId: execution.testCaseRow.document.id,
+        nextData: { executionId, status: input.status },
+      });
+      return updated;
+    });
+  }
+
+  async updateTestStepStatus(actorId: string, stepRowId: string, status: ExecutionStatus) {
+    const context = await this.requireRowContext(stepRowId);
+    await this.assertDocument(actorId, context.document, "row.write");
+    if (context.row.rowType !== "test_step") throw new UnprocessableEntityException("Only test steps have execution status");
+    return this.prisma.$transaction(async (tx) => {
+      const detail = await tx.testStepDetail.update({ where: { rowId: stepRowId }, data: { testResult: status } });
+      await tx.testStepExecution.updateMany({
+        where: { testStepRowId: stepRowId, execution: { status: "running" } },
+        data: { status, executedAt: new Date() },
+      });
+      await this.audit.record(tx, {
+        organizationId: context.document.organizationId,
+        workspaceId: context.document.workspaceId,
+        actorId,
+        action: "test_step.status_updated",
+        entityType: "document_row",
+        entityId: stepRowId,
+        documentId: context.document.id,
+        nextData: { status },
+      });
+      return detail;
     });
   }
 
@@ -541,7 +596,47 @@ export class LifecycleService {
           ? "passed"
           : "running";
     if (status === "running") throw new UnprocessableEntityException("Every test step must have a final status");
-    return this.prisma.testExecution.update({ where: { id: executionId }, data: { status, completedAt: new Date() } });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.testExecution.update({ where: { id: executionId }, data: { status, completedAt: new Date() } });
+      await this.audit.record(tx, {
+        organizationId: execution.testCaseRow.document.organizationId,
+        workspaceId: execution.testCaseRow.document.workspaceId,
+        actorId,
+        action: "test_execution.completed",
+        entityType: "test_execution",
+        entityId: executionId,
+        documentId: execution.testCaseRow.document.id,
+        nextData: { status },
+      });
+      return updated;
+    });
+  }
+
+  async stopExecution(actorId: string, executionId: string) {
+    const execution = await this.requireExecution(executionId);
+    await this.assertDocument(actorId, execution.testCaseRow.document, "row.write");
+    if (execution.status !== "running") throw new UnprocessableEntityException("Only running executions can be stopped");
+    return this.prisma.$transaction(async (tx) => {
+      await tx.testStepExecution.updateMany({
+        where: { executionId, status: { in: ["not_run", "running"] } },
+        data: { status: "skipped", executedAt: new Date() },
+      });
+      const updated = await tx.testExecution.update({
+        where: { id: executionId },
+        data: { status: "skipped", completedAt: new Date() },
+      });
+      await this.audit.record(tx, {
+        organizationId: execution.testCaseRow.document.organizationId,
+        workspaceId: execution.testCaseRow.document.workspaceId,
+        actorId,
+        action: "test_execution.stopped",
+        entityType: "test_execution",
+        entityId: executionId,
+        documentId: execution.testCaseRow.document.id,
+        nextData: { status: "skipped" },
+      });
+      return updated;
+    });
   }
 
   async listReviews(actorId: string, documentId: string) {

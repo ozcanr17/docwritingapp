@@ -17,7 +17,7 @@ interface MenuBarProps {
   documentType: DocumentType | null;
   view: "documents" | "trash";
   setView: (view: "documents" | "trash") => void;
-  onOpenReport: (tab: "baselines" | "coverage" | "matrix" | "reviews") => void;
+  onOpenReport: (tab: "baselines" | "coverage" | "matrix" | "reviews" | "runs") => void;
 }
 
 function slugifyKey(name: string): string {
@@ -44,7 +44,8 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);
-  const isHidden = useColumnStore((s) => s.isHidden);
+  const hiddenByDocument = useColumnStore((s) => s.hidden);
+  const hiddenColumns = documentId ? hiddenByDocument[documentId] ?? [] : [];
   const toggleColumn = useColumnStore((s) => s.toggle);
   const fileInput = useRef<HTMLInputElement>(null);
   const reqifInput = useRef<HTMLInputElement>(null);
@@ -142,25 +143,6 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
 
   const isDocumentsView = view === "documents";
   const isTrashView = view === "trash";
-  const headingInsideTestCase = selectedRow?.rowType === "heading" && (() => {
-    let parentId = selectedRow.parentId;
-    while (parentId) {
-      const parent = outline.find((row) => row.id === parentId);
-      if (!parent) return false;
-      if (parent.rowType === "test_case") return true;
-      parentId = parent.parentId;
-    }
-    return false;
-  })();
-  const childType = selectedRow
-    ? documentType === "requirement" && (selectedRow.rowType === "heading" || selectedRow.rowType === "requirement")
-      ? "requirement"
-      : documentType === "test" && selectedRow.rowType === "heading"
-        ? headingInsideTestCase ? "test_step" : "test_case"
-        : documentType === "test" && selectedRow.rowType === "test_case"
-          ? "test_step"
-          : null
-    : null;
   const fileEntry: MenuEntry[] = [
     ...(gridDoc
       ? [
@@ -187,14 +169,26 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
       onSelect: () => insertRow.mutate({
         parentId: selectedRow?.parentId ?? null,
         afterRowId: selectedRow?.id,
-        rowType: selectedRow?.rowType ?? (documentType === "test" ? "test_case" : "requirement"),
+        rowType: "heading",
       }),
+    },
+    {
+      key: "add-blank-object",
+      label: t("addBlankObject"),
+      disabled: !gridDoc,
+      onSelect: () => insertRow.mutate({ parentId: selectedRow?.parentId ?? null, afterRowId: selectedRow?.id, rowType: "note" }),
     },
     {
       key: "add-object-below",
       label: `${t("addObjectBelow")}\tShift+Insert`,
-      disabled: !gridDoc || !selectedRow || !childType,
-      onSelect: () => selectedRow && childType && insertRow.mutate({ parentId: selectedRow.id, rowType: childType }),
+      disabled: !gridDoc || !selectedRow || (selectedRow.rowType !== "heading" && selectedRow.rowType !== "test_case"),
+      onSelect: () => selectedRow && insertRow.mutate({ parentId: selectedRow.id, rowType: "heading" }),
+    },
+    {
+      key: "add-blank-object-below",
+      label: t("addBlankObjectBelow"),
+      disabled: !gridDoc || !selectedRow || (selectedRow.rowType !== "heading" && selectedRow.rowType !== "test_case"),
+      onSelect: () => selectedRow && insertRow.mutate({ parentId: selectedRow.id, rowType: "note" }),
     },
     { key: "object-sep", label: "", separator: true },
     { key: "add-heading", label: t("addTopLevelHeading"), disabled: !gridDoc, onSelect: () => insertRow.mutate({ parentId: null, rowType: "heading" }) },
@@ -208,13 +202,13 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
       ? [{ key: "add-requirement", label: t("addRequirement"), disabled: !gridDoc, onSelect: () => insertRow.mutate({ parentId: null, rowType: "requirement" as const }) }]
       : []),
     ...(documentType === "test"
-      ? [{ key: "add-test-case", label: t("addTestCase"), disabled: !gridDoc, onSelect: () => insertRow.mutate({ parentId: null, rowType: "test_case" as const }) }]
+      ? [{ key: "add-test-template", label: t("addTestTemplate"), disabled: !gridDoc, onSelect: () => window.dispatchEvent(new CustomEvent("docsys:add-test-template", { detail: { parentId: selectedRow?.rowType === "heading" ? selectedRow.id : null } })) }]
       : []),
     {
       key: "add-test-step",
       label: t("addTestStep"),
-      disabled: documentType !== "test" || selectedRow?.rowType !== "test_case",
-      onSelect: () => selectedRowId && insertRow.mutate({ parentId: selectedRowId, rowType: "test_step" }),
+      disabled: documentType !== "test",
+      onSelect: () => insertRow.mutate({ parentId: selectedRow?.rowType === "heading" ? selectedRow.id : null, rowType: "test_step" }),
     },
     { key: "sep", label: "", separator: true },
     { key: "delete", label: t("deleteAction"), danger: true, disabled: !gridDoc || !selectedRowId, onSelect: () => window.dispatchEvent(new Event("docsys:delete-selected-row")) },
@@ -247,7 +241,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
     .map((column) => ({
       key: `col-${column.key}`,
       label: column.kind === "custom" ? column.labelKey : t(column.labelKey),
-      checked: documentId ? !isHidden(documentId, column.key) : false,
+      checked: documentId ? !hiddenColumns.includes(column.key) : false,
       onSelect: () => documentId && toggleColumn(documentId, column.key),
     }));
 
@@ -256,6 +250,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
     { key: "coverage", label: t("coverageReport"), onSelect: () => onOpenReport("coverage") },
     { key: "matrix", label: t("traceabilityMatrix"), onSelect: () => onOpenReport("matrix") },
     { key: "reviews", label: t("reviews"), onSelect: () => onOpenReport("reviews") },
+    ...(documentType === "test" ? [{ key: "runs", label: t("testRuns"), onSelect: () => onOpenReport("runs" as const) }] : []),
   ];
 
   const helpEntries: MenuEntry[] = [

@@ -32,6 +32,9 @@ function makeRow(partial: Partial<OutlineRow> & Pick<OutlineRow, "id" | "parentI
     linkedRequirements: [],
     linkCount: 0,
     stepNumber: null,
+    updatedAt: "2026-07-15T12:00:00.000Z",
+    updatedById: "user-1",
+    changeState: "saved_self",
     ...partial,
   };
 }
@@ -42,14 +45,14 @@ const rows: OutlineRow[] = [
   makeRow({ id: "r3", objectNumber: 3, parentId: "r1", rank: "r", depth: 1, rowType: "requirement", title: "Gereksinim B", displayNumber: "1.2" }),
 ];
 
-function renderGrid(seed: OutlineRow[]) {
+function renderGrid(seed: OutlineRow[], documentType: "requirement" | "test" = "requirement") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["outline", "doc-1"], seed);
   client.setQueryData(["fields", "doc-1"], []);
   return render(
     <QueryClientProvider client={client}>
       <div style={{ height: 600 }}>
-        <DocumentGrid documentId="doc-1" documentType="requirement" />
+        <DocumentGrid documentId="doc-1" documentType={documentType} />
       </div>
     </QueryClientProvider>,
   );
@@ -68,11 +71,25 @@ describe("DocumentGrid", () => {
     expect(screen.getByTestId("grid-empty")).toBeInTheDocument();
   });
 
-  it("supports selecting multiple rows with row checkboxes", () => {
+  it("supports selecting multiple rows with modifier keys", () => {
     renderGrid(rows);
-    fireEvent.click(screen.getByTestId("select-row-1"));
-    fireEvent.click(screen.getByTestId("select-row-1.1"));
+    fireEvent.click(screen.getByTestId("grid-row-1"));
+    fireEvent.click(screen.getByTestId("grid-row-1.1"), { ctrlKey: true });
     expect(screen.getByTestId("bulk-delete")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /select/i })).not.toBeInTheDocument();
+  });
+
+  it("shows a saved change indicator on the row edge", () => {
+    renderGrid(rows);
+    expect(screen.getByTestId("row-change-state-1")).toHaveClass("bg-primary");
+  });
+
+  it("collapses and expands a hierarchy from the heading affordance", () => {
+    renderGrid(rows);
+    fireEvent.click(screen.getByTestId("toggle-row-1"));
+    expect(screen.queryByTestId("grid-row-1.1")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("toggle-row-1"));
+    expect(screen.getByTestId("grid-row-1.1")).toBeInTheDocument();
   });
 
   it("filters by object type and shows a compact link count", () => {
@@ -97,5 +114,35 @@ describe("DocumentGrid", () => {
     fireEvent.click(screen.getByTestId("menu-delete"));
     expect(screen.getByTestId("delete-promote-children")).toBeInTheDocument();
     expect(screen.getByTestId("delete-subtree")).toBeInTheDocument();
+  });
+
+  it("edits heading numbering together with content", () => {
+    renderGrid(rows);
+    fireEvent.doubleClick(screen.getAllByTestId("cell-value-title")[0] as HTMLElement);
+    expect(screen.getByTestId("cell-input-title")).toHaveValue("Giris");
+    expect(screen.getByTestId("inline-numbering-start")).toHaveValue(1);
+    fireEvent.click(screen.getByTestId("inline-numbering-start"));
+    expect(screen.getByTestId("cell-input-title")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("cell-input-title"), { target: { value: "Changed" } });
+    fireEvent.keyDown(screen.getByTestId("cell-input-title"), { key: "Escape" });
+    expect(screen.queryByTestId("cell-input-title")).not.toBeInTheDocument();
+    expect(screen.getByText("1 Giris")).toBeInTheDocument();
+  });
+
+  it("offers another test step from a test step and edits its step number", () => {
+    const step = makeRow({ id: "step-1", parentId: null, depth: 0, rowType: "test_step", title: "", displayNumber: "1", stepNumber: 3 });
+    renderGrid([step], "test");
+    fireEvent.contextMenu(screen.getByTestId("grid-row-1"), { clientX: 10, clientY: 10 });
+    expect(screen.getByTestId("menu-testStepAfter")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.doubleClick(screen.getByTestId("cell-value-stepNumber"));
+    expect(screen.getByTestId("cell-input-stepNumber")).toHaveValue("3");
+  });
+
+  it("hides a column from the active view immediately", () => {
+    renderGrid(rows);
+    fireEvent.click(screen.getByRole("button", { name: "Gereksinim No" }));
+    fireEvent.click(screen.getByTestId("menu-hide"));
+    expect(screen.queryByRole("button", { name: "Gereksinim No" })).not.toBeInTheDocument();
   });
 });
