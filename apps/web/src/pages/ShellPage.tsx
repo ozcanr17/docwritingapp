@@ -4,11 +4,14 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { MenuBar } from "../components/MenuBar";
+import { DocumentTabsBar } from "../components/DocumentTabsBar";
 import { ResizeHandle } from "../components/ResizeHandle";
 import { TrashPanel } from "../components/TrashPanel";
 import { TreePanel } from "../components/TreePanel";
 import { useDocumentEvents } from "../hooks/useDocumentEvents";
-import { api, DocumentType, setSessionToken, UserProfile } from "../lib/api";
+import { api, DocumentSummary, DocumentType, setSessionToken, UserProfile } from "../lib/api";
+import { openDocumentWindow } from "../lib/documentWindows";
+import { DocumentTab, useDocumentTabsStore } from "../stores/documentTabs";
 import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
 
@@ -40,6 +43,15 @@ export function ShellPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const closeReport = useCallback(() => setReport(null), []);
+  const tabs = useDocumentTabsStore((s) => s.tabs);
+  const activeDocumentId = useDocumentTabsStore((s) => s.activeId);
+  const secondaryDocumentId = useDocumentTabsStore((s) => s.secondaryId);
+  const openDocumentTab = useDocumentTabsStore((s) => s.open);
+  const activateDocumentTab = useDocumentTabsStore((s) => s.activate);
+  const closeDocumentTab = useDocumentTabsStore((s) => s.close);
+  const setSecondaryDocument = useDocumentTabsStore((s) => s.setSecondary);
+  const focusDocumentPane = useDocumentTabsStore((s) => s.focus);
+  const resetDocumentTabs = useDocumentTabsStore((s) => s.reset);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
   const detailRowId = useSelectionStore((s) => s.detailRowId);
@@ -49,16 +61,50 @@ export function ShellPage() {
   const setTreeWidth = useLayoutStore((s) => s.setTreeWidth);
   const setDetailWidth = useLayoutStore((s) => s.setDetailWidth);
 
+  const activateDocument = useCallback((id: string) => {
+    activateDocumentTab(id);
+    setSelectedDocumentId(id);
+    setView("documents");
+  }, [activateDocumentTab, setSelectedDocumentId]);
+
+  const openDocument = useCallback((document: DocumentTab) => {
+    openDocumentTab(document);
+    setSelectedDocumentId(document.id);
+    setView("documents");
+  }, [openDocumentTab, setSelectedDocumentId]);
+
+  const closeDocument = useCallback((id: string) => {
+    closeDocumentTab(id);
+    setSelectedDocumentId(useDocumentTabsStore.getState().activeId);
+  }, [closeDocumentTab, setSelectedDocumentId]);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen(true);
       }
+      if ((event.metaKey || event.ctrlKey) && event.key === "Tab") {
+        event.preventDefault();
+        const state = useDocumentTabsStore.getState();
+        if (state.tabs.length < 2 || !state.activeId) return;
+        const index = state.tabs.findIndex((tab) => tab.id === state.activeId);
+        const next = state.tabs[(index + (event.shiftKey ? -1 : 1) + state.tabs.length) % state.tabs.length];
+        if (next) activateDocument(next.id);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "w") {
+        const target = event.target as HTMLElement | null;
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+        const activeId = useDocumentTabsStore.getState().activeId;
+        if (activeId) {
+          event.preventDefault();
+          closeDocument(activeId);
+        }
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, []);
+  }, [activateDocument, closeDocument]);
 
   useEffect(() => {
     const openProfile = (event: Event) => setProfileUserId((event as CustomEvent<{ userId: string }>).detail.userId);
@@ -91,11 +137,19 @@ export function ShellPage() {
 
   const selectedDocument = useQuery({
     queryKey: ["document", selectedDocumentId],
-    queryFn: () => api<{ id: string; documentType: DocumentType }>(`/documents/${selectedDocumentId}`),
+    queryFn: () => api<DocumentSummary>(`/documents/${selectedDocumentId}`),
     enabled: selectedDocumentId !== null,
   });
-  const isTextDocument = selectedDocument.data?.documentType === "general_document";
+  useEffect(() => {
+    if (selectedDocument.data) useDocumentTabsStore.getState().update(selectedDocument.data);
+  }, [selectedDocument.data]);
 
+  useEffect(() => {
+    if (!profile.isSuccess) return;
+    const documentId = new URLSearchParams(window.location.search).get("document");
+    if (!documentId || useDocumentTabsStore.getState().tabs.some((tab) => tab.id === documentId)) return;
+    void api<DocumentSummary>(`/documents/${documentId}`).then(openDocument).catch(() => undefined);
+  }, [profile.isSuccess, openDocument]);
   const bootstrap = useMutation({
     mutationFn: async (input: { orgName: string; workspaceName: string }) => {
       const slugBase = `org-${Date.now()}`;
@@ -141,9 +195,8 @@ export function ShellPage() {
           <GlobalSearchDialog
             workspaceId={workspaceId}
             onClose={() => setSearchOpen(false)}
-            onSelect={(documentId, rowId) => {
-              setView("documents");
-              setSelectedDocumentId(documentId);
+            onSelect={(document, rowId) => {
+              openDocument({ id: document.id, title: document.title, documentType: document.documentType as DocumentType });
               setSearchOpen(false);
               window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0);
             }}
@@ -186,7 +239,7 @@ export function ShellPage() {
               <TreePanel
                 workspaceId={workspaceId}
                 selectedDocumentId={selectedDocumentId}
-                onSelectDocument={setSelectedDocumentId}
+                onSelectDocument={openDocument}
               />
             ))}
         </section>
@@ -201,6 +254,7 @@ export function ShellPage() {
             onClick={async () => {
               await api("/auth/logout", { method: "POST" });
               setSessionToken(null);
+              resetDocumentTabs();
               queryClient.clear();
               navigate("/login");
             }}
@@ -212,6 +266,18 @@ export function ShellPage() {
       </aside>
       <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />
       <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+        <DocumentTabsBar
+          tabs={tabs}
+          activeId={activeDocumentId}
+          secondaryId={secondaryDocumentId}
+          onActivate={activateDocument}
+          onClose={closeDocument}
+          onSecondaryChange={setSecondaryDocument}
+          onOpenWindow={(id) => {
+            const tab = tabs.find((item) => item.id === id);
+            if (tab) void openDocumentWindow(id, tab.title);
+          }}
+        />
         <header className="flex items-center justify-between border-b border-border bg-surface/85 px-4 py-2.5 text-sm backdrop-blur-xl">
           <button className="flex items-center gap-2 rounded-lg px-2 py-1 text-mutedForeground hover:bg-muted" onClick={() => setSearchOpen(true)}>
             <Search size={14} />{t("globalSearch")} <span className="rounded border border-border px-1.5 text-[10px]">⌘K</span>
@@ -238,16 +304,20 @@ export function ShellPage() {
           )}
         </header>
         {view === "documents" && selectedDocumentId ? (
-          <Suspense fallback={<PanelLoading />}>
-            {isTextDocument ? (
-              <RichTextEditor documentId={selectedDocumentId} displayName={profile.data.displayName} />
-            ) : (
-              <DocumentGrid
-                documentId={selectedDocumentId}
-                documentType={selectedDocument.data?.documentType === "test" ? "test" : "requirement"}
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <DocumentPane tab={tabs.find((tab) => tab.id === selectedDocumentId) ?? null} displayName={profile.data.displayName} active onFocus={() => undefined} />
+            {secondaryDocumentId && (
+              <DocumentPane
+                tab={tabs.find((tab) => tab.id === secondaryDocumentId) ?? null}
+                displayName={profile.data.displayName}
+                active={false}
+                onFocus={() => {
+                  focusDocumentPane(secondaryDocumentId);
+                  setSelectedDocumentId(secondaryDocumentId);
+                }}
               />
             )}
-          </Suspense>
+          </div>
         ) : view === "documents" ? (
           <div className="p-8 text-sm text-mutedForeground">{t("selectDocument")}</div>
         ) : (
@@ -270,6 +340,19 @@ export function ShellPage() {
       )}
       </div>
     </div>
+  );
+}
+
+function DocumentPane({ tab, displayName, active, onFocus }: { tab: DocumentTab | null; displayName: string; active: boolean; onFocus: () => void }) {
+  const { t } = useTranslation();
+  if (!tab) return <PanelLoading />;
+  return (
+    <section aria-label={tab.title} className={`flex min-w-0 flex-1 flex-col overflow-hidden ${active ? "" : "border-l border-border"}`} onMouseDownCapture={onFocus}>
+      {!active && <div className="flex h-8 shrink-0 items-center justify-between border-b border-border bg-editorBackground px-3 text-xs"><span className="truncate font-medium">{tab.title}</span><span className="text-[10px] uppercase tracking-wide text-mutedForeground">{t("secondaryPane")}</span></div>}
+      <Suspense fallback={<PanelLoading />}>
+        {tab.documentType === "general_document" ? <RichTextEditor documentId={tab.id} displayName={displayName} /> : <DocumentGrid documentId={tab.id} documentType={tab.documentType === "test" ? "test" : "requirement"} />}
+      </Suspense>
+    </section>
   );
 }
 

@@ -193,6 +193,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.11.0
         version: 3.14.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@tauri-apps/api':
+        specifier: 2.11.1
+        version: 2.11.1
       '@tauri-apps/plugin-process':
         specifier: ^2.3.0
         version: 2.3.1

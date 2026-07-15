@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, LinkCandidate, RowComment, RowDetail, TestExecution } from "../lib/api";
 import { useSelectionStore } from "../stores/selection";
+import { useDocumentTabsStore } from "../stores/documentTabs";
 import { useToastStore } from "../stores/toasts";
 
 interface RowDetailPanelProps {
@@ -34,6 +35,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
   const openLinked = useSelectionStore((s) => s.openLinked);
+  const openDocumentTab = useDocumentTabsStore((s) => s.open);
   const closeLinked = useSelectionStore((s) => s.closeLinked);
   const closeDetail = useSelectionStore((s) => s.closeDetail);
   const [description, setDescription] = useState("");
@@ -261,7 +263,12 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
                     <button
                       data-testid="open-linked"
                       className="flex w-full items-start gap-2 text-left text-primary hover:underline"
-                      onClick={() => openLinked(otherId)}
+                      onClick={() => {
+                        if (!other) return;
+                        openDocumentTab({ id: other.document.id, title: other.document.title, documentType: other.document.documentType });
+                        useSelectionStore.getState().setDocument(other.document.id);
+                        window.setTimeout(() => useSelectionStore.getState().openDetail(otherId), 0);
+                      }}
                     >
                       <ExternalLink size={13} className="mt-0.5 shrink-0" />
                       <span className="min-w-0 flex-1">
@@ -273,6 +280,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
                         </span>
                       </span>
                     </button>
+                    <button className="mt-1 text-[10px] text-mutedForeground hover:text-foreground hover:underline" onClick={() => openLinked(otherId)}>{t("quickPreview")}</button>
                     {link.suspect && (
                       <div className="mt-1 flex items-center gap-1">
                         <span

@@ -8,7 +8,7 @@ import { ContextMenu, MenuItem } from "./ContextMenu";
 interface TreePanelProps {
   workspaceId: string;
   selectedDocumentId: string | null;
-  onSelectDocument: (id: string) => void;
+  onSelectDocument: (document: DocumentSummary) => void;
 }
 
 interface TreeChildren {
@@ -82,7 +82,7 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
             method: "POST",
             body: JSON.stringify({ name, parentId: folderId }),
           })
-        : api<{ id: string }>(`/workspaces/${workspaceId}/documents`, {
+        : api<DocumentSummary>(`/workspaces/${workspaceId}/documents`, {
             method: "POST",
             body: JSON.stringify({
               title: name,
@@ -94,7 +94,7 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
     const created = await request;
     await invalidateBranch(folderId);
     setCreateState(null);
-    if (kind !== "folder") onSelectDocument(created.id);
+    if (kind !== "folder") onSelectDocument(created as DocumentSummary);
   };
 
   const deleteDocument = async (documentId: string) => {
@@ -171,7 +171,7 @@ function TreeBranch(props: {
   parentId: string | null;
   depth: number;
   selectedDocumentId: string | null;
-  onSelectDocument: (id: string) => void;
+  onSelectDocument: (document: DocumentSummary) => void;
   onContextMenu: (state: MenuState) => void;
 }) {
   const { workspaceId, parentId, depth, selectedDocumentId, onSelectDocument, onContextMenu } = props;
@@ -235,7 +235,7 @@ function TreeBranch(props: {
               selectedDocumentId === document.id ? "bg-selection" : ""
             }`}
             style={{ paddingLeft: 22 + depth * 14 }}
-            onClick={() => onSelectDocument(document.id)}
+            onClick={() => onSelectDocument(document)}
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();

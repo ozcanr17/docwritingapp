@@ -13,7 +13,7 @@ interface SearchResult {
   document: { id: string; title: string; documentType: string };
 }
 
-export function GlobalSearchDialog({ workspaceId, onClose, onSelect }: { workspaceId: string; onClose: () => void; onSelect: (documentId: string, rowId: string) => void }) {
+export function GlobalSearchDialog({ workspaceId, onClose, onSelect }: { workspaceId: string; onClose: () => void; onSelect: (document: SearchResult["document"], rowId: string) => void }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const results = useQuery({
@@ -36,7 +36,7 @@ export function GlobalSearchDialog({ workspaceId, onClose, onSelect }: { workspa
         </div>
         <div className="max-h-[58vh] overflow-auto p-2">
           {results.data?.map((result) => (
-            <button key={result.id} className="flex w-full gap-3 rounded-xl p-3 text-left hover:bg-muted" onClick={() => onSelect(result.document.id, result.id)}>
+            <button key={result.id} className="flex w-full gap-3 rounded-xl p-3 text-left hover:bg-muted" onClick={() => onSelect(result.document, result.id)}>
               <FileText size={16} className="mt-0.5 shrink-0 text-primary" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{[result.requirementNo, result.title].filter(Boolean).join(" : ") || "-"}</span>
