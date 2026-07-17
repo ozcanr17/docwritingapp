@@ -430,6 +430,19 @@ export interface TestExecution {
     id: string;
     status: "not_run" | "running" | "passed" | "failed" | "blocked" | "skipped";
     actualResult: string | null;
+    evidence: Array<{
+      id: string;
+      kind: "attachment" | "defect";
+      addedAt: string;
+      addedById: string;
+      attachmentId?: string;
+      fileName?: string;
+      contentType?: string;
+      sizeBytes?: number;
+      reference?: string;
+      summary?: string;
+      url?: string;
+    }>;
     testStepRow: { id: string; title: string; testStepDetail: { action: string | null; expectedResult: string | null } | null };
   }>;
 }

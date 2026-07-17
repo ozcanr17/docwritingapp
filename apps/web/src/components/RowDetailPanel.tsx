@@ -6,6 +6,7 @@ import { api, ApiError, LinkCandidate, RowComment, RowDetail, TestExecution } fr
 import { useSelectionStore } from "../stores/selection";
 import { useDocumentTabsStore } from "../stores/documentTabs";
 import { useToastStore } from "../stores/toasts";
+import { ExecutionStepCard } from "./ExecutionStepCard";
 
 interface RowDetailPanelProps {
   rowId: string;
@@ -170,15 +171,6 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
       pushToast("success", t("executionStarted"));
     },
     onError: (error) => pushToast("error", apiErrorDetail(error) ?? t("executionStartFailed")),
-  });
-  const updateExecutionStep = useMutation({
-    mutationFn: (input: { executionId: string; stepRowId: string; status: string }) =>
-      api(`/executions/${input.executionId}/steps/${input.stepRowId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: input.status }),
-      }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["executions", rowId] }),
-    onError: () => pushToast("error", t("genericError")),
   });
   const completeExecution = useMutation({
     mutationFn: (executionId: string) => api(`/executions/${executionId}/complete`, { method: "POST" }),
@@ -447,31 +439,18 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
                   <span className="font-medium">{execution.status}</span>
                   <span className="text-mutedForeground">{new Date(execution.createdAt).toLocaleString()}</span>
                 </div>
-                {execution.status === "running" && (
+                <details className="mt-2" open={execution.status === "running"}>
+                  <summary className="cursor-pointer text-xs text-mutedForeground">{t("executionSteps")} ({execution.steps.length})</summary>
                   <div className="mt-2 space-y-1.5">
-                    {execution.steps.map((step) => (
-                      <label key={step.id} className="flex items-center justify-between gap-2 text-xs">
-                        <span className="min-w-0 flex-1 truncate">{step.testStepRow.title || step.testStepRow.testStepDetail?.action || "—"}</span>
-                        <select
-                          data-testid={`execution-step-${step.testStepRow.id}`}
-                          className="rounded border border-border bg-surface px-1.5 py-1"
-                          value={step.status}
-                          onChange={(event) => updateExecutionStep.mutate({ executionId: execution.id, stepRowId: step.testStepRow.id, status: event.target.value })}
-                        >
-                          <option value="not_run">{t("notRun")}</option>
-                          <option value="passed">{t("passed")}</option>
-                          <option value="failed">{t("failed")}</option>
-                          <option value="blocked">{t("blocked")}</option>
-                          <option value="skipped">{t("skipped")}</option>
-                        </select>
-                      </label>
-                    ))}
+                    {execution.steps.map((step) => <ExecutionStepCard key={step.id} executionId={execution.id} step={step} editable={execution.status === "running"} onChanged={() => void queryClient.invalidateQueries({ queryKey: ["executions", rowId] })} />)}
+                    {execution.status === "running" && (
                     <div className="mt-1 grid grid-cols-2 gap-2">
                       <button className="rounded bg-primary px-2 py-1 text-xs text-primaryForeground" onClick={() => completeExecution.mutate(execution.id)}>{t("completeExecution")}</button>
                       <button className="rounded bg-destructive/10 px-2 py-1 text-xs text-destructive" onClick={() => stopExecution.mutate(execution.id)}>{t("stopRun")}</button>
                     </div>
+                    )}
                   </div>
-                )}
+                </details>
               </div>
             ))}
           </div>

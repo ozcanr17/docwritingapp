@@ -37,6 +37,25 @@ interface ExecutionInput {
   retestPackageItemId?: string;
 }
 
+interface ExecutionEvidence {
+  id: string;
+  kind: "attachment" | "defect";
+  addedAt: string;
+  addedById: string;
+  attachmentId?: string;
+  fileName?: string;
+  contentType?: string;
+  sizeBytes?: number;
+  reference?: string;
+  summary?: string;
+  url?: string;
+}
+
+function evidenceItems(value: Prisma.JsonValue): ExecutionEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is ExecutionEvidence & Prisma.JsonObject => Boolean(item && typeof item === "object" && !Array.isArray(item) && typeof item.id === "string" && (item.kind === "attachment" || item.kind === "defect")));
+}
+
 interface RetestPackageInput {
   name: string;
   candidateRowIds: string[];
@@ -1212,6 +1231,7 @@ export class LifecycleService {
   ) {
     const execution = await this.requireExecution(executionId);
     await this.assertDocument(actorId, execution.testCaseRow.document, "row.write");
+    if (execution.status !== "running") throw new UnprocessableEntityException("Only running executions can be edited");
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.testStepExecution.update({
         where: { executionId_testStepRowId: { executionId, testStepRowId: stepRowId } },
@@ -1227,6 +1247,69 @@ export class LifecycleService {
         entityId: stepRowId,
         documentId: execution.testCaseRow.document.id,
         nextData: { executionId, status: input.status },
+      });
+      return updated;
+    });
+  }
+
+  async addExecutionEvidence(
+    actorId: string,
+    executionId: string,
+    stepRowId: string,
+    input: { kind: "attachment"; attachmentId: string } | { kind: "defect"; reference: string; summary?: string; url?: string },
+  ) {
+    const execution = await this.requireExecution(executionId);
+    await this.assertDocument(actorId, execution.testCaseRow.document, "row.write");
+    if (execution.status !== "running") throw new UnprocessableEntityException("Only running executions can be edited");
+    const step = await this.prisma.testStepExecution.findUnique({ where: { executionId_testStepRowId: { executionId, testStepRowId: stepRowId } } });
+    if (!step) throw new NotFoundException("Execution step not found");
+    let item: ExecutionEvidence;
+    if (input.kind === "attachment") {
+      const attachment = await this.prisma.attachment.findFirst({ where: { id: input.attachmentId, rowId: stepRowId, organizationId: execution.organizationId, deletedAt: null } });
+      if (!attachment) throw new UnprocessableEntityException("Evidence attachment must belong to the executed test step");
+      await this.assertAttachmentObject(attachment.storageKey, Number(attachment.sizeBytes), attachment.contentType, attachment.checksum);
+      item = { id: randomUUID(), kind: "attachment", addedAt: new Date().toISOString(), addedById: actorId, attachmentId: attachment.id, fileName: attachment.fileName, contentType: attachment.contentType, sizeBytes: Number(attachment.sizeBytes) };
+    } else {
+      item = { id: randomUUID(), kind: "defect", addedAt: new Date().toISOString(), addedById: actorId, reference: input.reference, summary: input.summary, url: input.url };
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.testStepExecution.findUniqueOrThrow({ where: { executionId_testStepRowId: { executionId, testStepRowId: stepRowId } } });
+      const evidence = [...evidenceItems(current.evidence), item];
+      const updated = await tx.testStepExecution.update({ where: { id: current.id }, data: { evidence: evidence as unknown as Prisma.InputJsonValue } });
+      await this.audit.record(tx, {
+        organizationId: execution.testCaseRow.document.organizationId,
+        workspaceId: execution.testCaseRow.document.workspaceId,
+        actorId,
+        action: "test_execution.evidence_added",
+        entityType: "test_execution",
+        entityId: executionId,
+        documentId: execution.testCaseRow.document.id,
+        nextData: { stepRowId, evidenceId: item.id, kind: item.kind } as Prisma.InputJsonValue,
+      });
+      return updated;
+    });
+  }
+
+  async deleteExecutionEvidence(actorId: string, executionId: string, stepRowId: string, evidenceId: string) {
+    const execution = await this.requireExecution(executionId);
+    await this.assertDocument(actorId, execution.testCaseRow.document, "row.write");
+    if (execution.status !== "running") throw new UnprocessableEntityException("Only running executions can be edited");
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.testStepExecution.findUnique({ where: { executionId_testStepRowId: { executionId, testStepRowId: stepRowId } } });
+      if (!current) throw new NotFoundException("Execution step not found");
+      const existing = evidenceItems(current.evidence);
+      if (!existing.some((item) => item.id === evidenceId)) throw new NotFoundException("Execution evidence not found");
+      const evidence = existing.filter((item) => item.id !== evidenceId);
+      const updated = await tx.testStepExecution.update({ where: { id: current.id }, data: { evidence: evidence as unknown as Prisma.InputJsonValue } });
+      await this.audit.record(tx, {
+        organizationId: execution.testCaseRow.document.organizationId,
+        workspaceId: execution.testCaseRow.document.workspaceId,
+        actorId,
+        action: "test_execution.evidence_removed",
+        entityType: "test_execution",
+        entityId: executionId,
+        documentId: execution.testCaseRow.document.id,
+        previousData: { stepRowId, evidenceId, kind: existing.find((item) => item.id === evidenceId)?.kind } as Prisma.InputJsonValue,
       });
       return updated;
     });

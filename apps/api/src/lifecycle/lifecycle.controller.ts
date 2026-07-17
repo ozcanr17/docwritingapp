@@ -62,6 +62,16 @@ const stepExecutionSchema = z.object({
   actualResult: z.string().max(20000).nullable().optional(),
 });
 
+const executionEvidenceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("attachment"), attachmentId: z.string().uuid() }),
+  z.object({
+    kind: z.literal("defect"),
+    reference: z.string().trim().min(1).max(120),
+    summary: z.string().trim().max(500).optional(),
+    url: z.string().url().refine((value) => value.startsWith("https://") || value.startsWith("http://")).optional(),
+  }),
+]);
+
 const reviewSchema = z.object({
   title: z.string().min(1).max(300),
   description: z.string().max(10000).optional(),
@@ -354,6 +364,26 @@ export class LifecycleController {
     @Body(new ZodBodyPipe(stepExecutionSchema)) body: z.infer<typeof stepExecutionSchema>,
   ) {
     return this.lifecycle.updateExecutionStep(user.userId, executionId, stepRowId, body);
+  }
+
+  @Post("executions/:executionId/steps/:stepRowId/evidence")
+  addExecutionEvidence(
+    @CurrentUser() user: SessionUser,
+    @Param("executionId", ParseUUIDPipe) executionId: string,
+    @Param("stepRowId", ParseUUIDPipe) stepRowId: string,
+    @Body(new ZodBodyPipe(executionEvidenceSchema)) body: z.infer<typeof executionEvidenceSchema>,
+  ) {
+    return this.lifecycle.addExecutionEvidence(user.userId, executionId, stepRowId, body);
+  }
+
+  @Delete("executions/:executionId/steps/:stepRowId/evidence/:evidenceId")
+  deleteExecutionEvidence(
+    @CurrentUser() user: SessionUser,
+    @Param("executionId", ParseUUIDPipe) executionId: string,
+    @Param("stepRowId", ParseUUIDPipe) stepRowId: string,
+    @Param("evidenceId", ParseUUIDPipe) evidenceId: string,
+  ) {
+    return this.lifecycle.deleteExecutionEvidence(user.userId, executionId, stepRowId, evidenceId);
   }
 
   @Post("executions/:executionId/complete")

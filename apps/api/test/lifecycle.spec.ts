@@ -78,9 +78,30 @@ describe("lifecycle capabilities", () => {
     expect(JSON.parse(comment.body).mentions).toContain(actor.userId);
     const executionResponse = await app.inject({ method: "POST", url: `/rows/${testCase.id}/executions`, headers: { cookie: actor.cookie }, payload: {} });
     const execution = JSON.parse(executionResponse.body) as { id: string };
+    const evidenceResponse = await app.inject({ method: "POST", url: `/executions/${execution.id}/steps/${step.id}/evidence`, headers: { cookie: actor.cookie }, payload: { kind: "defect", reference: "BUG-42", summary: "Stop command is ignored", url: "https://issues.example.test/BUG-42" } });
+    expect(evidenceResponse.statusCode).toBe(201);
+    const evidence = JSON.parse(evidenceResponse.body).evidence as Array<{ id: string; kind: string; reference: string }>;
+    expect(evidence).toEqual([expect.objectContaining({ kind: "defect", reference: "BUG-42" })]);
+    const attachmentResponse = await app.inject({ method: "POST", url: `/rows/${step.id}/attachments`, headers: { cookie: actor.cookie }, payload: { fileName: "execution.log", contentType: "text/plain", sizeBytes: 4 } });
+    const attachment = JSON.parse(attachmentResponse.body) as { id: string };
+    const storage = app.get(StorageService);
+    vi.spyOn(storage, "statObject").mockResolvedValue({ size: 4, metaData: { "content-type": "text/plain" } } as never);
+    const attachmentEvidenceResponse = await app.inject({ method: "POST", url: `/executions/${execution.id}/steps/${step.id}/evidence`, headers: { cookie: actor.cookie }, payload: { kind: "attachment", attachmentId: attachment.id } });
+    expect(attachmentEvidenceResponse.statusCode).toBe(201);
+    const attachmentEvidence = (JSON.parse(attachmentEvidenceResponse.body).evidence as Array<{ id: string; kind: string; fileName?: string }>).find((item) => item.kind === "attachment");
+    expect(attachmentEvidence).toMatchObject({ fileName: "execution.log" });
+    const removeEvidence = await app.inject({ method: "DELETE", url: `/executions/${execution.id}/steps/${step.id}/evidence/${attachmentEvidence?.id}`, headers: { cookie: actor.cookie } });
+    expect(removeEvidence.statusCode).toBe(200);
+    vi.restoreAllMocks();
+    const executionsWithEvidence = await app.inject({ method: "GET", url: `/rows/${testCase.id}/executions`, headers: { cookie: actor.cookie } });
+    expect(JSON.parse(executionsWithEvidence.body)[0].steps[0].evidence).toEqual([expect.objectContaining({ reference: "BUG-42" })]);
+    const evidenceAudit = await prisma.auditEvent.findFirst({ where: { action: "test_execution.evidence_added", entityId: execution.id } });
+    expect(evidenceAudit).not.toBeNull();
     await app.inject({ method: "PATCH", url: `/executions/${execution.id}/steps/${step.id}`, headers: { cookie: actor.cookie }, payload: { status: "passed", actualResult: "Stopped" } });
     const complete = await app.inject({ method: "POST", url: `/executions/${execution.id}/complete`, headers: { cookie: actor.cookie } });
     expect(JSON.parse(complete.body).status).toBe("passed");
+    const immutableEvidence = await app.inject({ method: "POST", url: `/executions/${execution.id}/steps/${step.id}/evidence`, headers: { cookie: actor.cookie }, payload: { kind: "defect", reference: "BUG-99" } });
+    expect(immutableEvidence.statusCode).toBe(422);
   });
 
   it("notifies mentioned and assigned users and exposes a searchable personal work list", async () => {
