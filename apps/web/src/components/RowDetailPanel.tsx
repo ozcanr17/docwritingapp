@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ExternalLink, MessageSquare, Paperclip, Play, X } from "lucide-react";
+import { AlertTriangle, AtSign, ExternalLink, MessageSquare, Paperclip, PencilLine, Play, Quote, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, LinkCandidate, RowComment, RowDetail, TestExecution } from "../lib/api";
@@ -41,8 +41,14 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   const [description, setDescription] = useState("");
   const [linkTarget, setLinkTarget] = useState("");
   const [commentBody, setCommentBody] = useState("");
+  const [peopleQuery, setPeopleQuery] = useState("");
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [mentionedPeople, setMentionedPeople] = useState<Array<{ id: string; displayName: string; email: string }>>([]);
   const [proposalTitle, setProposalTitle] = useState("");
   const [proposedRowTitle, setProposedRowTitle] = useState("");
+  const [commentAnchor, setCommentAnchor] = useState<{ field: "title" | "description"; start: number; end: number; quotedText: string } | null>(null);
+  const [suggestionMode, setSuggestionMode] = useState(false);
+  const [suggestedReplacement, setSuggestedReplacement] = useState("");
 
   const { data: row, isLoading } = useQuery({
     queryKey: ["row", rowId],
@@ -73,6 +79,11 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   const { data: proposals = [] } = useQuery({
     queryKey: ["proposals", rowId],
     queryFn: () => api<Array<{ id: string; title: string; status: string; reason: string | null }>>(`/rows/${rowId}/proposals`),
+  });
+  const { data: people = [] } = useQuery({
+    queryKey: ["row-people", rowId, peopleQuery],
+    queryFn: () => api<Array<{ id: string; displayName: string; email: string; department: string | null }>>(`/rows/${rowId}/people?q=${encodeURIComponent(peopleQuery.trim())}`),
+    enabled: peopleOpen || row?.rowType === "test_case",
   });
 
   useEffect(() => {
@@ -126,13 +137,31 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
     onError: () => pushToast("error", t("genericError")),
   });
   const addComment = useMutation({
-    mutationFn: (body: string) => api(`/rows/${rowId}/comments`, { method: "POST", body: JSON.stringify({ body, mentionUserIds: [] }) }),
+    mutationFn: (input: { body: string; anchor: typeof commentAnchor; suggestedReplacement?: string }) => api(`/rows/${rowId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body: input.body, mentionUserIds: mentionedPeople.map((person) => person.id), anchor: input.anchor ?? undefined, suggestedReplacement: input.suggestedReplacement }),
+    }),
     onSuccess: () => {
       setCommentBody("");
+      setMentionedPeople([]);
+      setPeopleOpen(false);
+      setCommentAnchor(null);
+      setSuggestionMode(false);
+      setSuggestedReplacement("");
       void queryClient.invalidateQueries({ queryKey: ["comments", rowId] });
+      void queryClient.invalidateQueries({ queryKey: ["proposals", rowId] });
       pushToast("success", t("commentAdded"));
     },
     onError: (error) => pushToast("error", apiErrorDetail(error) ?? t("commentAddFailed")),
+  });
+  const assignTest = useMutation({
+    mutationFn: (assigneeId: string | null) => api(`/rows/${rowId}`, { method: "PATCH", body: JSON.stringify({ expectedVersion: row?.version, testCaseDetail: { assigneeId } }) }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["row", rowId] });
+      void queryClient.invalidateQueries({ queryKey: ["outline", documentId] });
+      pushToast("success", t("assignmentUpdated"));
+    },
+    onError: () => pushToast("error", t("genericError")),
   });
   const createExecution = useMutation({
     mutationFn: () => api<TestExecution>(`/rows/${rowId}/executions`, { method: "POST", body: JSON.stringify({}) }),
@@ -214,7 +243,19 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
 
         <div>
           <div className="mb-1 text-xs uppercase text-mutedForeground">{t("title")}</div>
-          <div className="font-medium">{row.title || "—"}</div>
+          <div
+            className="cursor-text select-text rounded px-1 py-0.5 font-medium hover:bg-primary/5"
+            title={t("selectionCommentHelp")}
+            onMouseUp={(event) => {
+              const selection = window.getSelection();
+              if (!selection || selection.isCollapsed || !selection.anchorNode || !selection.focusNode) return;
+              if (!event.currentTarget.contains(selection.anchorNode) || !event.currentTarget.contains(selection.focusNode)) return;
+              const start = Math.min(selection.anchorOffset, selection.focusOffset);
+              const end = Math.max(selection.anchorOffset, selection.focusOffset);
+              const quotedText = row.title.slice(start, end);
+              if (quotedText) setCommentAnchor({ field: "title", start, end, quotedText });
+            }}
+          >{row.title || "—"}</div>
         </div>
 
         <label className="block">
@@ -224,6 +265,12 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
             className="min-h-24 w-full rounded border border-border bg-editorBackground px-2 py-1.5"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            onSelect={(event) => {
+              const target = event.currentTarget;
+              if (target.selectionEnd > target.selectionStart) {
+                setCommentAnchor({ field: "description", start: target.selectionStart, end: target.selectionEnd, quotedText: target.value.slice(target.selectionStart, target.selectionEnd) });
+              }
+            }}
             onBlur={() => {
               if (description !== (row.description ?? "")) saveDescription.mutate(description);
             }}
@@ -240,9 +287,9 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
         )}
 
         {row.testCaseDetail && (
-          <div>
-            <div className="mb-1 text-xs uppercase text-mutedForeground">{t("status")}</div>
-            <span className="rounded bg-info/15 px-2 py-0.5 text-xs text-info">{row.testCaseDetail.status}</span>
+          <div className="grid grid-cols-2 gap-3">
+            <div><div className="mb-1 text-xs uppercase text-mutedForeground">{t("status")}</div><span className="rounded bg-info/15 px-2 py-0.5 text-xs text-info">{row.testCaseDetail.status}</span></div>
+            <label><div className="mb-1 text-xs uppercase text-mutedForeground">{t("assignee")}</div><select className="w-full rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs" value={row.testCaseDetail.assigneeId ?? ""} onChange={(event) => assignTest.mutate(event.target.value || null)} disabled={assignTest.isPending}><option value="">{t("unassigned")}</option>{people.map((person) => <option key={person.id} value={person.id}>{person.displayName} · {person.email}</option>)}</select></label>
           </div>
         )}
 
@@ -278,7 +325,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
                       <ExternalLink size={13} className="mt-0.5 shrink-0" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-medium">
-                          {[other?.requirementDetail?.requirementNo, other?.title].filter(Boolean).join(" : ") || otherId.slice(0, 8)}
+                          {other?.rowType === "requirement" ? other.requirementDetail?.requirementNo || `ID ${otherId.slice(0, 8)}` : other?.title || otherId.slice(0, 8)}
                         </span>
                         <span className="block truncate text-[10px] text-mutedForeground">
                           {other?.document.title} · {t(typeLabelKeys[other?.rowType ?? "note"])} · {link.linkType}
@@ -472,23 +519,48 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
                   <span>{new Date(comment.createdAt).toLocaleString()}</span>
                 </div>
                 <div className="mt-1 whitespace-pre-wrap text-xs">{comment.body}</div>
+                {comment.anchor?.quotedText && (
+                  <div className="mt-2 rounded-md border-l-2 border-primary bg-primary/5 px-2 py-1.5 text-[11px]">
+                    <div className="mb-1 flex items-center gap-1 font-medium text-primary"><Quote size={11} />{t("selectedPassage")} · {comment.anchor.field}</div>
+                    <div className="whitespace-pre-wrap text-mutedForeground">{comment.anchor.quotedText}</div>
+                    {comment.suggestedReplacement !== null && (
+                      <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                        <div className="rounded bg-destructive/10 p-1"><span className="block text-[9px] uppercase text-destructive">{t("originalText")}</span>{comment.anchor.quotedText}</div>
+                        <div className="rounded bg-success/10 p-1"><span className="block text-[9px] uppercase text-success">{t("replacementText")}</span>{comment.suggestedReplacement}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
+          {commentAnchor && (
+            <div className="mt-2 rounded-lg border border-primary/30 bg-primary/5 p-2 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1 font-medium text-primary"><Quote size={12} />{t("selectedPassage")} · {commentAnchor.field}</span>
+                <button type="button" aria-label={t("clearSelectionAnchor")} className="rounded p-0.5 hover:bg-muted" onClick={() => { setCommentAnchor(null); setSuggestionMode(false); }}><X size={12} /></button>
+              </div>
+              <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-mutedForeground">{commentAnchor.quotedText}</div>
+              <label className="mt-2 flex cursor-pointer items-center gap-2"><input type="checkbox" className="accent-primary" checked={suggestionMode} onChange={(event) => setSuggestionMode(event.target.checked)} /><PencilLine size={12} />{t("suggestChange")}</label>
+              {suggestionMode && <textarea className="mt-2 min-h-16 w-full rounded-lg border border-border bg-editorBackground px-2 py-1.5" value={suggestedReplacement} placeholder={t("suggestedReplacement")} onChange={(event) => setSuggestedReplacement(event.target.value)} />}
+            </div>
+          )}
           <form
-            className="mt-2 flex gap-1"
+            className="relative mt-2 flex items-end gap-1"
             onSubmit={(event) => {
               event.preventDefault();
-              if (commentBody.trim()) addComment.mutate(commentBody.trim());
+              if (commentBody.trim()) addComment.mutate({ body: commentBody.trim(), anchor: commentAnchor, ...(suggestionMode ? { suggestedReplacement } : {}) });
             }}
           >
-            <input data-testid="comment-input" className="min-w-0 flex-1 rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs" value={commentBody} placeholder={t("addComment")} onChange={(event) => setCommentBody(event.target.value)} />
+            <div className="min-w-0 flex-1"><div className="mb-1 flex flex-wrap gap-1">{mentionedPeople.map((person) => <button key={person.id} type="button" className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary" onClick={() => setMentionedPeople((current) => current.filter((candidate) => candidate.id !== person.id))}>@{person.displayName} ×</button>)}</div><textarea data-testid="comment-input" className="min-h-16 w-full rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs" value={commentBody} placeholder={commentAnchor ? t("commentOnSelection") : t("addComment")} onChange={(event) => { setCommentBody(event.target.value); if (event.target.value.endsWith("@")) setPeopleOpen(true); }} /></div>
+            <button type="button" aria-label={t("mentionUser")} title={t("mentionUser")} className="rounded-lg border border-border p-1.5 text-mutedForeground hover:bg-muted" onClick={() => setPeopleOpen((current) => !current)}><AtSign size={14} /></button>
             <button
               className="rounded-lg bg-primary px-2 py-1 text-xs text-primaryForeground disabled:cursor-wait disabled:opacity-60"
-              disabled={!commentBody.trim() || addComment.isPending}
+              disabled={!commentBody.trim() || addComment.isPending || (suggestionMode && !commentAnchor)}
             >
               {t("add")}
             </button>
+            {peopleOpen && <div className="absolute bottom-full right-0 z-30 mb-1 w-72 rounded-xl border border-border bg-surfaceElevated p-2 shadow-2xl"><input autoFocus className="mb-2 w-full rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs" value={peopleQuery} placeholder={t("searchPeople")} onChange={(event) => setPeopleQuery(event.target.value)} /><div className="max-h-44 overflow-auto">{people.map((person) => <button key={person.id} type="button" className="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted" onClick={() => { setMentionedPeople((current) => current.some((candidate) => candidate.id === person.id) ? current : [...current, person]); setCommentBody((current) => `${current.replace(/@$/, "")}@${person.displayName} `); setPeopleOpen(false); }}><span className="block font-medium">{person.displayName}</span><span className="block truncate text-[10px] text-mutedForeground">{person.email}{person.department ? ` · ${person.department}` : ""}</span></button>)}</div></div>}
           </form>
         </div>
 

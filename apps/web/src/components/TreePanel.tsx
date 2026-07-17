@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, FileText, Folder as FolderIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Folder as FolderIcon, GripVertical } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentSummary, FolderSummary } from "../lib/api";
 import { ContextMenu, MenuItem } from "./ContextMenu";
+import { useToastStore } from "../stores/toasts";
 
 interface TreePanelProps {
   workspaceId: string;
@@ -36,6 +37,10 @@ interface DeleteState {
   id: string;
 }
 
+interface DraggedNode extends MoveState {
+  label: string;
+}
+
 type CreateKind = "folder" | "requirementDocument" | "testDocument" | "textDocument";
 
 interface CreateState {
@@ -51,6 +56,9 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState<string>("");
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
+  const [draggedNode, setDraggedNode] = useState<DraggedNode | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | "root" | null>(null);
+  const pushToast = useToastStore((state) => state.push);
   const { data: folders = [] } = useQuery({
     queryKey: ["folders", workspaceId],
     queryFn: () => api<Array<FolderSummary & { ancestorPath: string; depth: number }>>(`/workspaces/${workspaceId}/folders`),
@@ -180,14 +188,85 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
     ]);
   };
 
+  const moveByDrop = async (targetFolderId: string | null): Promise<boolean> => {
+    if (!draggedNode || draggedNode.currentFolderId === targetFolderId) return false;
+    if (draggedNode.kind === "folder") {
+      if (targetFolderId === draggedNode.id) return false;
+      const target = folders.find((folder) => folder.id === targetFolderId);
+      if (target?.ancestorPath.includes(`${draggedNode.id}/`)) {
+        pushToast("error", t("invalidFolderMove"));
+        return false;
+      }
+    }
+    try {
+      if (draggedNode.kind === "folder") {
+        await api(`/folders/${draggedNode.id}/move`, {
+          method: "POST",
+          body: JSON.stringify({ newParentId: targetFolderId, expectedVersion: draggedNode.version }),
+        });
+      } else {
+        await api(`/documents/${draggedNode.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ folderId: targetFolderId, expectedVersion: draggedNode.version }),
+        });
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["folders", workspaceId] }),
+      ]);
+      pushToast("success", t("itemMoved", { name: draggedNode.label }));
+      return true;
+    } catch {
+      pushToast("error", t("moveFailed"));
+      return false;
+    } finally {
+      setDraggedNode(null);
+      setDropTarget(null);
+    }
+  };
+
   return (
     <div
-      className="h-full overflow-auto py-2 text-sm"
+      className={`h-full overflow-auto py-2 text-sm transition-colors ${dropTarget === "root" ? "bg-primary/5 ring-1 ring-inset ring-primary/30" : ""}`}
+      onDragOver={(event) => {
+        if (!draggedNode || event.target !== event.currentTarget) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setDropTarget("root");
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+        setDropTarget(null);
+      }}
+      onDrop={(event) => {
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        void moveByDrop(null);
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
         setMenu({ x: event.clientX, y: event.clientY, folderId: null });
       }}
     >
+      {draggedNode && (
+        <div
+          data-testid="tree-root-drop-target"
+          className={`mx-2 mb-2 rounded-lg border border-dashed px-3 py-2 text-center text-xs transition-colors ${dropTarget === "root" ? "border-primary bg-primary/10 text-primary" : "border-border text-mutedForeground"}`}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            event.dataTransfer.dropEffect = "move";
+            setDropTarget("root");
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void moveByDrop(null);
+          }}
+        >
+          {t("dropAtRoot")}
+        </div>
+      )}
       <TreeBranch
         workspaceId={workspaceId}
         parentId={null}
@@ -195,7 +274,14 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
         selectedDocumentId={selectedDocumentId}
         onSelectDocument={onSelectDocument}
         onContextMenu={setMenu}
+        draggedNode={draggedNode}
+        dropTarget={dropTarget}
+        onDragStart={setDraggedNode}
+        onDragEnd={() => { setDraggedNode(null); setDropTarget(null); }}
+        onDropTargetChange={setDropTarget}
+        onDropNode={moveByDrop}
       />
+      {draggedNode && <div className="pointer-events-none sticky bottom-2 mx-2 rounded-lg border border-primary/30 bg-surfaceElevated/95 px-3 py-2 text-xs shadow-lg">{t("dragMoveHint", { name: draggedNode.label })}</div>}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu)} onClose={() => setMenu(null)} />}
       {createState && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
@@ -283,8 +369,14 @@ function TreeBranch(props: {
   selectedDocumentId: string | null;
   onSelectDocument: (document: DocumentSummary) => void;
   onContextMenu: (state: MenuState) => void;
+  draggedNode: DraggedNode | null;
+  dropTarget: string | "root" | null;
+  onDragStart: (node: DraggedNode) => void;
+  onDragEnd: () => void;
+  onDropTargetChange: (target: string | "root" | null) => void;
+  onDropNode: (targetFolderId: string | null) => Promise<boolean>;
 }) {
-  const { workspaceId, parentId, depth, selectedDocumentId, onSelectDocument, onContextMenu } = props;
+  const { workspaceId, parentId, depth, selectedDocumentId, onSelectDocument, onContextMenu, draggedNode, dropTarget, onDragStart, onDragEnd, onDropTargetChange, onDropNode } = props;
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -311,10 +403,43 @@ function TreeBranch(props: {
   return (
     <ul role={depth === 0 ? "tree" : "group"}>
       {data.folders.map((folder) => (
-        <li key={folder.id} role="treeitem" aria-expanded={expanded.has(folder.id)}>
+        <li
+          key={folder.id}
+          role="treeitem"
+          aria-expanded={expanded.has(folder.id)}
+          draggable
+          aria-grabbed={draggedNode?.kind === "folder" && draggedNode.id === folder.id}
+          onDragStart={(event) => {
+            event.stopPropagation();
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", `folder:${folder.id}`);
+            event.dataTransfer.setData("application/x-docsys-tree-node", folder.id);
+            onDragStart({ kind: "folder", id: folder.id, version: folder.version, currentFolderId: folder.parentId, label: folder.name });
+          }}
+          onDragEnd={onDragEnd}
+        >
           <button
-            className="mx-1 flex w-auto items-center gap-1 rounded-lg px-2 py-1.5 hover:bg-muted"
+            data-testid={`tree-folder-${folder.id}`}
+            title={t("dragToMove")}
+            className={`group mx-1 flex w-auto items-center gap-1 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted ${dropTarget === folder.id ? "bg-primary/10 ring-1 ring-primary/40" : ""}`}
             style={{ paddingLeft: 8 + depth * 14 }}
+            onDragOver={(event) => {
+              if (!draggedNode || draggedNode.id === folder.id) return;
+              event.preventDefault();
+              event.stopPropagation();
+              event.dataTransfer.dropEffect = "move";
+              onDropTargetChange(folder.id);
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) onDropTargetChange(null);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void onDropNode(folder.id).then((moved) => {
+                if (moved) setExpanded((current) => new Set(current).add(folder.id));
+              });
+            }}
             onClick={() => toggle(folder.id)}
             onContextMenu={(event) => {
               event.preventDefault();
@@ -325,6 +450,7 @@ function TreeBranch(props: {
             {expanded.has(folder.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             <FolderIcon size={14} className="text-warning" />
             <span className="truncate">{folder.name}</span>
+            <GripVertical size={12} className="ml-auto opacity-0 transition-opacity group-hover:opacity-50" />
           </button>
           {expanded.has(folder.id) && (
             <TreeBranch
@@ -334,14 +460,35 @@ function TreeBranch(props: {
               selectedDocumentId={selectedDocumentId}
               onSelectDocument={onSelectDocument}
               onContextMenu={onContextMenu}
+              draggedNode={draggedNode}
+              dropTarget={dropTarget}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDropTargetChange={onDropTargetChange}
+              onDropNode={onDropNode}
             />
           )}
         </li>
       ))}
       {data.documents.map((document) => (
-        <li key={document.id} role="treeitem">
+        <li
+          key={document.id}
+          role="treeitem"
+          draggable
+          aria-grabbed={draggedNode?.kind === "document" && draggedNode.id === document.id}
+          onDragStart={(event) => {
+            event.stopPropagation();
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", `document:${document.id}`);
+            event.dataTransfer.setData("application/x-docsys-tree-node", document.id);
+            onDragStart({ kind: "document", id: document.id, version: document.version, currentFolderId: document.folderId, label: document.title });
+          }}
+          onDragEnd={onDragEnd}
+        >
           <button
-            className={`mx-1 flex w-auto items-center gap-1 rounded-lg px-2 py-1.5 hover:bg-muted ${
+            data-testid={`tree-document-${document.id}`}
+            title={t("dragToMove")}
+            className={`group mx-1 flex w-auto items-center gap-1 rounded-lg px-2 py-1.5 hover:bg-muted ${
               selectedDocumentId === document.id ? "bg-selection" : ""
             }`}
             style={{ paddingLeft: 22 + depth * 14 }}
@@ -360,6 +507,7 @@ function TreeBranch(props: {
           >
             <FileText size={14} className="text-info" />
             <span className="truncate">{document.title}</span>
+            <GripVertical size={12} className="ml-auto opacity-0 transition-opacity group-hover:opacity-50" />
           </button>
         </li>
       ))}

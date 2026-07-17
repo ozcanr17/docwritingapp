@@ -10,6 +10,7 @@ import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
 import { EventsService } from "../events/events.service";
 import { rankBetween } from "../common/rank";
+import { resolveTestScenario } from "../common/test-scenarios";
 import { PrismaService } from "../prisma/prisma.service";
 import { validateCustomFields } from "./custom-field.validator";
 
@@ -32,6 +33,20 @@ export interface UpdateRowInput {
   requirementDetail?: { requirementNo?: string | null; status?: string; priority?: string | null; rationale?: string | null };
   testCaseDetail?: { status?: string; priority?: string | null; assigneeId?: string | null; tags?: string[] };
   testStepDetail?: { stepNumber?: number | null; action?: string | null; expectedResult?: string | null; testResult?: string | null };
+}
+
+export interface TemplateRowSnapshot {
+  key: string;
+  parentKey: string | null;
+  rank: string;
+  rowType: RowType;
+  title: string;
+  description: string | null;
+  numberingStart: number | null;
+  customFields: Record<string, unknown>;
+  requirementDetail?: { status?: string; priority?: string | null; rationale?: string | null; verificationMethod?: string | null } | null;
+  testCaseDetail?: { status?: string; priority?: string | null; tags?: string[] } | null;
+  testStepDetail?: { stepNumber?: number | null; action?: string | null; expectedResult?: string | null } | null;
 }
 
 @Injectable()
@@ -90,16 +105,9 @@ export class RowsService {
         },
       });
       if (input.rowType === "requirement") {
-        const existingNumbers = new Set(
-          (await tx.requirementDetail.findMany({
-            where: { row: { documentId: document.id } },
-            select: { requirementNo: true },
-          })).map((detail) => detail.requirementNo),
-        );
-        let sequence = existingNumbers.size + 1;
-        while (existingNumbers.has(`REQ-${String(sequence).padStart(3, "0")}`)) sequence += 1;
+        const nextRequirementNo = await this.requirementNumberGenerator(tx, document.id, document.requirementPrefix);
         await tx.requirementDetail.create({
-          data: { rowId: created.id, requirementNo: `REQ-${String(sequence).padStart(3, "0")}` },
+          data: { rowId: created.id, requirementNo: nextRequirementNo() },
         });
       } else if (input.rowType === "test_case") {
         await tx.testCaseDetail.create({ data: { rowId: created.id } });
@@ -303,7 +311,8 @@ export class RowsService {
                 title: true,
                 description: true,
                 requirementDetail: { select: { requirementNo: true } },
-                document: { select: { title: true } },
+                testStepDetail: { select: { action: true, expectedResult: true } },
+                document: { select: { id: true, title: true, documentType: true } },
               },
             },
           },
@@ -318,7 +327,8 @@ export class RowsService {
                 title: true,
                 description: true,
                 requirementDetail: { select: { requirementNo: true } },
-                document: { select: { title: true } },
+                testStepDetail: { select: { action: true, expectedResult: true } },
+                document: { select: { id: true, title: true, documentType: true } },
               },
             },
           },
@@ -335,17 +345,28 @@ export class RowsService {
     );
     const readable = await this.access.readableRowIds(actorId, rows.map((row) => row.id));
     const flattened = rows.filter((row) => readable.has(row.id)).map((row) => {
-      const linked = [...row.outgoingLinks.map((link) => link.targetRow), ...row.incomingLinks.map((link) => link.sourceRow)]
-        .filter((linkedRow) => linkedRow.rowType === "requirement")
+      const linkedObjects = [...row.outgoingLinks.map((link) => link.targetRow), ...row.incomingLinks.map((link) => link.sourceRow)]
         .filter((linkedRow, index, all) => all.findIndex((candidate) => candidate.id === linkedRow.id) === index)
+        .map((linkedRow) => ({
+          id: linkedRow.id,
+          rowType: linkedRow.rowType,
+          requirementNo: linkedRow.requirementDetail?.requirementNo ?? null,
+          title: linkedRow.title,
+          description: linkedRow.description,
+          action: linkedRow.testStepDetail?.action ?? null,
+          expectedResult: linkedRow.testStepDetail?.expectedResult ?? null,
+          document: linkedRow.document,
+        }));
+      const linked = linkedObjects
+        .filter((linkedRow) => linkedRow.rowType === "requirement")
         .sort((a, b) =>
-          (a.requirementDetail?.requirementNo ?? a.title).localeCompare(
-            b.requirementDetail?.requirementNo ?? b.title,
+          (a.requirementNo ?? a.title).localeCompare(
+            b.requirementNo ?? b.title,
           ),
         )
         .map((linkedRow) => ({
           id: linkedRow.id,
-          requirementNo: linkedRow.requirementDetail?.requirementNo ?? null,
+          requirementNo: linkedRow.requirementNo,
           title: linkedRow.title,
           description: linkedRow.description,
           documentTitle: linkedRow.document.title,
@@ -378,6 +399,7 @@ export class RowsService {
         testResult: row.testStepDetail?.testResult ?? null,
         configuredStepNumber: row.testStepDetail?.stepNumber ?? null,
         linkedRequirements: linked,
+        linkedObjects,
         linkCount: row.outgoingLinks.length + row.incomingLinks.length,
       };
     });
@@ -531,6 +553,22 @@ export class RowsService {
         await tx.requirementDetail.upsert({ where: { rowId }, create: { rowId, ...input.requirementDetail }, update: input.requirementDetail });
       }
       if (input.testCaseDetail) {
+        const nextAssigneeId = input.testCaseDetail.assigneeId;
+        const currentTestCase = nextAssigneeId === undefined ? null : await tx.testCaseDetail.findUnique({ where: { rowId }, select: { assigneeId: true } });
+        if (nextAssigneeId !== undefined && nextAssigneeId !== currentTestCase?.assigneeId && nextAssigneeId) {
+          const member = await tx.organizationMember.findFirst({ where: { organizationId: document.organizationId, userId: nextAssigneeId, deletedAt: null }, select: { userId: true } });
+          if (!member) throw new UnprocessableEntityException("Assignee must be an organization member");
+          if (nextAssigneeId !== actorId) {
+            await tx.notification.create({
+              data: {
+                organizationId: document.organizationId,
+                recipientId: nextAssigneeId,
+                type: "assignment",
+                payload: { rowId, documentId: document.id, title: input.title ?? row.title, documentTitle: document.title } as Prisma.InputJsonValue,
+              },
+            });
+          }
+        }
         await tx.testCaseDetail.upsert({ where: { rowId }, create: { rowId, ...input.testCaseDetail }, update: input.testCaseDetail });
       }
       if (input.testStepDetail) {
@@ -849,7 +887,7 @@ export class RowsService {
         select: { nextObjectNumber: true },
       });
       let objectNumber = counter.nextObjectNumber - sourceRows.length;
-      let requirementSequence = await tx.requirementDetail.count({ where: { row: { documentId } } });
+      const nextRequirementNo = await this.requirementNumberGenerator(tx, documentId, document.requirementPrefix);
       let afterRowId: string | undefined;
       for (const source of sourceRows) {
         const isRoot = roots.some((root) => root.id === source.id);
@@ -882,11 +920,10 @@ export class RowsService {
         idMap.set(source.id, { id: created.id, ancestorPath: created.ancestorPath, depth: created.depth });
         if (isRoot) afterRowId = created.id;
         if (source.rowType === "requirement") {
-          requirementSequence += 1;
           await tx.requirementDetail.create({
             data: {
               rowId: created.id,
-              requirementNo: `REQ-${String(requirementSequence).padStart(3, "0")}`,
+              requirementNo: nextRequirementNo(),
               status: source.requirementDetail?.status,
               priority: source.requirementDetail?.priority,
               rationale: source.requirementDetail?.rationale,
@@ -926,6 +963,113 @@ export class RowsService {
       });
       return { copiedRows: idMap.size, rootIds: roots.map((root) => idMap.get(root.id)?.id).filter(Boolean) };
     });
+  }
+
+  async applyTemplateSnapshot(actorId: string, documentId: string, parentId: string | null, snapshot: TemplateRowSnapshot[]) {
+    if (snapshot.length === 0 || snapshot.length > 2000) throw new UnprocessableEntityException("Template must contain between 1 and 2000 rows");
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "row.write", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+    });
+    for (const source of snapshot) this.assertRowTypeAllowed(document.documentType, source.rowType);
+    const keys = new Set(snapshot.map((source) => source.key));
+    if (keys.size !== snapshot.length || snapshot.some((source) => source.parentKey && !keys.has(source.parentKey))) {
+      throw new UnprocessableEntityException("Template hierarchy is invalid");
+    }
+    const targetParent = parentId
+      ? await this.prisma.documentRow.findFirst({ where: { id: parentId, documentId, deletedAt: null } })
+      : null;
+    if (parentId && !targetParent) throw new NotFoundException("Target parent not found");
+    for (const source of snapshot.filter((candidate) => !candidate.parentKey)) {
+      if (targetParent) this.assertParentAllowed(source.rowType, targetParent.rowType);
+    }
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
+      const definitions = await this.fieldDefinitions(tx, documentId);
+      const allowedFieldKeys = new Set(definitions.map((definition) => definition.fieldKey));
+      const idMap = new Map<string, { id: string; ancestorPath: string; depth: number }>();
+      const lastSibling = new Map<string, string>();
+      const counter = await tx.document.update({
+        where: { id: document.id },
+        data: { nextObjectNumber: { increment: snapshot.length } },
+        select: { nextObjectNumber: true },
+      });
+      let objectNumber = counter.nextObjectNumber - snapshot.length;
+      const nextRequirementNo = await this.requirementNumberGenerator(tx, documentId, document.requirementPrefix);
+      const rootIds: string[] = [];
+      for (const source of snapshot) {
+        const mappedParent = source.parentKey ? idMap.get(source.parentKey) : undefined;
+        if (source.parentKey && !mappedParent) throw new UnprocessableEntityException("Template rows are not ordered by hierarchy");
+        const destinationParent = mappedParent ?? (source.parentKey ? undefined : targetParent ?? undefined);
+        const destinationParentId = destinationParent?.id ?? null;
+        const siblingKey = destinationParentId ?? "root";
+        const rank = await this.computeInsertRank(tx, documentId, destinationParentId, lastSibling.get(siblingKey));
+        const filteredFields = Object.fromEntries(Object.entries(source.customFields ?? {}).filter(([key]) => allowedFieldKeys.has(key)));
+        const customFields = validateCustomFields(definitions, filteredFields);
+        const created = await tx.documentRow.create({
+          data: {
+            organizationId: document.organizationId,
+            documentId,
+            objectNumber,
+            parentId: destinationParentId,
+            rank,
+            ancestorPath: destinationParent ? `${destinationParent.ancestorPath}${destinationParent.id}/` : "",
+            depth: destinationParent ? destinationParent.depth + 1 : 0,
+            rowType: source.rowType,
+            title: source.title,
+            description: source.description,
+            numberingStart: source.numberingStart,
+            customFields: customFields as Prisma.InputJsonValue,
+            createdById: actorId,
+            updatedById: actorId,
+          },
+        });
+        objectNumber += 1;
+        idMap.set(source.key, { id: created.id, ancestorPath: created.ancestorPath, depth: created.depth });
+        lastSibling.set(siblingKey, created.id);
+        if (!source.parentKey) rootIds.push(created.id);
+        if (source.rowType === "requirement") {
+          await tx.requirementDetail.create({
+            data: {
+              rowId: created.id,
+              requirementNo: nextRequirementNo(),
+              status: source.requirementDetail?.status,
+              priority: source.requirementDetail?.priority,
+              rationale: source.requirementDetail?.rationale,
+              verificationMethod: source.requirementDetail?.verificationMethod,
+            },
+          });
+        } else if (source.rowType === "test_case") {
+          await tx.testCaseDetail.create({ data: { rowId: created.id, status: "draft", priority: source.testCaseDetail?.priority, tags: source.testCaseDetail?.tags } });
+        } else if (source.rowType === "test_step") {
+          await tx.testStepDetail.create({
+            data: {
+              rowId: created.id,
+              stepNumber: source.testStepDetail?.stepNumber,
+              action: source.testStepDetail?.action,
+              expectedResult: source.testStepDetail?.expectedResult,
+              testResult: null,
+            },
+          });
+        }
+      }
+      await this.audit.record(tx, {
+        organizationId: document.organizationId,
+        workspaceId: document.workspaceId,
+        actorId,
+        action: "document_template.applied",
+        entityType: "document",
+        entityId: document.id,
+        documentId,
+        metadata: { parentId, rowsCreated: snapshot.length, rootIds },
+      });
+      return { rowsCreated: snapshot.length, rootIds };
+    });
+    for (const rootId of result.rootIds) {
+      await this.events.publish({ type: "row.created", documentId, organizationId: document.organizationId, entityId: rootId, actorId });
+    }
+    return result;
   }
 
   async createLink(actorId: string, sourceRowId: string, targetRowId: string, linkType: "verifies" | "relates_to" | "derives_from" | "duplicates") {
@@ -1047,65 +1191,253 @@ export class RowsService {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
-    const requirements = await this.prisma.documentRow.findMany({
-      where: { documentId, deletedAt: null, rowType: "requirement" },
+    const rows = await this.prisma.documentRow.findMany({
+      where: { documentId, deletedAt: null },
+      orderBy: [{ depth: "asc" }, { rank: "asc" }],
       select: {
         id: true,
+        parentId: true,
+        objectNumber: true,
+        rowType: true,
         title: true,
-        incomingLinks: {
-          where: { deletedAt: null, linkType: "verifies" },
-          select: { id: true, suspect: true },
-        },
+        description: true,
+        customFields: true,
+        requirementDetail: { select: { requirementNo: true } },
+        document: { select: { id: true, title: true, documentType: true } },
       },
     });
-    const covered = requirements.filter((r) => r.incomingLinks.length > 0);
-    const suspect = requirements.filter((r) => r.incomingLinks.some((l) => l.suspect));
+    const rowIds = rows.map((row) => row.id);
+    const links = rowIds.length === 0 ? [] : await this.prisma.requirementLink.findMany({
+      where: {
+        deletedAt: null,
+        linkType: "verifies",
+        OR: [{ sourceRowId: { in: rowIds } }, { targetRowId: { in: rowIds } }],
+      },
+      select: {
+        suspect: true,
+        sourceRow: { select: { id: true, rowType: true } },
+        targetRow: { select: { id: true, rowType: true } },
+      },
+    });
+    if (document.documentType === "test") {
+      const rowsById = new Map(rows.map((row) => [row.id, row]));
+      const scenarios = new Map<string, typeof rows[number]>();
+      for (const row of rows) {
+        if (row.rowType !== "test_case" && row.rowType !== "test_step") continue;
+        const scenario = resolveTestScenario(row.id, rowsById);
+        if (scenario) scenarios.set(scenario.id, rowsById.get(scenario.id) ?? row);
+      }
+      const linkedScenarioIds = new Set<string>();
+      const suspectScenarioIds = new Set<string>();
+      for (const link of links) {
+        const testRow = [link.sourceRow, link.targetRow].find((row) => row.rowType === "test_case" || row.rowType === "test_step");
+        const requirementRow = [link.sourceRow, link.targetRow].find((row) => row.rowType === "requirement");
+        if (!testRow || !requirementRow || !rowsById.has(testRow.id)) continue;
+        const scenario = resolveTestScenario(testRow.id, rowsById);
+        if (!scenario) continue;
+        linkedScenarioIds.add(scenario.id);
+        if (link.suspect) suspectScenarioIds.add(scenario.id);
+      }
+      const uncoveredRows = [...scenarios.values()].filter((row) => !linkedScenarioIds.has(row.id));
+      return {
+        mode: "test",
+        totalItems: scenarios.size,
+        totalRequirements: scenarios.size,
+        covered: linkedScenarioIds.size,
+        uncovered: uncoveredRows.length,
+        suspect: suspectScenarioIds.size,
+        uncoveredRows: uncoveredRows.map((row) => ({ id: row.id, objectNumber: row.objectNumber, title: row.title })),
+      };
+    }
+    const requirements = rows.filter((row) => row.rowType === "requirement");
+    const requirementIds = new Set(requirements.map((row) => row.id));
+    const linkedRequirementIds = new Set<string>();
+    const suspectRequirementIds = new Set<string>();
+    for (const link of links) {
+      const testRow = [link.sourceRow, link.targetRow].find((row) => row.rowType === "test_case" || row.rowType === "test_step");
+      const requirementRow = [link.sourceRow, link.targetRow].find((row) => row.rowType === "requirement");
+      if (!testRow || !requirementRow || !requirementIds.has(requirementRow.id)) continue;
+      linkedRequirementIds.add(requirementRow.id);
+      if (link.suspect) suspectRequirementIds.add(requirementRow.id);
+    }
+    const uncoveredRows = requirements.filter((row) => !linkedRequirementIds.has(row.id));
     return {
+      mode: "requirement",
+      totalItems: requirements.length,
       totalRequirements: requirements.length,
-      covered: covered.length,
-      uncovered: requirements.length - covered.length,
-      suspect: suspect.length,
-      uncoveredRows: requirements
-        .filter((r) => r.incomingLinks.length === 0)
-        .map((r) => ({ id: r.id, title: r.title })),
+      covered: linkedRequirementIds.size,
+      uncovered: uncoveredRows.length,
+      suspect: suspectRequirementIds.size,
+      uncoveredRows: uncoveredRows.map((row) => ({ id: row.id, objectNumber: row.objectNumber, title: row.title })),
     };
   }
 
-  async traceabilityMatrix(actorId: string, documentId: string) {
+  async traceabilityMatrix(actorId: string, documentId: string, direction: "requirement_to_test" | "test_to_requirement" = "requirement_to_test") {
     const document = await this.requireDocument(documentId);
     await this.access.assertPermission(actorId, "row.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
-    const requirements = await this.prisma.documentRow.findMany({
-      where: { documentId, deletedAt: null, rowType: "requirement" },
+    const currentRows = await this.prisma.documentRow.findMany({
+      where: { documentId, deletedAt: null },
       orderBy: [{ depth: "asc" }, { rank: "asc" }],
       select: {
         id: true,
+        parentId: true,
+        objectNumber: true,
+        rowType: true,
         title: true,
-        incomingLinks: {
-          where: { deletedAt: null },
-          select: {
-            id: true,
-            suspect: true,
-            linkType: true,
-            sourceRow: { select: { id: true, title: true, rowType: true } },
-          },
+        description: true,
+        customFields: true,
+        requirementDetail: { select: { requirementNo: true } },
+        document: { select: { id: true, title: true, documentType: true } },
+      },
+    });
+    const currentRowIds = currentRows.map((row) => row.id);
+    const links = currentRowIds.length === 0 ? [] : await this.prisma.requirementLink.findMany({
+      where: {
+        deletedAt: null,
+        OR: [{ sourceRowId: { in: currentRowIds } }, { targetRowId: { in: currentRowIds } }],
+      },
+      select: {
+        id: true,
+        suspect: true,
+        linkType: true,
+        sourceRow: {
+          select: { id: true, rowType: true, documentId: true, document: { select: { id: true, title: true, documentType: true } } },
+        },
+        targetRow: {
+          select: { id: true, rowType: true, documentId: true, document: { select: { id: true, title: true, documentType: true } } },
         },
       },
     });
-    return requirements.map((requirement) => ({
-      id: requirement.id,
-      title: requirement.title,
-      links: requirement.incomingLinks.map((link) => ({
-        linkId: link.id,
-        suspect: link.suspect,
-        linkType: link.linkType,
-        sourceId: link.sourceRow.id,
-        sourceTitle: link.sourceRow.title,
-        sourceType: link.sourceRow.rowType,
-      })),
-    }));
+    const testDocumentIds = [...new Set([
+      ...(document.documentType === "test" ? [document.id] : []),
+      ...links.flatMap((link) => [link.sourceRow, link.targetRow])
+        .filter((row) => row.rowType === "test_case" || row.rowType === "test_step")
+        .map((row) => row.documentId),
+    ])];
+    const hierarchyRows = testDocumentIds.length === 0 ? [] : await this.prisma.documentRow.findMany({
+      where: { documentId: { in: testDocumentIds }, deletedAt: null },
+      select: {
+        id: true,
+        parentId: true,
+        objectNumber: true,
+        rowType: true,
+        title: true,
+        customFields: true,
+        document: { select: { id: true, title: true, documentType: true } },
+      },
+    });
+    const testRowsById = new Map(hierarchyRows.map((row) => [row.id, row]));
+    const requirementRows = document.documentType === "requirement"
+      ? currentRows.filter((row) => row.rowType === "requirement")
+      : await this.prisma.documentRow.findMany({
+        where: {
+          deletedAt: null,
+          rowType: "requirement",
+          id: { in: links.flatMap((link) => [link.sourceRow, link.targetRow]).filter((row) => row.rowType === "requirement").map((row) => row.id) },
+        },
+        orderBy: [{ depth: "asc" }, { rank: "asc" }],
+        select: {
+          id: true,
+          parentId: true,
+          objectNumber: true,
+          rowType: true,
+          title: true,
+          description: true,
+          customFields: true,
+          requirementDetail: { select: { requirementNo: true } },
+          document: { select: { id: true, title: true, documentType: true } },
+        },
+      });
+    if (direction === "test_to_requirement") {
+      const requirementsById = new Map(requirementRows.map((row) => [row.id, row]));
+      const scenarios = new Map<string, typeof hierarchyRows[number]>();
+      for (const row of hierarchyRows) {
+        if (row.rowType !== "test_case" && row.rowType !== "test_step") continue;
+        const scenario = resolveTestScenario(row.id, testRowsById);
+        if (scenario) scenarios.set(scenario.id, testRowsById.get(scenario.id) ?? row);
+      }
+      return [...scenarios.values()]
+        .sort((a, b) => a.document.title.localeCompare(b.document.title) || (a.objectNumber ?? 0) - (b.objectNumber ?? 0))
+        .map((scenario) => {
+          const normalized = new Map<string, {
+            linkId: string;
+            suspect: boolean;
+            linkType: string;
+            requirementId: string;
+            requirementNo: string | null;
+            requirementTitle: string;
+            requirementDescription: string | null;
+            requirementDocument: { id: string; title: string; documentType: string };
+          }>();
+          for (const link of links) {
+            const testRow = [link.sourceRow, link.targetRow].find((row) => row.rowType === "test_case" || row.rowType === "test_step");
+            const requirementRef = [link.sourceRow, link.targetRow].find((row) => row.rowType === "requirement");
+            if (!testRow || !requirementRef || resolveTestScenario(testRow.id, testRowsById)?.id !== scenario.id) continue;
+            const requirement = requirementsById.get(requirementRef.id);
+            if (!requirement) continue;
+            const existing = normalized.get(requirement.id);
+            normalized.set(requirement.id, {
+              linkId: existing?.linkId ?? link.id,
+              suspect: Boolean(existing?.suspect || link.suspect),
+              linkType: link.linkType,
+              requirementId: requirement.id,
+              requirementNo: requirement.requirementDetail?.requirementNo ?? null,
+              requirementTitle: requirement.title,
+              requirementDescription: requirement.description,
+              requirementDocument: requirement.document,
+            });
+          }
+          return {
+            id: scenario.id,
+            objectNumber: scenario.objectNumber,
+            title: scenario.title,
+            document: scenario.document,
+            requirements: [...normalized.values()].sort((a, b) => (a.requirementNo ?? a.requirementTitle).localeCompare(b.requirementNo ?? b.requirementTitle, undefined, { numeric: true })),
+          };
+        });
+    }
+    return requirementRows.map((requirement) => {
+      const related = links.filter((link) => link.sourceRow.id === requirement.id || link.targetRow.id === requirement.id);
+      const normalized = new Map<string, {
+        linkId: string;
+        suspect: boolean;
+        linkType: string;
+        sourceId: string;
+        sourceScenarioId: string;
+        sourceObjectNumber: number | null;
+        sourceTitle: string;
+        sourceType: string;
+        sourceDocument: { id: string; title: string; documentType: string };
+      }>();
+      for (const link of related) {
+        const testRow = [link.sourceRow, link.targetRow].find((row) => row.rowType === "test_case" || row.rowType === "test_step");
+        if (!testRow) continue;
+        const scenario = resolveTestScenario(testRow.id, testRowsById);
+        if (!scenario) continue;
+        const existing = normalized.get(scenario.id);
+        normalized.set(scenario.id, {
+          linkId: existing?.linkId ?? link.id,
+          suspect: Boolean(existing?.suspect || link.suspect),
+          linkType: link.linkType,
+          sourceId: testRow.id,
+          sourceScenarioId: scenario.id,
+          sourceObjectNumber: testRowsById.get(scenario.id)?.objectNumber ?? null,
+          sourceTitle: scenario.title,
+          sourceType: scenario.rowType,
+          sourceDocument: testRow.document,
+        });
+      }
+      return {
+        id: requirement.id,
+        objectNumber: requirement.objectNumber,
+        requirementNo: requirement.requirementDetail?.requirementNo ?? null,
+        title: requirement.title,
+        links: [...normalized.values()],
+      };
+    });
   }
 
   async assignProject(actorId: string, rowId: string, projectId: string) {
@@ -1211,6 +1543,24 @@ export class RowsService {
 
   private async fieldDefinitions(tx: Prisma.TransactionClient, documentId: string) {
     return tx.customFieldDefinition.findMany({ where: { documentId, deletedAt: null } });
+  }
+
+  private async requirementNumberGenerator(tx: Prisma.TransactionClient, documentId: string, prefix: string) {
+    const existingNumbers = new Set((await tx.requirementDetail.findMany({
+      where: { row: { documentId } },
+      select: { requirementNo: true },
+    })).flatMap((detail) => detail.requirementNo ? [detail.requirementNo.toUpperCase()] : []));
+    let sequence = 1;
+    return () => {
+      let value = `${prefix}-${String(sequence).padStart(3, "0")}`;
+      while (existingNumbers.has(value)) {
+        sequence += 1;
+        value = `${prefix}-${String(sequence).padStart(3, "0")}`;
+      }
+      existingNumbers.add(value);
+      sequence += 1;
+      return value;
+    };
   }
 
   private assertRowTypeAllowed(documentType: DocumentType, rowType: RowType) {

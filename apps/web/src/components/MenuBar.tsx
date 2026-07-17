@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, CustomFieldType, DocumentType, FieldDefinition, OutlineRow } from "../lib/api";
@@ -17,7 +18,12 @@ interface MenuBarProps {
   documentType: DocumentType | null;
   view: "documents" | "trash";
   setView: (view: "documents" | "trash") => void;
-  onOpenReport: (tab: "baselines" | "coverage" | "matrix" | "reviews" | "runs") => void;
+  onOpenReport: (tab: "readiness" | "baselines" | "coverage" | "matrix" | "reviews" | "runs") => void;
+  onOpenSearch: () => void;
+  onCloseSearch: () => void;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
+  searchOpen: boolean;
 }
 
 function slugifyKey(name: string): string {
@@ -37,7 +43,7 @@ async function pollExport(jobId: string): Promise<{ ready: boolean; status: stri
   throw new Error("timeout");
 }
 
-export function MenuBar({ documentId, documentType, view, setView, onOpenReport }: MenuBarProps) {
+export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen }: MenuBarProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
@@ -146,14 +152,27 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
   const fileEntry: MenuEntry[] = [
     ...(gridDoc
       ? [
-          { key: "export-csv", label: t("exportCsv"), onSelect: () => runExport.mutate("csv") },
-          { key: "export-docx", label: t("exportDocx"), onSelect: () => runExport.mutate("docx") },
-          { key: "export-xlsx", label: t("exportXlsx"), onSelect: () => runExport.mutate("xlsx") },
-          { key: "export-pdf", label: t("exportPdf"), onSelect: () => runExport.mutate("pdf") },
-          { key: "export-reqif", label: t("exportReqif"), onSelect: () => runExport.mutate("reqif") },
-          { key: "import-csv", label: t("importCsv"), onSelect: () => fileInput.current?.click() },
-          { key: "import-xlsx", label: t("importXlsx"), onSelect: () => xlsxInput.current?.click() },
-          { key: "import-reqif", label: t("importReqif"), onSelect: () => reqifInput.current?.click() },
+          {
+            key: "import",
+            label: t("import"),
+            children: [
+              { key: "import-csv", label: t("importCsv"), onSelect: () => fileInput.current?.click() },
+              { key: "import-xlsx", label: t("importXlsx"), onSelect: () => xlsxInput.current?.click() },
+              { key: "import-reqif", label: t("importReqif"), onSelect: () => reqifInput.current?.click() },
+            ],
+          },
+          {
+            key: "export",
+            label: t("export"),
+            children: [
+              { key: "export-csv", label: t("exportCsv"), onSelect: () => runExport.mutate("csv") },
+              { key: "export-docx", label: t("exportDocx"), onSelect: () => runExport.mutate("docx") },
+              { key: "export-xlsx", label: t("exportXlsx"), onSelect: () => runExport.mutate("xlsx") },
+              { key: "export-pdf", label: t("exportPdf"), onSelect: () => runExport.mutate("pdf") },
+              { key: "export-reqif", label: t("exportReqif"), onSelect: () => runExport.mutate("reqif") },
+            ],
+          },
+          { key: "baselines", label: t("baselines"), onSelect: () => onOpenReport("baselines") },
           { key: "sep1", label: "", separator: true },
         ]
       : []),
@@ -246,11 +265,12 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
     }));
 
   const analysisEntries: MenuEntry[] = [
-    { key: "baselines", label: t("baselines"), onSelect: () => onOpenReport("baselines") },
+    { key: "readiness", label: t("releaseReadiness"), onSelect: () => onOpenReport("readiness") },
+    { key: "readiness-sep", label: "", separator: true },
     { key: "coverage", label: t("coverageReport"), onSelect: () => onOpenReport("coverage") },
     { key: "matrix", label: t("traceabilityMatrix"), onSelect: () => onOpenReport("matrix") },
     { key: "reviews", label: t("reviews"), onSelect: () => onOpenReport("reviews") },
-    ...(documentType === "test" ? [{ key: "runs", label: t("testRuns"), onSelect: () => onOpenReport("runs" as const) }] : []),
+    { key: "runs", label: t("testRuns"), onSelect: () => onOpenReport("runs") },
   ];
 
   const helpEntries: MenuEntry[] = [
@@ -259,16 +279,45 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport 
 
   return (
     <>
-    <div className="relative z-50 flex items-center gap-0.5 border-b border-border bg-surface/90 px-2 py-1.5 backdrop-blur-xl">
-      <span className="px-2 text-sm font-semibold">{t("appName")}</span>
-      <Menu testId="menu-file" label={t("menuFile")} entries={fileEntry} />
-      <Menu testId="menu-edit" label={t("menuEdit")} entries={editEntries} />
-      <Menu testId="menu-view" label={t("menuView")} entries={viewEntries} />
-      <Menu testId="menu-insert" label={t("menuInsert")} entries={insertEntries} />
-      {gridDoc && <Menu testId="menu-columns" label={t("menuColumns")} entries={columnEntries} />}
-      {gridDoc && <Menu testId="menu-analysis" label={t("menuAnalysis")} entries={analysisEntries} />}
-      <Menu testId="menu-help" label={t("menuHelp")} entries={helpEntries} />
-      <NotificationCenter />
+    <div className="relative z-50 grid grid-cols-[minmax(0,1fr)_clamp(16rem,32vw,34rem)_minmax(0,1fr)] items-center border-b border-border bg-surface/90 px-2 py-1 backdrop-blur-xl">
+      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <span className="shrink-0 px-2 text-sm font-semibold">{t("appName")}</span>
+        <Menu testId="menu-file" label={t("menuFile")} entries={fileEntry} />
+        <Menu testId="menu-edit" label={t("menuEdit")} entries={editEntries} />
+        <Menu testId="menu-view" label={t("menuView")} entries={viewEntries} />
+        <Menu testId="menu-insert" label={t("menuInsert")} entries={insertEntries} />
+        {gridDoc && <Menu testId="menu-columns" label={t("menuColumns")} entries={columnEntries} />}
+        {gridDoc && <Menu testId="menu-analysis" label={t("menuAnalysis")} entries={analysisEntries} />}
+        <Menu testId="menu-help" label={t("menuHelp")} entries={helpEntries} />
+      </div>
+      <div
+        id="docsys-global-search"
+        data-testid="global-search-trigger"
+        title={t("globalSearchHelp")}
+        className={`mx-3 flex min-w-0 items-center gap-2 border border-border bg-editorBackground/80 px-3 py-1.5 text-xs text-mutedForeground shadow-sm transition-colors focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-primary/35 hover:bg-muted ${searchOpen ? "rounded-t-xl rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-lg"}`}
+      >
+        <Search size={14} className="shrink-0" />
+        <input
+          id="docsys-global-search-input"
+          data-testid="global-search-input"
+          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-mutedForeground"
+          value={searchQuery}
+          placeholder={t("globalSearchHelp")}
+          onFocus={onOpenSearch}
+          onChange={(event) => {
+            onSearchQueryChange(event.target.value);
+            onOpenSearch();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              onCloseSearch();
+              event.currentTarget.blur();
+            }
+          }}
+        />
+        {!searchQuery && <span className="shrink-0 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px]">⌘K</span>}
+      </div>
+      <div className="flex justify-end"><NotificationCenter /></div>
       <input
         ref={fileInput}
         type="file"

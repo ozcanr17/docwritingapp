@@ -39,6 +39,15 @@ export interface ExportRow {
   linkedRequirementNos: string[];
 }
 
+export interface TraceabilityExportRow {
+  id: string;
+  primary: string;
+  documentTitle: string;
+  related: Array<{ id: string; label: string; description: string; suspect: boolean }>;
+}
+
+type TraceabilityDirection = "requirement_to_test" | "test_to_requirement";
+
 export function numberRows(
   rows: Array<{
     id: string;
@@ -271,6 +280,146 @@ export async function toXlsx(title: string, rows: ExportRow[]): Promise<Buffer> 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+function traceabilityLabels(direction: TraceabilityDirection, locale: ExportLocale) {
+  const tr = locale === "tr";
+  if (direction === "test_to_requirement") {
+    return tr
+      ? { title: "Testlerden Gereksinimlere \u0130zlenebilirlik Matrisi", primary: "Test Ad\u0131", related: "Gereksinim No" }
+      : { title: "Tests to Requirements Traceability Matrix", primary: "Test Name", related: "Requirement No" };
+  }
+  return tr
+    ? { title: "Gereksinimlerden Testlere \u0130zlenebilirlik Matrisi", primary: "Gereksinim No", related: "Ba\u011fl\u0131 Testler" }
+    : { title: "Requirements to Tests Traceability Matrix", primary: "Requirement No", related: "Linked Tests" };
+}
+
+export async function toTraceabilityXlsx(title: string, rows: TraceabilityExportRow[], direction: TraceabilityDirection, locale: ExportLocale): Promise<Buffer> {
+  const labels = traceabilityLabels(direction, locale);
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "DocSys";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Traceability", { views: [{ state: "frozen", ySplit: 1, xSplit: 1 }] });
+  sheet.columns = [
+    { header: labels.primary, key: "primary", width: 42 },
+    { header: labels.related, key: "related", width: 72 },
+  ];
+  for (const row of rows) sheet.addRow({ primary: row.primary, related: row.related.map((item) => item.label).join("\n") });
+  sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
+  sheet.eachRow((row) => { row.alignment = { vertical: "top", wrapText: true }; });
+  sheet.headerFooter.oddHeader = `&L${title}&R${labels.title}`;
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
+export async function toTraceabilityDocx(title: string, rows: TraceabilityExportRow[], direction: TraceabilityDirection, locale: ExportLocale): Promise<Buffer> {
+  const labels = traceabilityLabels(direction, locale);
+  const widths = [3500, 5860];
+  const table = new Table({
+    rows: [
+      new TableRow({ tableHeader: true, cantSplit: true, children: [tableCell(labels.primary, widths[0]!, { header: true }), tableCell(labels.related, widths[1]!, { header: true })] }),
+      ...rows.map((row) => new TableRow({ cantSplit: true, children: [tableCell(row.primary, widths[0]!, { bold: true }), tableCell(row.related.map((item) => item.label).join("\n"), widths[1]!)] })),
+    ],
+    width: { size: TABLE_WIDTH, type: WidthType.DXA },
+    columnWidths: widths,
+    layout: TableLayoutType.FIXED,
+    margins: CELL_MARGINS,
+    borders: TABLE_BORDERS,
+  });
+  const document = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: "Calibri", size: 22, color: "172033" },
+          paragraph: { spacing: { after: 120, line: 300 } },
+        },
+      },
+    },
+    sections: [{
+      properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 } } },
+      children: [
+        new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: title, bold: true, size: 30, font: "Calibri" })] }),
+        new Paragraph({ spacing: { after: 180 }, children: [new TextRun({ text: labels.title, size: 18, color: "667085", font: "Calibri" })] }),
+        table,
+      ],
+    }],
+  });
+  return Packer.toBuffer(document);
+}
+
+async function buildTraceabilityExportRows(prisma: PrismaClient, documentId: string, direction: TraceabilityDirection): Promise<TraceabilityExportRow[]> {
+  const document = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+  const currentRows = await prisma.documentRow.findMany({
+    where: { documentId, deletedAt: null },
+    select: { id: true, objectNumber: true, parentId: true, rowType: true, title: true, description: true, requirementDetail: { select: { requirementNo: true } }, document: { select: { id: true, title: true, documentType: true } } },
+  });
+  const currentIds = currentRows.map((row) => row.id);
+  const links = currentIds.length === 0 ? [] : await prisma.requirementLink.findMany({
+    where: { deletedAt: null, OR: [{ sourceRowId: { in: currentIds } }, { targetRowId: { in: currentIds } }] },
+    select: {
+      id: true,
+      suspect: true,
+      sourceRow: { select: { id: true, documentId: true, rowType: true } },
+      targetRow: { select: { id: true, documentId: true, rowType: true } },
+    },
+  });
+  const testDocumentIds = [...new Set([
+    ...(document.documentType === "test" ? [documentId] : []),
+    ...links.flatMap((link) => [link.sourceRow, link.targetRow]).filter((row) => row.rowType === "test_case" || row.rowType === "test_step").map((row) => row.documentId),
+  ])];
+  const testRows = testDocumentIds.length === 0 ? [] : await prisma.documentRow.findMany({
+    where: { documentId: { in: testDocumentIds }, deletedAt: null },
+    select: { id: true, objectNumber: true, parentId: true, rowType: true, title: true, description: true, document: { select: { id: true, title: true, documentType: true } } },
+  });
+  const testRowsById = new Map(testRows.map((row) => [row.id, row]));
+  const resolveScenario = (rowId: string) => {
+    const row = testRowsById.get(rowId);
+    if (!row || row.rowType === "test_case" || row.rowType !== "test_step" || !row.parentId) return row;
+    const parent = testRowsById.get(row.parentId);
+    if (!parent || parent.rowType === "test_case") return parent ?? row;
+    return parent.parentId ? testRowsById.get(parent.parentId) ?? parent : parent;
+  };
+  const linkedRequirementIds = links.flatMap((link) => [link.sourceRow, link.targetRow]).filter((row) => row.rowType === "requirement").map((row) => row.id);
+  const requirementRows = document.documentType === "requirement"
+    ? currentRows.filter((row) => row.rowType === "requirement")
+    : await prisma.documentRow.findMany({
+      where: { id: { in: linkedRequirementIds }, rowType: "requirement", deletedAt: null },
+      select: { id: true, objectNumber: true, parentId: true, rowType: true, title: true, description: true, requirementDetail: { select: { requirementNo: true } }, document: { select: { id: true, title: true, documentType: true } } },
+    });
+  const requirementsById = new Map(requirementRows.map((row) => [row.id, row]));
+  if (direction === "requirement_to_test") {
+    return requirementRows.sort((a, b) => a.objectNumber - b.objectNumber).map((requirement) => {
+      const related = new Map<string, { id: string; label: string; description: string; suspect: boolean }>();
+      for (const link of links) {
+        const requirementRef = [link.sourceRow, link.targetRow].find((row) => row.id === requirement.id);
+        const testRef = [link.sourceRow, link.targetRow].find((row) => row.rowType === "test_case" || row.rowType === "test_step");
+        const scenario = testRef ? resolveScenario(testRef.id) : null;
+        if (!requirementRef || !scenario) continue;
+        const existing = related.get(scenario.id);
+        related.set(scenario.id, { id: scenario.id, label: scenario.title || `ID ${scenario.objectNumber}`, description: scenario.description ?? "", suspect: Boolean(existing?.suspect || link.suspect) });
+      }
+      return { id: requirement.id, primary: requirement.requirementDetail?.requirementNo ?? `ID ${requirement.objectNumber}`, documentTitle: requirement.document.title, related: [...related.values()] };
+    });
+  }
+  const scenarios = new Map<string, typeof testRows[number]>();
+  for (const row of testRows) {
+    if (row.rowType !== "test_case" && row.rowType !== "test_step") continue;
+    const scenario = resolveScenario(row.id);
+    if (scenario) scenarios.set(scenario.id, scenario);
+  }
+  return [...scenarios.values()].sort((a, b) => a.document.title.localeCompare(b.document.title) || a.objectNumber - b.objectNumber).map((scenario) => {
+    const related = new Map<string, { id: string; label: string; description: string; suspect: boolean }>();
+    for (const link of links) {
+      const testRef = [link.sourceRow, link.targetRow].find((row) => row.rowType === "test_case" || row.rowType === "test_step");
+      const requirementRef = [link.sourceRow, link.targetRow].find((row) => row.rowType === "requirement");
+      if (!testRef || !requirementRef || resolveScenario(testRef.id)?.id !== scenario.id) continue;
+      const requirement = requirementsById.get(requirementRef.id);
+      if (!requirement) continue;
+      const existing = related.get(requirement.id);
+      related.set(requirement.id, { id: requirement.id, label: requirement.requirementDetail?.requirementNo ?? `ID ${requirement.objectNumber}`, description: requirement.description ?? requirement.title, suspect: Boolean(existing?.suspect || link.suspect) });
+    }
+    return { id: scenario.id, primary: scenario.title || `ID ${scenario.objectNumber}`, documentTitle: scenario.document.title, related: [...related.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true })) };
+  });
+}
+
 export async function toPdf(title: string, rows: ExportRow[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const document = new PDFDocument({ size: "A4", margin: 48, bufferPages: true });
@@ -383,16 +532,22 @@ export async function runExport(
   const parameters = job.parameters as Record<string, unknown>;
   const templateId = typeof parameters.templateId === "string" ? parameters.templateId : null;
   const locale = parameters.locale === "en" ? "en" : "tr";
+  const traceabilityDirection: TraceabilityDirection = parameters.traceabilityDirection === "test_to_requirement" ? "test_to_requirement" : "requirement_to_test";
+  const traceabilityRows = parameters.scope === "traceability"
+    ? await buildTraceabilityExportRows(prisma, document.id, traceabilityDirection)
+    : null;
   const template = templateId ? await prisma.exportTemplate.findFirst({ where: { id: templateId, organizationId: job.organizationId, deletedAt: null } }) : null;
   const docxBody = job.jobType === "docx"
-    ? template
+    ? traceabilityRows
+      ? await toTraceabilityDocx(document.title, traceabilityRows, traceabilityDirection, locale)
+      : template
       ? toTemplatedDocx(await storage.get(template.storageKey), document.title, numbered)
       : await toDocx(document.title, numbered, document.documentType === "test" ? "test" : "requirement", locale)
     : Buffer.alloc(0);
   const output = job.jobType === "docx"
     ? { body: docxBody, contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", extension: "docx" }
     : job.jobType === "xlsx"
-      ? { body: await toXlsx(document.title, numbered), contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", extension: "xlsx" }
+      ? { body: traceabilityRows ? await toTraceabilityXlsx(document.title, traceabilityRows, traceabilityDirection, locale) : await toXlsx(document.title, numbered), contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", extension: "xlsx" }
       : job.jobType === "pdf"
         ? { body: await toPdf(document.title, numbered), contentType: "application/pdf", extension: "pdf" }
         : job.jobType === "reqif"

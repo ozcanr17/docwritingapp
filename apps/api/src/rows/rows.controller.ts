@@ -254,8 +254,12 @@ export class RowsController {
   }
 
   @Get("documents/:documentId/traceability")
-  traceability(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
-    return this.rows.traceabilityMatrix(user.userId, documentId);
+  traceability(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Query("direction") direction?: string,
+  ) {
+    return this.rows.traceabilityMatrix(user.userId, documentId, direction === "test_to_requirement" ? "test_to_requirement" : "requirement_to_test");
   }
 
   @Post("rows/:rowId/projects/:projectId")

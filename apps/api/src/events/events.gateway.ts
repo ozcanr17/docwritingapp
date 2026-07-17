@@ -43,8 +43,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     });
   }
 
-  async onModuleDestroy(): Promise<void> {
-    await this.redis.subscriber.unsubscribe(EVENTS_CHANNEL).catch(() => undefined);
+  onModuleDestroy(): void {
+    this.redis.subscriber.removeAllListeners("message");
   }
 
   handleConnection(client: WebSocket, request: IncomingMessage): void {

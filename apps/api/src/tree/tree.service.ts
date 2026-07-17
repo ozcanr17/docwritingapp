@@ -80,7 +80,7 @@ export class TreeService {
       this.prisma.document.findMany({
         where: { workspaceId, folderId: parentId, deletedAt: null },
         orderBy: { rank: "asc" },
-        select: { id: true, title: true, documentType: true, folderId: true, rank: true, version: true, updatedAt: true },
+        select: { id: true, title: true, documentType: true, folderId: true, rank: true, version: true, requirementPrefix: true, updatedAt: true },
       }),
     ]);
     return { folders, documents };
@@ -322,7 +322,7 @@ export class TreeService {
     actorId: string,
     documentId: string,
     expectedVersion: number,
-    patch: { title?: string; columnConfig?: Prisma.InputJsonValue; folderId?: string | null },
+    patch: { title?: string; columnConfig?: Prisma.InputJsonValue; folderId?: string | null; requirementPrefix?: string },
   ) {
     const document = await this.requireDocument(documentId);
     await this.access.assertPermission(actorId, "document.manage", {
@@ -351,6 +351,7 @@ export class TreeService {
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.columnConfig !== undefined ? { columnConfig: patch.columnConfig } : {}),
           ...(patch.folderId !== undefined ? { folderId: patch.folderId, ...(rank ? { rank } : {}) } : {}),
+          ...(patch.requirementPrefix !== undefined ? { requirementPrefix: patch.requirementPrefix } : {}),
           version: { increment: 1 },
           updatedById: actorId,
         },
@@ -366,8 +367,8 @@ export class TreeService {
         entityType: "document",
         entityId: documentId,
         documentId,
-        previousData: { title: document.title, folderId: document.folderId },
-        nextData: { title: patch.title ?? document.title, folderId: patch.folderId ?? document.folderId, columnConfigChanged: patch.columnConfig !== undefined },
+        previousData: { title: document.title, folderId: document.folderId, requirementPrefix: document.requirementPrefix },
+        nextData: { title: patch.title ?? document.title, folderId: patch.folderId ?? document.folderId, requirementPrefix: patch.requirementPrefix ?? document.requirementPrefix, columnConfigChanged: patch.columnConfig !== undefined },
       });
       return tx.document.findUniqueOrThrow({ where: { id: documentId } });
     });

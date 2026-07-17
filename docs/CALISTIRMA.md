@@ -80,7 +80,7 @@ verin: `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`.
 - **Yeni içerik:** soldaki ağaçta sağ tıklayın → **Yeni doküman** / **Yeni metin dokümanı**
 - **Sütunlar:** **Sütunlar** menüsünden aç/kapat, **Ekle → Sütun ekle** ile yeni sütun
 - **İçe/Dışa aktarım:** **Dosya** menüsü (CSV / Word)
-- **DOORS özellikleri:** **Analiz** menüsü → Temel çizgiler, Kapsam raporu, İzlenebilirlik matrisi
+- **DOORS özellikleri:** **Dosya** menüsü → Baseline'lar; **Analiz** menüsü → Kapsam raporu, İzlenebilirlik matrisi
 
 ## Adresler
 

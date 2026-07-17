@@ -28,6 +28,7 @@ const updateDocumentSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   columnConfig: z.array(z.record(z.unknown())).optional(),
   folderId: z.string().uuid().nullable().optional(),
+  requirementPrefix: z.string().regex(/^[A-Za-z][A-Za-z0-9]{0,19}$/).optional(),
 });
 
 @Controller()
@@ -118,6 +119,7 @@ export class TreeController {
       title: body.title,
       columnConfig: body.columnConfig as never,
       folderId: body.folderId,
+      requirementPrefix: body.requirementPrefix?.toUpperCase(),
     });
   }
 

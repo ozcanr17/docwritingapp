@@ -105,6 +105,13 @@ enum ExecutionStatus {
   skipped
 }
 
+enum RetestPackageStatus {
+  draft
+  active
+  completed
+  canceled
+}
+
 enum ReviewStatus {
   draft
   active
@@ -178,6 +185,7 @@ model User {
   savedViews              SavedView[]            @relation("SavedViewOwner")
   rowComments             RowComment[]           @relation("CommentAuthor")
   testExecutions          TestExecution[]        @relation("ExecutionUser")
+  createdRetestPackages   RetestPackage[]        @relation("RetestPackageCreator")
   createdReviews          Review[]               @relation("ReviewCreator")
   reviewDecisions         ReviewDecision[]       @relation("ReviewDecisionUser")
   changeProposals         ChangeProposal[]       @relation("ProposalRequester")
@@ -222,6 +230,7 @@ model Organization {
   savedViews        SavedView[]
   rowComments       RowComment[]
   testExecutions    TestExecution[]
+  retestPackages    RetestPackage[]
   reviews           Review[]
   changeProposals   ChangeProposal[]
   configurations    ProductConfiguration[]
@@ -266,6 +275,7 @@ model Workspace {
   documents      Document[]
   memberRoles    MemberRole[]
   configurations ProductConfiguration[]
+  retestPackages RetestPackage[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, deletedAt])
@@ -438,6 +448,7 @@ model Document {
   rank             String
   columnConfig     Json         @default("[]")
   numberingStyle   Json         @default("{}")
+  requirementPrefix String      @default("REQ")
   nextObjectNumber Int          @default(1)
   version          Int          @default(1)
   createdAt        DateTime     @default(now()) @db.Timestamptz(6)
@@ -453,16 +464,17 @@ model Document {
   folder       Folder?           @relation(fields: [folderId], references: [id], onDelete: Restrict)
   template     DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
 
-  rows            DocumentRow[]
-  customFieldDefs CustomFieldDefinition[]
-  attachments     Attachment[]
-  revisions       DocumentRevision[]
-  collabSnapshots CollaborationSnapshot[]
-  collabUpdates   CollaborationUpdate[]
-  exportJobs      ExportJob[]
-  savedViews      SavedView[]
-  reviews         Review[]
-  configurations  ProductConfiguration[]
+  rows                 DocumentRow[]
+  customFieldDefs      CustomFieldDefinition[]
+  attachments          Attachment[]
+  revisions            DocumentRevision[]
+  collabSnapshots      CollaborationSnapshot[]
+  collabUpdates        CollaborationUpdate[]
+  exportJobs           ExportJob[]
+  savedViews           SavedView[]
+  reviews              Review[]
+  configurations       ProductConfiguration[]
+  sourceRetestPackages RetestPackage[]
 
   @@index([workspaceId, folderId, deletedAt, rank])
   @@index([organizationId, deletedAt])
@@ -479,6 +491,8 @@ model DocumentTemplate {
   validationRules  Json         @default("{}")
   namingConvention Json         @default("{}")
   numberingStyle   Json         @default("{}")
+  templateKind     String       @default("document")
+  contentSnapshot  Json         @default("[]")
   exportTemplateId String?      @db.Uuid
   version          Int          @default(1)
   createdAt        DateTime     @default(now()) @db.Timestamptz(6)
@@ -539,6 +553,7 @@ model DocumentRow {
   changeProposals    ChangeProposal[]
   configurationItems ConfigurationItem[]
   accessGrants       RowAccessGrant[]
+  retestPackageItems RetestPackageItem[]
 
   @@unique([documentId, objectNumber])
   @@index([documentId, parentId, deletedAt, rank])
@@ -768,16 +783,16 @@ model AuditEvent {
 }
 
 model DocumentRevision {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String   @db.Uuid
-  documentId     String   @db.Uuid
-  revisionNumber Int
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String   @db.Uuid
+  documentId      String   @db.Uuid
+  revisionNumber  Int
   semanticVersion String
-  label          String?
-  snapshotKey    String?
-  summary        Json     @default("{}")
-  createdById    String?  @db.Uuid
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  label           String?
+  snapshotKey     String?
+  summary         Json     @default("{}")
+  createdById     String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   document     Document     @relation(fields: [documentId], references: [id], onDelete: Restrict)
@@ -881,16 +896,18 @@ model SavedView {
 }
 
 model RowComment {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String    @db.Uuid
-  rowId          String    @db.Uuid
-  authorId       String    @db.Uuid
-  body           String
-  mentions       String[]  @default([])
-  resolvedAt     DateTime? @db.Timestamptz(6)
-  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
-  deletedAt      DateTime? @db.Timestamptz(6)
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String    @db.Uuid
+  rowId                String    @db.Uuid
+  authorId             String    @db.Uuid
+  body                 String
+  mentions             String[]  @default([])
+  anchor               Json      @default("{}")
+  suggestedReplacement String?
+  resolvedAt           DateTime? @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt            DateTime? @db.Timestamptz(6)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   row          DocumentRow  @relation(fields: [rowId], references: [id], onDelete: Restrict)
@@ -901,27 +918,30 @@ model RowComment {
 }
 
 model TestExecution {
-  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String          @db.Uuid
-  testCaseRowId  String          @db.Uuid
-  executedById   String          @db.Uuid
-  status         ExecutionStatus @default(not_run)
-  environment    String?
-  buildReference String?
-  iteration      String?
-  notes          String?
-  startedAt      DateTime?       @db.Timestamptz(6)
-  completedAt    DateTime?       @db.Timestamptz(6)
-  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId      String          @db.Uuid
+  testCaseRowId       String          @db.Uuid
+  executedById        String          @db.Uuid
+  retestPackageItemId String?         @db.Uuid
+  status              ExecutionStatus @default(not_run)
+  environment         String?
+  buildReference      String?
+  iteration           String?
+  notes               String?
+  startedAt           DateTime?       @db.Timestamptz(6)
+  completedAt         DateTime?       @db.Timestamptz(6)
+  createdAt           DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime        @updatedAt @db.Timestamptz(6)
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  testCaseRow  DocumentRow         @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
-  executedBy   User                @relation("ExecutionUser", fields: [executedById], references: [id], onDelete: Restrict)
-  steps        TestStepExecution[]
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  testCaseRow       DocumentRow         @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
+  executedBy        User                @relation("ExecutionUser", fields: [executedById], references: [id], onDelete: Restrict)
+  retestPackageItem RetestPackageItem?  @relation(fields: [retestPackageItemId], references: [id], onDelete: Restrict)
+  steps             TestStepExecution[]
 
   @@index([testCaseRowId, createdAt])
   @@index([organizationId, status])
+  @@index([retestPackageItemId, createdAt])
   @@map("test_executions")
 }
 
@@ -942,6 +962,52 @@ model TestStepExecution {
   @@map("test_step_executions")
 }
 
+model RetestPackage {
+  id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String              @db.Uuid
+  workspaceId          String              @db.Uuid
+  sourceDocumentId     String              @db.Uuid
+  createdById          String              @db.Uuid
+  name                 String
+  status               RetestPackageStatus @default(draft)
+  sourceRevisionNumber Int?
+  impactDepth          Int                 @default(1)
+  criteria             Json                @default("{}")
+  summary              Json                @default("{}")
+  createdAt            DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime            @updatedAt @db.Timestamptz(6)
+  completedAt          DateTime?           @db.Timestamptz(6)
+  canceledAt           DateTime?           @db.Timestamptz(6)
+
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workspace      Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  sourceDocument Document            @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
+  createdBy      User                @relation("RetestPackageCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  items          RetestPackageItem[]
+
+  @@index([sourceDocumentId, createdAt])
+  @@index([workspaceId, status, createdAt])
+  @@map("retest_packages")
+}
+
+model RetestPackageItem {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  packageId    String   @db.Uuid
+  testRowId    String   @db.Uuid
+  reason       String
+  sourceRowIds String[] @default([])
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  package    RetestPackage   @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  testRow    DocumentRow     @relation(fields: [testRowId], references: [id], onDelete: Restrict)
+  executions TestExecution[]
+
+  @@unique([packageId, testRowId])
+  @@index([testRowId, createdAt])
+  @@map("retest_package_items")
+}
+
 model Review {
   id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String       @db.Uuid
@@ -952,6 +1018,9 @@ model Review {
   status         ReviewStatus @default(draft)
   reviewerIds    String[]     @default([])
   dueAt          DateTime?    @db.Timestamptz(6)
+  baselineRevisionNumber Int?
+  baselineSemanticVersion String?
+  contentHash    String?
   createdAt      DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
 

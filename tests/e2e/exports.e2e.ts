@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createTreeNode } from "./helpers";
+import { createTreeNode, openTreeDocument } from "./helpers";
 
 test("import CSV, verify hierarchy, then export and download", async ({ page }) => {
   const suffix = Date.now();
@@ -17,7 +17,7 @@ test("import CSV, verify hierarchy, then export and download", async ({ page }) 
   await expect(page.getByTestId("tree-empty")).toBeVisible();
 
   await createTreeNode(page, "menu-newDocument", "Imported Spec");
-  await page.getByRole("button", { name: "Imported Spec" }).click();
+  await openTreeDocument(page, "Imported Spec");
   await expect(page.getByTestId("grid-empty")).toBeVisible();
 
   const csv = [
@@ -39,6 +39,7 @@ test("import CSV, verify hierarchy, then export and download", async ({ page }) 
   await expect(page.getByTestId("grid-row-2")).toBeVisible();
 
   await page.getByTestId("menu-file").click();
+  await page.getByTestId("menuitem-export").click();
   await page.getByTestId("menuitem-export-csv").click();
   await expect(page.getByTestId("toast-success")).toBeVisible({ timeout: 45000 });
 });

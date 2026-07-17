@@ -1,8 +1,11 @@
-import { CornerDownRight, LayoutDashboard, Pin, Plus, Save, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ChevronsDown, ChevronsUp, CornerDownRight, FilePlus2, Filter, IndentDecrease, IndentIncrease, LayoutDashboard, Layers3, ListPlus, PanelRightOpen, Pin, Plus, Redo2, Replace, Save, Search, SlidersHorizontal, Trash2, Undo2, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { DashboardSummary, OutlineRow, SavedView } from "../lib/api";
+import { AdvancedFilterConfig } from "../lib/advancedFilters";
 import { GridColumn } from "../lib/columns";
+import { AdvancedFilterPopover } from "./AdvancedFilterPopover";
 
 interface ProductivityBarProps {
   columns: GridColumn[];
@@ -18,35 +21,62 @@ interface ProductivityBarProps {
   onSortChange: (key: string, direction: "asc" | "desc") => void;
   onFrozenCountChange: (count: number) => void;
   onApplyView: (view: SavedView) => void;
-  onSaveView: (name: string, scope: "personal" | "team") => void;
+  onSaveView: (name: string, scope: "personal" | "team", isDefault: boolean) => void;
   onDeleteView: (id: string) => void;
   onAddObject: () => void;
   onAddObjectBelow: () => void;
   onAddBlankObject: () => void;
   onAddBlankObjectBelow: () => void;
   canAddObjectBelow: boolean;
+  canModifySelected: boolean;
+  onIndent: () => void;
+  onOutdent: () => void;
+  onOpenDetails: () => void;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
+  onDeleteSelected: () => void;
+  onAddTestStep?: () => void;
+  onAddTestTemplate?: () => void;
+  advancedFilter: AdvancedFilterConfig;
+  onAdvancedFilterChange: (config: AdvancedFilterConfig) => void;
+  onToggleFindReplace: () => void;
+  onToggleTemplates: () => void;
+  advancedTargetId?: string;
+  showAdvancedControls?: boolean;
+  undoDisabled: boolean;
+  redoDisabled: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 export function ProductivityBar(props: ProductivityBarProps) {
   const { t } = useTranslation();
   const [saveOpen, setSaveOpen] = useState(false);
   const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [viewName, setViewName] = useState("");
   const [scope, setScope] = useState<"personal" | "team">("personal");
+  const [isDefault, setIsDefault] = useState(false);
   const [activeViewId, setActiveViewId] = useState("");
+  const [advancedTarget, setAdvancedTarget] = useState<HTMLElement | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!saveOpen && !dashboardOpen) return;
+    setAdvancedTarget(props.advancedTargetId ? document.getElementById(props.advancedTargetId) : null);
+  }, [props.advancedTargetId]);
+  useEffect(() => {
+    if (!saveOpen && !dashboardOpen && !filterOpen) return;
     const closeOutside = (event: PointerEvent) => {
       if (!barRef.current?.contains(event.target as Node)) {
         setSaveOpen(false);
         setDashboardOpen(false);
+        setFilterOpen(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setSaveOpen(false);
         setDashboardOpen(false);
+        setFilterOpen(false);
       }
     };
     document.addEventListener("pointerdown", closeOutside);
@@ -55,55 +85,20 @@ export function ProductivityBar(props: ProductivityBarProps) {
       document.removeEventListener("pointerdown", closeOutside);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [dashboardOpen, saveOpen]);
+  }, [dashboardOpen, filterOpen, saveOpen]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!viewName.trim()) return;
-    props.onSaveView(viewName.trim(), scope);
+    props.onSaveView(viewName.trim(), scope, isDefault);
     setViewName("");
+    setIsDefault(false);
     setSaveOpen(false);
   };
-  return (
-    <div ref={barRef} className="relative z-20 flex flex-wrap items-center gap-2 border-b border-border bg-surface/90 px-3 py-2 text-xs backdrop-blur-xl">
-      <div className="flex items-center rounded-lg border border-border bg-editorBackground p-0.5">
-        <button
-          data-testid="add-object"
-          className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-medium hover:bg-muted"
-          title={`${t("addObject")} · Insert`}
-          onClick={props.onAddObject}
-        >
-          <Plus size={14} />
-          {t("addObject")}
-        </button>
-        <button
-          data-testid="add-blank-object"
-          className="border-l border-border px-2 py-1.5 text-mutedForeground hover:bg-muted hover:text-foreground"
-          title={t("addBlankObjectHelp")}
-          onClick={props.onAddBlankObject}
-        >
-          {t("blankObject")}
-        </button>
-        <button
-          data-testid="add-object-below"
-          className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-          title={`${t("addObjectBelow")} · Shift+Insert`}
-          disabled={!props.canAddObjectBelow}
-          onClick={props.onAddObjectBelow}
-        >
-          <CornerDownRight size={14} />
-          {t("addObjectBelow")}
-        </button>
-        <button
-          data-testid="add-blank-object-below"
-          className="border-l border-border px-2 py-1.5 text-mutedForeground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-          title={t("addBlankObjectBelowHelp")}
-          disabled={!props.canAddObjectBelow}
-          onClick={props.onAddBlankObjectBelow}
-        >
-          {t("blankObject")}
-        </button>
-      </div>
-      <label className="flex min-w-52 flex-1 items-center gap-2 rounded-lg border border-border bg-editorBackground px-2.5 py-1.5">
+  const advancedControls = (
+    <div ref={barRef} className="relative min-w-0 flex-1 overflow-visible text-xs">
+      <div className="w-full min-w-0 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
+      <div className="flex min-w-max items-center gap-1.5 pr-1">
+      <label className="flex min-w-40 flex-1 items-center gap-2 rounded-lg border border-border bg-editorBackground px-2.5 py-1.5 xl:max-w-sm">
         <Search size={14} className="text-mutedForeground" />
         <input
           data-testid="grid-search"
@@ -118,10 +113,19 @@ export function ProductivityBar(props: ProductivityBarProps) {
           </button>
         )}
       </label>
+      <button
+        data-testid="advanced-filter-toggle"
+        className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 hover:bg-muted ${props.advancedFilter.conditions.length > 0 ? "border-primary/40 bg-primary/10 text-primary" : "border-border"}`}
+        onClick={() => { setFilterOpen((current) => !current); setSaveOpen(false); setDashboardOpen(false); }}
+      >
+        <Filter size={13} /><span className="hidden 2xl:inline">{t("filters")}</span>{props.advancedFilter.conditions.length > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primaryForeground">{props.advancedFilter.conditions.length}</span>}
+      </button>
+      <button data-testid="find-replace-toggle" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2 py-1.5 hover:bg-muted" title={`${t("findReplace")} · Ctrl/Cmd+H`} onClick={props.onToggleFindReplace}><Replace size={13} /><span className="hidden 2xl:inline">{t("findReplace")}</span></button>
+      <button data-testid="template-library-toggle" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2 py-1.5 hover:bg-muted" title={t("templateLibrary")} onClick={props.onToggleTemplates}><Layers3 size={13} /><span className="hidden 2xl:inline">{t("templates")}</span></button>
       <select
         data-testid="grid-type-filter"
         aria-label={t("filterByType")}
-        className="rounded-lg border border-border bg-editorBackground px-2 py-1.5"
+        className="max-w-40 rounded-lg border border-border bg-editorBackground px-2 py-1.5"
         value={props.rowTypeFilter}
         onChange={(event) => props.onRowTypeFilterChange(event.target.value as OutlineRow["rowType"] | "")}
       >
@@ -133,7 +137,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
       </select>
       <select
         data-testid="grid-sort"
-        className="rounded-lg border border-border bg-editorBackground px-2 py-1.5"
+        className="max-w-44 rounded-lg border border-border bg-editorBackground px-2 py-1.5"
         value={props.sortKey}
         onChange={(event) => props.onSortChange(event.target.value, props.sortDirection)}
       >
@@ -165,7 +169,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
       </label>
       <select
         data-testid="saved-view-select"
-        className="max-w-44 rounded-lg border border-border bg-editorBackground px-2 py-1.5"
+        className="max-w-36 rounded-lg border border-border bg-editorBackground px-2 py-1.5 2xl:max-w-44"
         value={activeViewId}
         onChange={(event) => {
           const view = props.views.find((candidate) => candidate.id === event.target.value);
@@ -174,7 +178,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
         }}
       >
         <option value="">{t("savedViews")}</option>
-        {props.views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
+        {props.views.map((view) => <option key={view.id} value={view.id}>{view.isDefault ? "★ " : ""}{view.name} · {t(view.scope === "team" ? "teamView" : "personalView")}</option>)}
       </select>
       {activeViewId && <button className="rounded-lg border border-border p-1.5 text-destructive hover:bg-muted" title={t("deleteView")} onClick={() => { props.onDeleteView(activeViewId); setActiveViewId(""); }}><Trash2 size={14} /></button>}
       <button className="rounded-lg border border-border p-1.5 hover:bg-muted" title={t("saveView")} onClick={() => { setSaveOpen((current) => !current); setDashboardOpen(false); }}>
@@ -188,6 +192,8 @@ export function ProductivityBar(props: ProductivityBarProps) {
       >
         <LayoutDashboard size={14} />
       </button>
+      </div>
+      </div>
       {saveOpen && (
         <form className="absolute right-3 top-full z-40 mt-1 w-72 rounded-xl border border-border bg-surfaceElevated p-3 shadow-2xl" onSubmit={submit}>
           <div className="mb-2 flex items-center gap-2 font-medium"><SlidersHorizontal size={14} />{t("saveView")}</div>
@@ -203,6 +209,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
             <option value="personal">{t("personalView")}</option>
             <option value="team">{t("teamView")}</option>
           </select>
+          <label className="mt-2 flex items-center gap-2 rounded-lg bg-editorBackground px-2.5 py-2 text-xs"><input type="checkbox" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} className="accent-primary" />{t("makeDefaultView")}</label>
           <div className="mt-3 flex justify-end gap-2">
             <button type="button" className="rounded-lg px-2.5 py-1.5 hover:bg-muted" onClick={() => setSaveOpen(false)}>{t("cancel")}</button>
             <button data-testid="saved-view-submit" className="rounded-lg bg-primary px-2.5 py-1.5 text-primaryForeground" disabled={!viewName.trim()}>{t("save")}</button>
@@ -219,7 +226,49 @@ export function ProductivityBar(props: ProductivityBarProps) {
           <Widget label={t("failedExecutions")} value={props.dashboard.executions.failed} />
         </div>
       )}
+      {filterOpen && <AdvancedFilterPopover config={props.advancedFilter} columns={props.columns} onChange={props.onAdvancedFilterChange} onClose={() => setFilterOpen(false)} />}
     </div>
+  );
+  return (
+    <>
+      <div className="relative z-20 min-w-0 overflow-x-auto border-b border-border bg-surface/90 px-2.5 py-1 text-xs backdrop-blur-xl [scrollbar-width:thin]">
+        <div className="flex min-w-max items-center gap-1">
+          <ToolbarButton testId="add-object" label={`${t("addObject")} · Insert`} onClick={props.onAddObject}><Plus size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-blank-object" label={t("addBlankObjectHelp")} onClick={props.onAddBlankObject}><FilePlus2 size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-object-below" label={`${t("addObjectBelow")} · Shift+Insert`} disabled={!props.canAddObjectBelow} onClick={props.onAddObjectBelow}><CornerDownRight size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-blank-object-below" label={t("addBlankObjectBelowHelp")} disabled={!props.canAddObjectBelow} onClick={props.onAddBlankObjectBelow}><FilePlus2 size={16} className="translate-y-0.5" /></ToolbarButton>
+          {props.onAddTestStep && <ToolbarButton testId="toolbar-add-test-step" label={t("addTestStep")} onClick={props.onAddTestStep}><ListPlus size={16} /></ToolbarButton>}
+          {props.onAddTestTemplate && <ToolbarButton testId="toolbar-add-test-template" label={t("addTestTemplate")} onClick={props.onAddTestTemplate}><Layers3 size={16} /></ToolbarButton>}
+          <span className="mx-1 h-5 w-px bg-border" />
+          <ToolbarButton testId="toolbar-indent" label={t("indent")} disabled={!props.canModifySelected} onClick={props.onIndent}><IndentIncrease size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-outdent" label={t("outdent")} disabled={!props.canModifySelected} onClick={props.onOutdent}><IndentDecrease size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-open-details" label={t("openDetails")} disabled={!props.canModifySelected} onClick={props.onOpenDetails}><PanelRightOpen size={16} /></ToolbarButton>
+          <ToolbarButton testId="expand-all" label={t("expandAllGroups")} onClick={props.onExpandAll}><ChevronsDown size={16} /></ToolbarButton>
+          <ToolbarButton testId="collapse-all" label={t("collapseAllGroups")} onClick={props.onCollapseAll}><ChevronsUp size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-delete" label={t("deleteAction")} disabled={!props.canModifySelected} danger onClick={props.onDeleteSelected}><Trash2 size={16} /></ToolbarButton>
+          <span className="mx-1 h-5 w-px bg-border" />
+          <ToolbarButton testId="undo-action" label={`${t("undoLastChange")} · Ctrl/Cmd+Z`} disabled={props.undoDisabled} onClick={props.onUndo}><Undo2 size={16} /></ToolbarButton>
+          <ToolbarButton testId="redo-action" label={`${t("redoLastChange")} · Ctrl/Cmd+Shift+Z`} disabled={props.redoDisabled} onClick={props.onRedo}><Redo2 size={16} /></ToolbarButton>
+        </div>
+      </div>
+      {(props.showAdvancedControls ?? true) && (advancedTarget ? createPortal(advancedControls, advancedTarget) : advancedControls)}
+    </>
+  );
+}
+
+function ToolbarButton({ testId, label, disabled, danger, onClick, children }: { testId: string; label: string; disabled?: boolean; danger?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      className={`rounded-lg p-2 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-35 ${danger ? "text-destructive" : "text-mutedForeground hover:text-foreground"}`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 

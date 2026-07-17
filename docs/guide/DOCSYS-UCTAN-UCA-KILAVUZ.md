@@ -651,7 +651,7 @@ Bağlı kaynak veya hedef satır değişince bağlantı şüpheli olur. Kullanı
 
 ## 19.5 Baseline ve fark
 
-Analiz > Temel çizgiler altında etiket vererek snapshot oluşturun. Daha sonra baseline diff eklenen, kaldırılan ve değiştirilen satırları gösterir. Baseline, kaynak kontrol commit'i değildir; iş seviyesinde doküman anlık görüntüsüdür.
+Dosya > Baseline'lar altında etiket vererek resmi doküman sürümünü oluşturun. Daha sonra baseline farkı eklenen, kaldırılan ve değiştirilen satırları gösterir. Baseline, kaynak kontrol commit'i değildir; onaylanmış iş seviyesi doküman anlık görüntüsüdür.
 
 # 20. İşbirliği ve yaşam döngüsü
 

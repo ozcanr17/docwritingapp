@@ -1,54 +1,93 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Search, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { FileText, Search } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
 
 interface SearchResult {
   id: string;
+  rowId: string | null;
   rowType: string;
   title: string;
   description: string | null;
   requirementNo: string | null;
+  objectNumber: number | null;
   document: { id: string; title: string; documentType: string };
 }
 
-export function GlobalSearchDialog({ workspaceId, onClose, onSelect }: { workspaceId: string; onClose: () => void; onSelect: (document: SearchResult["document"], rowId: string) => void }) {
+interface GlobalSearchDialogProps {
+  workspaceId: string;
+  query: string;
+  onClose: () => void;
+  onSelect: (document: SearchResult["document"], rowId: string | null) => void;
+}
+
+export function GlobalSearchDialog({ workspaceId, query, onClose, onSelect }: GlobalSearchDialogProps) {
   const { t } = useTranslation();
-  const [query, setQuery] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [bounds, setBounds] = useState<{ left: number; top: number; width: number } | null>(null);
+  const searchable = query.trim().length >= 2 || /^\d+$/.test(query.trim());
   const results = useQuery({
     queryKey: ["workspace-search", workspaceId, query],
     queryFn: () => api<SearchResult[]>(`/workspaces/${workspaceId}/search?q=${encodeURIComponent(query)}`),
-    enabled: query.trim().length >= 2,
+    enabled: searchable,
   });
   useEffect(() => {
-    const handler = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    const handlePointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      const search = document.getElementById("docsys-global-search");
+      if (!panelRef.current?.contains(target) && !search?.contains(target)) onClose();
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("pointerdown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [onClose]);
+  useLayoutEffect(() => {
+    const search = document.getElementById("docsys-global-search");
+    if (!search) return;
+    const update = () => {
+      const rect = search.getBoundingClientRect();
+      setBounds({ left: rect.left, top: rect.bottom - 1, width: rect.width });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(search);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, []);
   return (
-    <div className="fixed inset-0 z-[200] flex justify-center bg-black/40 pt-[12vh]" onClick={onClose}>
-      <div className="h-fit max-h-[70vh] w-[42rem] overflow-hidden rounded-2xl border border-border bg-surfaceElevated shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <Search size={18} className="text-mutedForeground" />
-          <input autoFocus className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={t("advancedSearch")} value={query} onChange={(event) => setQuery(event.target.value)} />
-          <button aria-label={t("close")} onClick={onClose}><X size={16} /></button>
-        </div>
-        <div className="max-h-[58vh] overflow-auto p-2">
-          {results.data?.map((result) => (
-            <button key={result.id} className="flex w-full gap-3 rounded-xl p-3 text-left hover:bg-muted" onClick={() => onSelect(result.document, result.id)}>
-              <FileText size={16} className="mt-0.5 shrink-0 text-primary" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{[result.requirementNo, result.title].filter(Boolean).join(" : ") || "-"}</span>
-                <span className="block truncate text-xs text-mutedForeground">{result.document.title} · {result.rowType}</span>
-                {result.description && <span className="mt-1 block line-clamp-2 text-xs text-mutedForeground">{result.description}</span>}
-              </span>
-            </button>
-          ))}
-          {query.trim().length >= 2 && results.data?.length === 0 && <div className="p-6 text-center text-sm text-mutedForeground">{t("noSearchResults")}</div>}
-          {query.trim().length < 2 && <div className="p-6 text-center text-sm text-mutedForeground">{t("searchHint")}</div>}
-        </div>
-      </div>
+    <div
+      ref={panelRef}
+      data-testid="global-search-results"
+      style={bounds ?? { visibility: "hidden" }}
+      className="fixed z-[190] max-h-[min(32rem,70vh)] overflow-auto rounded-b-xl border border-t-0 border-border bg-surfaceElevated p-2 shadow-2xl"
+    >
+      {results.isFetching && <div className="p-5 text-center text-sm text-mutedForeground">{t("loading")}</div>}
+      {!results.isFetching && results.data?.map((result) => (
+        <button key={result.id} className="flex w-full gap-3 rounded-lg p-3 text-left hover:bg-muted" onClick={() => onSelect(result.document, result.rowId)}>
+          <FileText size={16} className="mt-0.5 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">
+              {result.rowId === null
+                ? result.document.title
+                : [result.requirementNo, result.objectNumber ? `ID ${result.objectNumber}` : null, result.title].filter(Boolean).join(" · ") || "-"}
+            </span>
+            <span className="block truncate text-xs text-mutedForeground">{result.document.title} · {result.rowId === null ? t("document") : result.rowType}</span>
+            {result.description && <span className="mt-1 block line-clamp-2 text-xs text-mutedForeground">{result.description}</span>}
+          </span>
+        </button>
+      ))}
+      {!results.isFetching && searchable && results.data?.length === 0 && <div className="p-6 text-center text-sm text-mutedForeground">{t("noSearchResults")}</div>}
+      {!searchable && <div className="flex items-center justify-center gap-2 p-6 text-center text-sm text-mutedForeground"><Search size={15} />{t("searchHint")}</div>}
     </div>
   );
 }

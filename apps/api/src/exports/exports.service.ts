@@ -41,7 +41,15 @@ export class ExportsService {
     private readonly queue: ExportQueue,
   ) {}
 
-  async createExport(actorId: string, documentId: string, format: ExportFormat, templateId?: string, locale: "tr" | "en" = "tr") {
+  async createExport(
+    actorId: string,
+    documentId: string,
+    format: ExportFormat,
+    templateId?: string,
+    locale: "tr" | "en" = "tr",
+    scope: "document" | "traceability" = "document",
+    traceabilityDirection: "requirement_to_test" | "test_to_requirement" = "requirement_to_test",
+  ) {
     const document = await this.requireDocument(documentId);
     await this.access.assertPermission(actorId, "document.read", {
       organizationId: document.organizationId,
@@ -54,7 +62,7 @@ export class ExportsService {
         requestedById: actorId,
         jobType: format,
         status: "pending",
-        parameters: { format, locale, ...(templateId ? { templateId } : {}) },
+        parameters: { format, locale, scope, traceabilityDirection, ...(templateId ? { templateId } : {}) },
       },
     });
     await this.queue.enqueue({ exportJobId: job.id });
@@ -147,7 +155,7 @@ export class ExportsService {
           await tx.requirementDetail.create({
             data: {
               rowId: row.id,
-              requirementNo: parsed.requirementNo || `REQ-${String(requirementSequence).padStart(3, "0")}`,
+              requirementNo: parsed.requirementNo || `${document.requirementPrefix}-${String(requirementSequence).padStart(3, "0")}`,
             },
           });
         }
@@ -175,12 +183,13 @@ export class ExportsService {
   }
 
   async importReqif(actorId: string, documentId: string, reqifText: string) {
+    const document = await this.requireDocument(documentId);
     const parsed = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", removeNSPrefix: true }).parse(reqifText) as unknown;
     const objects = collectNodes(parsed, "SPEC-OBJECT");
     if (objects.length === 0) throw new UnprocessableEntityException("ReqIF contains no specification objects");
     const rows = objects.map((object, index) => {
       const record = object as Record<string, unknown>;
-      const identifier = String(record["@_IDENTIFIER"] ?? `REQ-${String(index + 1).padStart(3, "0")}`);
+      const identifier = String(record["@_IDENTIFIER"] ?? `${document.requirementPrefix}-${String(index + 1).padStart(3, "0")}`);
       const longName = String(record["@_LONG-NAME"] ?? "");
       const values = collectNodes(record, "ATTRIBUTE-VALUE-STRING") as Array<Record<string, unknown>>;
       const valueText = values.map((value) => String(value["@_THE-VALUE"] ?? "")).find(Boolean) ?? longName;

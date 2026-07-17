@@ -7,6 +7,7 @@ import { ContextMenu } from "./ContextMenu";
 export function DocumentTabsBar({
   tabs,
   activeId,
+  primaryId,
   secondaryId,
   onActivate,
   onClose,
@@ -14,9 +15,12 @@ export function DocumentTabsBar({
   onOpenWindow,
   onTogglePin,
   onReorder,
+  splitDirection,
+  onSplitDirectionChange,
 }: {
   tabs: DocumentTab[];
   activeId: string | null;
+  primaryId: string | null;
   secondaryId: string | null;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
@@ -24,6 +28,8 @@ export function DocumentTabsBar({
   onOpenWindow: (id: string) => void;
   onTogglePin: (id: string) => void;
   onReorder: (sourceId: string, targetId: string) => void;
+  splitDirection: "horizontal" | "vertical";
+  onSplitDirectionChange: (direction: "horizontal" | "vertical") => void;
 }) {
   const { t } = useTranslation();
   const [menu, setMenu] = useState<{ x: number; y: number; tab: DocumentTab } | null>(null);
@@ -87,12 +93,16 @@ export function DocumentTabsBar({
               label: t("openInSplitView"),
               disabled: tabs.length < 2,
               onSelect: () => {
-                if (menu.tab.id !== activeId) onSecondaryChange(menu.tab.id);
-                else onSecondaryChange(tabs.find((tab) => tab.id !== activeId)?.id ?? null);
+                if (menu.tab.id !== primaryId) onSecondaryChange(menu.tab.id);
+                else onSecondaryChange(tabs.find((tab) => tab.id !== primaryId)?.id ?? null);
               },
             },
             { key: "pin", label: t(menu.tab.pinned ? "unpinDocument" : "pinDocument"), onSelect: () => onTogglePin(menu.tab.id) },
-            ...(secondaryId ? [{ key: "splitOff", label: t("splitOff"), onSelect: () => onSecondaryChange(null) }] : []),
+            ...(secondaryId ? [
+              { key: "split-horizontal", label: t("splitSideBySide"), disabled: splitDirection === "horizontal", onSelect: () => onSplitDirectionChange("horizontal") },
+              { key: "split-vertical", label: t("splitStacked"), disabled: splitDirection === "vertical", onSelect: () => onSplitDirectionChange("vertical") },
+              { key: "splitOff", label: t("splitOff"), onSelect: () => onSecondaryChange(null) },
+            ] : []),
             { key: "window", label: t("openInNewWindow"), onSelect: () => onOpenWindow(menu.tab.id) },
             { key: "close", label: t("close"), onSelect: () => onClose(menu.tab.id) },
           ]}

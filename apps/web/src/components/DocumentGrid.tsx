@@ -1,22 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronRight, Link2, Settings2, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ApiError, CustomFieldType, DashboardSummary, DocumentType, FieldDefinition, OutlineRow, SavedView } from "../lib/api";
+import { api, ApiError, CustomFieldType, DashboardSummary, DocumentTemplateSummary, DocumentType, FieldDefinition, OutlineRow, SavedView } from "../lib/api";
+import { AdvancedFilterConfig, applyAdvancedFilter, EMPTY_ADVANCED_FILTER, parseAdvancedFilter } from "../lib/advancedFilters";
 import { cellValue, columnsForDocument, GridColumn, isCellEditable, totalWidth } from "../lib/columns";
+import { TextReplacement } from "../lib/findReplace";
 import { useColumnStore } from "../stores/columns";
 import { useEditHistoryStore } from "../stores/editHistory";
 import { useSelectionStore } from "../stores/selection";
 import { useToastStore } from "../stores/toasts";
+import { documentFontFamilies, useAuthoringPreferencesStore } from "../stores/authoringPreferences";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import { BulkActionInput, BulkActionsDialog } from "./BulkActionsDialog";
 import { ProductivityBar } from "./ProductivityBar";
 import { AddColumnDialog } from "./AddColumnDialog";
+import { FindReplacePanel } from "./FindReplacePanel";
+import { TemplateLibraryPanel } from "./TemplateLibraryPanel";
 
 interface GridProps {
   documentId: string;
   documentType: Exclude<DocumentType, "general_document">;
+  advancedTargetId?: string;
+  showAdvancedControls?: boolean;
 }
 
 interface MenuState {
@@ -36,6 +43,20 @@ interface EditState {
   columnKey: string;
   value: string;
   numberingStart?: string;
+}
+
+interface LinkPreviewState {
+  x: number;
+  y: number;
+  row: OutlineRow;
+}
+
+function linkedObjectPreview(linked: OutlineRow["linkedObjects"][number]): string {
+  const value = [linked.action, linked.expectedResult, linked.description, linked.title]
+    .filter((part): part is string => Boolean(part?.trim()))
+    .filter((part, index, all) => all.indexOf(part) === index)
+    .join(" ");
+  return value.length > 360 ? `${value.slice(0, 357).trimEnd()}...` : value;
 }
 
 const rowTypeLabelKeys: Record<OutlineRow["rowType"], string> = {
@@ -80,11 +101,21 @@ function coerceCustom(column: GridColumn, value: string): unknown {
   return value;
 }
 
-export function DocumentGrid({ documentId, documentType }: GridProps) {
+export function DocumentGrid({ documentId, documentType, advancedTargetId, showAdvancedControls = true }: GridProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
   const pushHistory = useEditHistoryStore((s) => s.push);
+  const undoCount = useEditHistoryStore((s) => s.documents[documentId]?.undo.length ?? 0);
+  const redoCount = useEditHistoryStore((s) => s.documents[documentId]?.redo.length ?? 0);
+  const historyBusy = useEditHistoryStore((s) => Boolean(s.busy[documentId]));
+  const rowDensity = useAuthoringPreferencesStore((s) => s.rowDensity);
+  const showHierarchyGuides = useAuthoringPreferencesStore((s) => s.showHierarchyGuides);
+  const showChangeIndicators = useAuthoringPreferencesStore((s) => s.showChangeIndicators);
+  const spellCheck = useAuthoringPreferencesStore((s) => s.spellCheck);
+  const defaultFrozenColumns = useAuthoringPreferencesStore((s) => s.defaultFrozenColumns);
+  const documentFontSize = useAuthoringPreferencesStore((s) => s.documentFontSize);
+  const documentFontFamily = useAuthoringPreferencesStore((s) => s.documentFontFamily);
   const setSelectedRow = useSelectionStore((s) => s.setRow);
   const selectOnly = useSelectionStore((s) => s.selectOnly);
   const toggleRow = useSelectionStore((s) => s.toggleRow);
@@ -109,6 +140,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   const [columnMenu, setColumnMenu] = useState<ColumnMenuState | null>(null);
   const [addColumnAt, setAddColumnAt] = useState<{ anchor: GridColumn; side: "left" | "right" } | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
+  const [linkPreview, setLinkPreview] = useState<LinkPreviewState | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<OutlineRow | null>(null);
   const [numberingTarget, setNumberingTarget] = useState<OutlineRow | null>(null);
@@ -120,14 +152,18 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   const [rowTypeFilter, setRowTypeFilter] = useState<OutlineRow["rowType"] | "">("");
   const [sortKey, setSortKey] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [frozenCount, setFrozenCount] = useState(1);
+  const [frozenCount, setFrozenCount] = useState(defaultFrozenColumns);
   const [viewVisibleColumns, setViewVisibleColumns] = useState<string[] | null>(null);
   const [linkProjection, setLinkProjection] = useState({
-    fields: ["requirementNo", "title"],
+    fields: ["requirementNo"],
     separator: " : ",
     sortBy: "requirementNo",
   });
   const [collapsedRowIds, setCollapsedRowIds] = useState<string[]>([]);
+  const [advancedFilter, setAdvancedFilter] = useState<AdvancedFilterConfig>(EMPTY_ADVANCED_FILTER);
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
+  const defaultViewApplied = useRef<string | null>(null);
 
   const outlineKey = ["outline", documentId];
   const { data: rows = [], isLoading } = useQuery({
@@ -145,6 +181,11 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   const { data: dashboard } = useQuery({
     queryKey: ["dashboard", documentId],
     queryFn: () => api<DashboardSummary>(`/documents/${documentId}/dashboard`),
+  });
+  const { data: templates = [] } = useQuery({
+    queryKey: ["document-templates", documentId],
+    queryFn: () => api<DocumentTemplateSummary[]>(`/documents/${documentId}/templates`),
+    enabled: templateLibraryOpen,
   });
 
   const columns = useMemo(
@@ -165,6 +206,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   );
   const allColumnKeys = useMemo(() => columnsForDocument(documentType, fields).map((column) => column.key), [documentType, fields]);
   const collapsedRows = useMemo(() => new Set(collapsedRowIds), [collapsedRowIds]);
+  const advancedFilterResult = useMemo(() => applyAdvancedFilter(rows, columns, advancedFilter), [advancedFilter, columns, rows]);
   const displayedRows = useMemo(() => {
     const normalized = searchQuery.trim().toLocaleLowerCase();
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -178,7 +220,8 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           }
           return true;
         });
-    const byType = rowTypeFilter ? hierarchyRows.filter((row) => row.rowType === rowTypeFilter) : hierarchyRows;
+    const advancedRows = advancedFilter.conditions.length > 0 ? hierarchyRows.filter((row) => advancedFilterResult.visibleIds.has(row.id)) : hierarchyRows;
+    const byType = rowTypeFilter ? advancedRows.filter((row) => row.rowType === rowTypeFilter) : advancedRows;
     const filtered = normalized
       ? byType.filter((row) =>
           [
@@ -201,11 +244,12 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
       const compared = cellValue(column, a).localeCompare(cellValue(column, b), undefined, { numeric: true, sensitivity: "base" });
       return sortDirection === "asc" ? compared : -compared;
     });
-  }, [rows, rowTypeFilter, searchQuery, sortKey, sortDirection, columns, collapsedRows]);
+  }, [rows, rowTypeFilter, searchQuery, sortKey, sortDirection, columns, collapsedRows, advancedFilter.conditions.length, advancedFilterResult.visibleIds]);
   const template = columns.map((c) => `${c.width}px`).join(" ");
   const gridWidth = totalWidth(columns);
   const gridTemplate = template;
-  const frozenOffsets = columns.map((_, index) => columns.slice(0, index).reduce((sum, column) => sum + column.width + 8, 0));
+  const frozenOffsets = columns.map((_, index) => columns.slice(1, index).reduce((sum, column) => sum + column.width + 8, 0));
+  const isFrozenColumn = (index: number) => index > 0 && index <= frozenCount;
   const selectedRootRowIds = useMemo(() => {
     const selected = new Set(selectedRowIds);
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -223,7 +267,8 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   const virtualizer = useVirtualizer({
     count: displayedRows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 56,
+    getItemKey: (index) => displayedRows[index]?.id ?? index,
+    estimateSize: () => rowDensity === "compact" ? 44 : 56,
     overscan: 20,
     initialRect: { width: 1000, height: 600 },
   });
@@ -236,7 +281,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   };
 
   const saveView = useMutation({
-    mutationFn: (input: { name: string; scope: "personal" | "team" }) =>
+    mutationFn: (input: { name: string; scope: "personal" | "team"; isDefault: boolean }) =>
       api<SavedView>(`/documents/${documentId}/views`, {
         method: "POST",
         body: JSON.stringify({
@@ -244,12 +289,13 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           filters: [
             ...(searchQuery ? [{ field: "all", operator: "contains", value: searchQuery }] : []),
             ...(rowTypeFilter ? [{ field: "rowType", operator: "equals", value: rowTypeFilter }] : []),
+            ...(advancedFilter.conditions.length > 0 ? [{ kind: "advanced", ...advancedFilter }] : []),
           ],
           sorting: sortKey ? [{ field: sortKey, direction: sortDirection }] : [],
           visibleColumns: columns.map((column) => column.key),
-          frozenColumns: columns.slice(0, frozenCount).map((column) => column.key),
+          frozenColumns: columns.slice(1, frozenCount + 1).map((column) => column.key),
           linkProjection,
-          isDefault: false,
+          isDefault: input.isDefault,
         }),
       }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["saved-views", documentId] }),
@@ -262,7 +308,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
     onError: handleMutationError,
   });
 
-  const applyView = (view: SavedView) => {
+  const applyView = useCallback((view: SavedView) => {
     const searchFilter = view.filters.find((filter) => filter.field === "all");
     const typeFilter = view.filters.find((filter) => filter.field === "rowType");
     setSearchQuery(typeof searchFilter?.value === "string" ? searchFilter.value : "");
@@ -271,17 +317,26 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         ? typeFilter.value as OutlineRow["rowType"]
         : "",
     );
+    setAdvancedFilter(parseAdvancedFilter(view.filters));
     const sorting = view.sorting[0];
     setSortKey(typeof sorting?.field === "string" ? sorting.field : "");
     setSortDirection(sorting?.direction === "desc" ? "desc" : "asc");
     setViewVisibleColumns(view.visibleColumns.length > 0 ? view.visibleColumns : null);
     setFrozenCount(view.frozenColumns.length);
     setLinkProjection({
-      fields: view.linkProjection.fields ?? ["requirementNo", "title"],
+      fields: view.linkProjection.fields ?? ["requirementNo"],
       separator: view.linkProjection.separator ?? " : ",
       sortBy: view.linkProjection.sortBy ?? "requirementNo",
     });
-  };
+  }, []);
+
+  useEffect(() => {
+    if (defaultViewApplied.current === documentId) return;
+    const defaultView = savedViews.find((view) => view.isDefault);
+    if (!defaultView) return;
+    defaultViewApplied.current = documentId;
+    applyView(defaultView);
+  }, [applyView, documentId, savedViews]);
 
   const createRow = useMutation({
     mutationFn: (input: { parentId: string | null; afterRowId?: string; rowType: OutlineRow["rowType"] }) =>
@@ -335,6 +390,37 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
       setTemplateName("");
       void invalidate();
     },
+    onError: handleMutationError,
+  });
+
+  const saveAuthoringTemplate = useMutation({
+    mutationFn: (input: { name: string; sourceRowId: string | null }) => api(`/documents/${documentId}/templates`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["document-templates", documentId] });
+      pushToast("success", t("templateSaved"));
+    },
+    onError: handleMutationError,
+  });
+
+  const applyAuthoringTemplate = useMutation({
+    mutationFn: (input: { templateId: string; parentId: string | null }) => api<{ rowsCreated: number; rootIds: string[] }>(`/documents/${documentId}/templates/${input.templateId}/apply`, {
+      method: "POST",
+      body: JSON.stringify({ parentId: input.parentId }),
+    }),
+    onSuccess: (result) => {
+      for (const rowId of result.rootIds) pushHistory(documentId, { kind: "create", rowId });
+      void invalidate();
+      pushToast("success", t("templateApplied", { count: result.rowsCreated }));
+    },
+    onError: handleMutationError,
+  });
+
+  const deleteAuthoringTemplate = useMutation({
+    mutationFn: (templateId: string) => api(`/documents/${documentId}/templates/${templateId}`, { method: "DELETE" }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["document-templates", documentId] }),
     onError: handleMutationError,
   });
 
@@ -450,6 +536,26 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
       setConfirmBulkDelete(false);
     },
     onSettled: invalidate,
+    onError: handleMutationError,
+  });
+
+  const replaceText = useMutation({
+    mutationFn: async (replacements: TextReplacement[]) => {
+      const currentRows = new Map((await api<OutlineRow[]>(`/documents/${documentId}/outline`)).map((row) => [row.id, row]));
+      for (const replacement of replacements) {
+        const row = currentRows.get(replacement.rowId);
+        const column = columns.find((candidate) => candidate.key === replacement.columnKey);
+        if (!row || !column || cellValue(column, row) !== replacement.before) throw new Error("replace conflict");
+        const updated = await api<OutlineRow>(`/rows/${row.id}`, { method: "PATCH", body: JSON.stringify(buildPatchPayload(column, row, replacement.after)) });
+        currentRows.set(row.id, updated);
+        pushHistory(documentId, { kind: "cell", rowId: row.id, columnKey: column.key, beforeValue: replacement.before, afterValue: replacement.after });
+      }
+      return replacements.length;
+    },
+    onSuccess: (count) => {
+      void invalidate();
+      pushToast("success", t("replaceCompleted", { count }));
+    },
     onError: handleMutationError,
   });
 
@@ -645,6 +751,17 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
   });
 
   useEffect(() => {
+    const onFindReplace = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "h") {
+        event.preventDefault();
+        setFindReplaceOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onFindReplace);
+    return () => document.removeEventListener("keydown", onFindReplace);
+  }, []);
+
+  useEffect(() => {
     const requestDelete = () => {
       const row = rows.find((candidate) => candidate.id === selectedRowId);
       if (row) setDeleteTarget(row);
@@ -774,14 +891,59 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         }}
         onFrozenCountChange={setFrozenCount}
         onApplyView={applyView}
-        onSaveView={(name, scope) => saveView.mutate({ name, scope })}
+        onSaveView={(name, scope, isDefault) => saveView.mutate({ name, scope, isDefault })}
         onDeleteView={(id) => deleteView.mutate(id)}
         onAddObject={() => addObject()}
         onAddObjectBelow={() => addObjectBelow()}
         onAddBlankObject={() => addBlankObject()}
         onAddBlankObjectBelow={() => addBlankObjectBelow()}
         canAddObjectBelow={!selectedGridRow || selectedGridRow.rowType === "heading" || selectedGridRow.rowType === "test_case"}
+        canModifySelected={Boolean(selectedGridRow)}
+        onIndent={() => selectedGridRow && indent(selectedGridRow)}
+        onOutdent={() => selectedGridRow && outdent(selectedGridRow)}
+        onOpenDetails={() => {
+          if (!selectedGridRow) return;
+          openDetail(selectedGridRow.id);
+          void queryClient.invalidateQueries({ queryKey: ["row", selectedGridRow.id] });
+        }}
+        onExpandAll={() => setCollapsedRowIds([])}
+        onCollapseAll={() => setCollapsedRowIds(rows.filter((candidate) => rows.some((row) => row.parentId === candidate.id)).map((candidate) => candidate.id))}
+        onDeleteSelected={() => selectedGridRow && setDeleteTarget(selectedGridRow)}
+        onAddTestStep={documentType === "test" ? () => createRow.mutate({ parentId: selectedGridRow?.rowType === "heading" || selectedGridRow?.rowType === "test_case" ? selectedGridRow.id : selectedGridRow?.parentId ?? null, afterRowId: selectedGridRow?.rowType === "test_step" ? selectedGridRow.id : undefined, rowType: "test_step" }) : undefined}
+        onAddTestTemplate={documentType === "test" ? () => setTemplateParentId(selectedGridRow?.rowType === "heading" ? selectedGridRow.id : null) : undefined}
+        advancedFilter={advancedFilter}
+        onAdvancedFilterChange={setAdvancedFilter}
+        onToggleFindReplace={() => setFindReplaceOpen((current) => !current)}
+        onToggleTemplates={() => setTemplateLibraryOpen((current) => !current)}
+        advancedTargetId={advancedTargetId}
+        showAdvancedControls={showAdvancedControls}
+        undoDisabled={undoCount === 0 || historyBusy}
+        redoDisabled={redoCount === 0 || historyBusy}
+        onUndo={() => window.dispatchEvent(new CustomEvent("docsys:undo", { detail: { documentId } }))}
+        onRedo={() => window.dispatchEvent(new CustomEvent("docsys:redo", { detail: { documentId } }))}
       />
+      {templateLibraryOpen && (
+        <TemplateLibraryPanel
+          templates={templates}
+          selectedRow={selectedGridRow ?? null}
+          pending={saveAuthoringTemplate.isPending || applyAuthoringTemplate.isPending}
+          onSave={(name, sourceRowId) => saveAuthoringTemplate.mutate({ name, sourceRowId })}
+          onApply={(templateId, parentId) => applyAuthoringTemplate.mutate({ templateId, parentId })}
+          onDelete={(templateId) => deleteAuthoringTemplate.mutate(templateId)}
+          onClose={() => setTemplateLibraryOpen(false)}
+        />
+      )}
+      {findReplaceOpen && (
+        <FindReplacePanel
+          rows={rows}
+          columns={columns}
+          selectedRowIds={selectedRowIds}
+          selectedRowId={selectedRowId}
+          pending={replaceText.isPending}
+          onApply={(replacements) => replaceText.mutate(replacements)}
+          onClose={() => setFindReplaceOpen(false)}
+        />
+      )}
       {selectedRowIds.length > 1 && (
         <div className="flex items-center gap-3 border-b border-border bg-surface/95 px-4 py-2 text-sm shadow-sm backdrop-blur-xl">
           <span className="font-medium">{t("selectedRows", { count: selectedRowIds.length })}</span>
@@ -808,6 +970,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
       )}
       <div
         ref={scrollRef}
+        data-testid="document-grid-scroll"
         className="flex-1 overflow-auto"
         tabIndex={0}
         onKeyDown={(event) => {
@@ -867,16 +1030,19 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
           {columns.map((column, columnIndex) => (
             <div
               role="columnheader"
+              data-testid={`column-header-${column.key}`}
               key={column.key}
-              className={`relative flex items-center gap-1 overflow-hidden py-2 pr-2 ${columnIndex < frozenCount ? "sticky z-20 bg-surface/95" : ""}`}
-              style={columnIndex < frozenCount ? { left: frozenOffsets[columnIndex] } : undefined}
+              className={`relative flex cursor-context-menu items-center gap-1 overflow-hidden py-2 pr-2 ${isFrozenColumn(columnIndex) ? "sticky z-20 bg-surface/95" : ""}`}
+              style={isFrozenColumn(columnIndex) ? { left: frozenOffsets[columnIndex] } : undefined}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setColumnMenu({ x: event.clientX, y: event.clientY, column });
+              }}
             >
               <button
                 className="min-w-0 flex-1 truncate text-left"
-                onClick={(event) => {
-                  const bounds = event.currentTarget.getBoundingClientRect();
-                  setColumnMenu({ x: bounds.left, y: bounds.bottom + 2, column });
-                }}
+                title={t("columnContextMenuHint")}
               >
                 {column.kind === "custom" ? column.labelKey : t(column.labelKey)}
               </button>
@@ -925,14 +1091,16 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
                   key={row.id}
                   data-testid={`grid-row-${row.displayNumber}`}
                   draggable={editing?.rowId !== row.id}
-                  className={`absolute left-0 grid min-h-14 items-stretch gap-2 border-b border-border px-4 py-1.5 text-sm transition-colors hover:bg-muted/70 ${
+                  className={`absolute left-0 top-0 grid items-stretch gap-2 border-b border-border px-4 transition-colors hover:bg-muted/70 ${rowDensity === "compact" ? "min-h-11 py-0.5" : "min-h-14 py-1.5"} ${
                     selectedRowIds.includes(row.id) ? "bg-selection" : ""
-                  }`}
+                  } ${advancedFilter.highlightMatches && advancedFilterResult.matchedIds.has(row.id) ? "ring-1 ring-inset ring-primary/40" : ""}`}
                   style={{
                     transform: `translateY(${virtualRow.start}px)`,
                     gridTemplateColumns: gridTemplate,
                     width: gridWidth,
                     zIndex: editing?.rowId === row.id ? 20 : 0,
+                    fontSize: documentFontSize,
+                    fontFamily: documentFontFamilies[documentFontFamily],
                   }}
                   onClick={(event) => {
                     const target = event.target as HTMLElement;
@@ -960,7 +1128,7 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
                     if (dragged && dragged.id !== row.id) moveRow.mutate({ row: dragged, newParentId: row.parentId, afterRowId: row.id });
                   }}
                 >
-                  <div
+                  {showChangeIndicators && <div
                     data-testid={`row-change-state-${row.objectNumber}`}
                     title={t(`rowChangeState.${visibleChangeState}`)}
                     className={`absolute inset-y-0 left-0 z-30 w-1 ${
@@ -972,12 +1140,12 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
                             ? "bg-orange-500"
                             : "bg-primary"
                     }`}
-                  />
+                  />}
                   {columns.map((column, columnIndex) => (
                     <div
                       key={column.key}
-                      className={`relative ${columnIndex < frozenCount ? "sticky z-10 bg-inherit" : ""}`}
-                      style={columnIndex < frozenCount ? { left: frozenOffsets[columnIndex] } : undefined}
+                      className={`relative ${isFrozenColumn(columnIndex) ? "sticky z-10 bg-inherit" : ""}`}
+                      style={isFrozenColumn(columnIndex) ? { left: frozenOffsets[columnIndex] } : undefined}
                     >
                       {column.kind === "title" && hasChildren && (
                         <button
@@ -1002,6 +1170,18 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
                         linkProjection={linkProjection}
                         selected={selectedRowIds.includes(row.id)}
                         titleLeadingOffset={hasChildren ? 18 : 0}
+                        showHierarchyGuides={showHierarchyGuides}
+                        spellCheck={spellCheck}
+                        onOpenLinks={(event) => {
+                          event.stopPropagation();
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          const width = Math.min(560, window.innerWidth - 24);
+                          setLinkPreview({
+                            row,
+                            x: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
+                            y: Math.min(rect.bottom + 8, window.innerHeight - 220),
+                          });
+                        }}
                         onStartEdit={() => {
                           if (column.kind === "linkedRequirements") {
                             openDetail(row.id);
@@ -1023,6 +1203,48 @@ export function DocumentGrid({ documentId, documentType }: GridProps) {
         )}
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
+      {linkPreview && (
+        <div className="fixed inset-0 z-[190]" onMouseDown={() => setLinkPreview(null)}>
+          <div
+            data-testid="link-preview"
+            role="menu"
+            aria-label={t("linkedObjects")}
+            className="absolute max-h-72 w-[min(35rem,calc(100vw-1.5rem))] overflow-auto rounded-xl border border-border bg-surfaceElevated p-1.5 shadow-2xl"
+            style={{ left: linkPreview.x, top: Math.max(12, linkPreview.y) }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-mutedForeground">
+              {t("linkedObjects")} · {linkPreview.row.linkedObjects.length}
+            </div>
+            {linkPreview.row.linkedObjects.map((linked) => (
+              <button
+                key={linked.id}
+                type="button"
+                role="menuitem"
+                className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left hover:bg-muted"
+                onClick={() => {
+                  setLinkPreview(null);
+                  if (linked.document.id === documentId) {
+                    selectOnly(linked.id);
+                    openDetail(linked.id);
+                    return;
+                  }
+                  window.dispatchEvent(new CustomEvent("docsys:open-document-row", { detail: { document: linked.document, rowId: linked.id } }));
+                }}
+              >
+                <Link2 size={13} className="mt-0.5 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-xs font-medium">
+                    <span className="shrink-0 font-mono">{linked.requirementNo ?? `ID ${linked.id.slice(0, 8)}`}</span>
+                    <span className="truncate text-mutedForeground">{linked.document.title}</span>
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-foreground" title={linkedObjectPreview(linked)}>{linkedObjectPreview(linked) || t("untitled")}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {columnMenu && <ContextMenu x={columnMenu.x} y={columnMenu.y} onClose={() => setColumnMenu(null)} items={[
         { key: "left", label: t("addColumnLeft"), onSelect: () => setAddColumnAt({ anchor: columnMenu.column, side: "left" }) },
         { key: "right", label: t("addColumnRight"), onSelect: () => setAddColumnAt({ anchor: columnMenu.column, side: "right" }) },
@@ -1182,6 +1404,9 @@ function GridCell({
   linkProjection,
   selected,
   titleLeadingOffset,
+  showHierarchyGuides,
+  spellCheck,
+  onOpenLinks,
   onStartEdit,
   onChange,
   onNumberingChange,
@@ -1194,32 +1419,40 @@ function GridCell({
   linkProjection: { fields: string[]; separator: string; sortBy: string };
   selected: boolean;
   titleLeadingOffset: number;
+  showHierarchyGuides: boolean;
+  spellCheck: boolean;
+  onOpenLinks: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onStartEdit: () => void;
   onChange: (value: string) => void;
   onNumberingChange: (value: string) => void;
   onCommit: (value?: string) => void;
   onCancel: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   if (column.kind === "number") {
     return (
       <span className="flex items-center gap-1.5 self-center tabular-nums text-mutedForeground">
         {row.objectNumber}
         {(row.linkCount ?? 0) > 0 && (
-          <span
+          <button
+            type="button"
+            data-testid={`link-count-${row.objectNumber}`}
             className="flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
             title={t("linkCount", { count: row.linkCount })}
             aria-label={t("linkCount", { count: row.linkCount })}
+            onClick={onOpenLinks}
           >
             <Link2 size={10} />
             {row.linkCount ?? 0}
-          </span>
+          </button>
         )}
       </span>
     );
   }
   const editable = isCellEditable(column, row);
-  const display = column.kind === "linkedRequirements"
+  const display = column.kind === "rowType"
+    ? t(rowTypeLabelKeys[row.rowType])
+    : column.kind === "linkedRequirements"
     ? [...row.linkedRequirements]
         .sort((a, b) => String(a[linkProjection.sortBy as keyof typeof a] ?? "").localeCompare(String(b[linkProjection.sortBy as keyof typeof b] ?? ""), undefined, { numeric: true }))
         .map((linked) => linkProjection.fields.map((field) => String(linked[field as keyof typeof linked] ?? "")).filter(Boolean).join(linkProjection.separator))
@@ -1270,6 +1503,8 @@ function GridCell({
           />
           <input
             autoFocus
+            spellCheck={spellCheck}
+            lang={i18n.resolvedLanguage ?? i18n.language}
             data-testid={`cell-input-${column.key}`}
             className="min-h-10 min-w-0 flex-1 rounded border border-border bg-surface px-2 py-2"
             value={editing.value}
@@ -1296,6 +1531,8 @@ function GridCell({
       return (
         <textarea
           autoFocus
+          spellCheck={spellCheck}
+          lang={i18n.resolvedLanguage ?? i18n.language}
           data-cell-editor
           data-testid={`cell-input-${column.key}`}
           className="min-h-24 w-full resize-y rounded-md border border-border bg-surface px-2 py-2"
@@ -1321,6 +1558,8 @@ function GridCell({
     return (
       <input
         autoFocus
+        spellCheck={spellCheck}
+        lang={i18n.resolvedLanguage ?? i18n.language}
         data-cell-editor
         data-testid={`cell-input-${column.key}`}
         className="min-h-10 w-full rounded border border-border bg-surface px-2 py-2"
@@ -1364,7 +1603,7 @@ function GridCell({
         if ((e.key === "F2" || e.key === "Enter") && editable) onStartEdit();
       }}
     >
-      {column.kind === "title" && row.depth > 0 && Array.from({ length: row.depth }, (_, index) => (
+      {showHierarchyGuides && column.kind === "title" && row.depth > 0 && Array.from({ length: row.depth }, (_, index) => (
         <span
           key={index}
           aria-hidden="true"

@@ -79,6 +79,21 @@ describe("document rows", () => {
     expect(duplicate.statusCode).toBe(422);
   });
 
+  it("uses a document-specific requirement prefix for new requirements", async () => {
+    const document = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/documents/${documentId}`,
+      headers: { cookie: actor.cookie },
+      payload: { expectedVersion: document.version, requirementPrefix: "ger" },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(JSON.parse(updated.body).requirementPrefix).toBe("GER");
+    const requirement = await createRow({ rowType: "requirement", title: "Custom prefix", parentId: null });
+    const detail = await app.inject({ method: "GET", url: `/rows/${requirement.id}`, headers: { cookie: actor.cookie } });
+    expect(JSON.parse(detail.body).requirementDetail.requirementNo).toBe("GER-001");
+  });
+
   it("enforces document row types and stores test step results", async () => {
     const sourceDocument = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
     const testDocument = await createDocument(app, actor, sourceDocument.workspaceId, "test", "Execution tests");
@@ -346,9 +361,13 @@ describe("document rows", () => {
     const testRows = JSON.parse(testOutline.body) as Array<{
       id: string;
       linkedRequirements: Array<{ id: string; requirementNo: string; title: string }>;
+      linkedObjects: Array<{ id: string; rowType: string; title: string; document: { id: string; title: string; documentType: string } }>;
     }>;
     expect(testRows.find((row) => row.id === testCase.id)?.linkedRequirements).toEqual([
       expect.objectContaining({ id: requirement.id, title: "Linked Req" }),
+    ]);
+    expect(testRows.find((row) => row.id === testCase.id)?.linkedObjects).toEqual([
+      expect.objectContaining({ id: requirement.id, rowType: "requirement", title: "Linked Req" }),
     ]);
 
     await app.inject({

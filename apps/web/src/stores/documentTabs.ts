@@ -12,6 +12,7 @@ interface DocumentTabsState {
   tabs: DocumentTab[];
   activeId: string | null;
   secondaryId: string | null;
+  focusedId: string | null;
   open: (tab: DocumentTab) => void;
   activate: (id: string) => void;
   focus: (id: string) => void;
@@ -27,17 +28,35 @@ export const useDocumentTabsStore = create<DocumentTabsState>((set) => ({
   tabs: [],
   activeId: null,
   secondaryId: null,
-  open: (tab) => set((state) => ({ tabs: state.tabs.some((item) => item.id === tab.id) ? state.tabs.map((item) => item.id === tab.id ? { ...tab, pinned: item.pinned } : item) : [...state.tabs, tab], activeId: tab.id, secondaryId: state.secondaryId === tab.id ? null : state.secondaryId })),
-  activate: (id) => set((state) => state.tabs.some((tab) => tab.id === id) ? { activeId: id, secondaryId: state.secondaryId === id ? null : state.secondaryId } : state),
-  focus: (id) => set((state) => id === state.secondaryId ? { activeId: id, secondaryId: state.activeId } : state.tabs.some((tab) => tab.id === id) ? { activeId: id } : state),
+  focusedId: null,
+  open: (tab) => set((state) => {
+    const tabs = state.tabs.some((item) => item.id === tab.id)
+      ? state.tabs.map((item) => item.id === tab.id ? { ...tab, pinned: item.pinned } : item)
+      : [...state.tabs, tab];
+    if (state.secondaryId === tab.id) return { tabs, focusedId: tab.id };
+    return { tabs, activeId: tab.id, focusedId: tab.id };
+  }),
+  activate: (id) => set((state) => {
+    if (!state.tabs.some((tab) => tab.id === id)) return state;
+    if (state.secondaryId === id) return { focusedId: id };
+    return { activeId: id, focusedId: id };
+  }),
+  focus: (id) => set((state) => id === state.activeId || id === state.secondaryId ? { focusedId: id } : state),
   close: (id) => set((state) => {
     const index = state.tabs.findIndex((tab) => tab.id === id);
     if (index < 0) return state;
     const tabs = state.tabs.filter((tab) => tab.id !== id);
     const activeId = state.activeId === id ? tabs[Math.min(index, tabs.length - 1)]?.id ?? null : state.activeId;
-    return { tabs, activeId, secondaryId: state.secondaryId === id || state.secondaryId === activeId ? null : state.secondaryId };
+    const secondaryId = state.secondaryId === id || state.secondaryId === activeId ? null : state.secondaryId;
+    const focusedId = state.focusedId === id
+      ? activeId ?? secondaryId
+      : state.focusedId;
+    return { tabs, activeId, secondaryId, focusedId };
   }),
-  setSecondary: (id) => set((state) => ({ secondaryId: id && id !== state.activeId && state.tabs.some((tab) => tab.id === id) ? id : null })),
+  setSecondary: (id) => set((state) => {
+    const secondaryId = id && id !== state.activeId && state.tabs.some((tab) => tab.id === id) ? id : null;
+    return { secondaryId, focusedId: secondaryId ?? state.activeId };
+  }),
   update: (tab) => set((state) => ({ tabs: state.tabs.map((item) => item.id === tab.id ? { ...tab, pinned: item.pinned } : item) })),
   togglePin: (id) => set((state) => {
     const tabs = state.tabs.map((tab) => tab.id === id ? { ...tab, pinned: !tab.pinned } : tab);
@@ -54,5 +73,5 @@ export const useDocumentTabsStore = create<DocumentTabsState>((set) => ({
     tabs.splice(targetIndex, 0, source);
     return { tabs };
   }),
-  reset: () => set({ tabs: [], activeId: null, secondaryId: null }),
+  reset: () => set({ tabs: [], activeId: null, secondaryId: null, focusedId: null }),
 }));

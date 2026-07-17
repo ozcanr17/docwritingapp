@@ -7,6 +7,9 @@ test("desktop login accepts an empty server address and a local username", async
   });
   expect(registration.ok()).toBeTruthy();
 
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+  });
   await page.goto("/login");
   await expect(page.getByTestId("auth-server-address")).toHaveValue("");
   await page.getByTestId("auth-email").fill(username);

@@ -102,6 +102,19 @@ describe("exports and imports", () => {
     expect(download.statusCode).toBe(422);
   });
 
+  it("creates a directional traceability export job", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/documents/${documentId}/exports`,
+      headers: { cookie: actor.cookie },
+      payload: { format: "xlsx", scope: "traceability", traceabilityDirection: "test_to_requirement", locale: "tr" },
+    });
+    expect(response.statusCode).toBe(201);
+    const job = JSON.parse(response.body) as { id: string };
+    const persisted = await prisma.exportJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(persisted.parameters).toEqual(expect.objectContaining({ scope: "traceability", traceabilityDirection: "test_to_requirement" }));
+  });
+
   it("prevents a non-member from exporting another tenant's document", async () => {
     const outsider = await registerActor(app, "export-outsider");
     const response = await app.inject({

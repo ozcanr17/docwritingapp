@@ -2,6 +2,7 @@ import { DocumentType, FieldDefinition, OutlineRow, RowType } from "./api";
 
 export type ColumnKind =
   | "number"
+  | "rowType"
   | "stepNumber"
   | "requirementNo"
   | "title"
@@ -32,6 +33,7 @@ export function builtInColumns(documentType: Exclude<DocumentType, "general_docu
   if (documentType === "requirement") {
     return [
       NUMBER_COLUMN,
+      { key: "rowType", labelKey: "attribute", kind: "rowType", width: 132, editable: false },
       { key: "requirementNo", labelKey: "requirementNumber", kind: "requirementNo", width: 168, editable: true, appliesTo: ["requirement"] },
       { key: "title", labelKey: "requirementDescription", kind: "title", width: 480, editable: true },
       DESCRIPTION_COLUMN,
@@ -43,7 +45,7 @@ export function builtInColumns(documentType: Exclude<DocumentType, "general_docu
     { key: "stepNumber", labelKey: "stepNumber", kind: "stepNumber", width: 96, editable: true, appliesTo: ["test_step"] },
     { key: "action", labelKey: "testStep", kind: "action", width: 320, editable: true, appliesTo: ["test_step"] },
     { key: "expectedResult", labelKey: "expectedResult", kind: "expectedResult", width: 320, editable: true, appliesTo: ["test_step"] },
-    { key: "linkedRequirements", labelKey: "linkedRequirements", kind: "linkedRequirements", width: 320, editable: true },
+    { key: "linkedRequirements", labelKey: "requirementNumber", kind: "linkedRequirements", width: 320, editable: true },
     { key: "testResult", labelKey: "testResult", kind: "testResult", width: 240, editable: true, appliesTo: ["test_step"] },
     DESCRIPTION_COLUMN,
   ];
@@ -80,6 +82,8 @@ export function cellValue(column: GridColumn, row: OutlineRow): string {
   switch (column.kind) {
     case "number":
       return String(row.objectNumber);
+    case "rowType":
+      return row.rowType;
     case "stepNumber":
       return row.stepNumber === null ? "" : String(row.stepNumber);
     case "requirementNo":
@@ -96,7 +100,7 @@ export function cellValue(column: GridColumn, row: OutlineRow): string {
       return row.testResult ?? "";
     case "linkedRequirements":
       return (row.linkedRequirements ?? [])
-        .map((requirement) => [requirement.requirementNo, requirement.title].filter(Boolean).join(" : "))
+        .map((requirement) => requirement.requirementNo ?? "")
         .join("\n");
     case "custom": {
       const value = column.fieldKey ? row.customFields[column.fieldKey] : undefined;

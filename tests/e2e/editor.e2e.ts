@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createTreeNode } from "./helpers";
+import { createTreeNode, openTreeDocument } from "./helpers";
 
 test("collaborative rich-text document persists across reloads", async ({ page }) => {
   const suffix = Date.now();
@@ -18,7 +18,7 @@ test("collaborative rich-text document persists across reloads", async ({ page }
 
   await createTreeNode(page, "menu-newTextDocument", "Design Notes");
 
-  await page.getByRole("button", { name: "Design Notes" }).click();
+  await openTreeDocument(page, "Design Notes");
   await expect(page.getByTestId("richtext-surface")).toBeVisible();
   await expect(page.getByTestId("collab-status")).toHaveClass(/bg-success/, { timeout: 15000 });
 
@@ -27,10 +27,9 @@ test("collaborative rich-text document persists across reloads", async ({ page }
   await page.keyboard.type(marker);
   await expect(page.getByTestId("richtext-surface")).toContainText(marker);
 
-  // Wait past the Hocuspocus store debounce (2s) so a snapshot is persisted.
   await page.waitForTimeout(3000);
   await page.reload();
 
-  await page.getByRole("button", { name: "Design Notes" }).click();
+  await openTreeDocument(page, "Design Notes");
   await expect(page.getByTestId("richtext-surface")).toContainText(marker, { timeout: 15000 });
 });

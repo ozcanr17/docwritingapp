@@ -143,6 +143,16 @@ export interface OutlineRow {
     description: string | null;
     documentTitle: string;
   }>;
+  linkedObjects: Array<{
+    id: string;
+    rowType: RowType;
+    requirementNo: string | null;
+    title: string;
+    description: string | null;
+    action: string | null;
+    expectedResult: string | null;
+    document: { id: string; title: string; documentType: DocumentType };
+  }>;
   linkCount: number;
   version: number;
   updatedAt: string;
@@ -224,6 +234,7 @@ export interface DocumentSummary {
   documentType: DocumentType;
   folderId: string | null;
   version: number;
+  requirementPrefix?: string;
 }
 
 export interface FolderSummary {
@@ -255,10 +266,119 @@ export interface DashboardSummary {
   executions: { total: number; passed: number; failed: number; blocked: number };
 }
 
+export type ReleaseReadinessStatus = "ready" | "warning" | "blocked";
+export type ReleaseReadinessGateStatus = "passed" | "warning" | "failed" | "not_applicable";
+
+export interface ReleaseReadinessReport {
+  status: ReleaseReadinessStatus;
+  score: number;
+  generatedAt: string;
+  gates: Array<{
+    key: "content" | "traceability" | "links_current" | "verification" | "review";
+    required: boolean;
+    status: ReleaseReadinessGateStatus;
+    issueCount: number;
+  }>;
+  counts: {
+    rows: number;
+    requirements: number;
+    testSteps: number;
+    qualityErrors: number;
+    qualityWarnings: number;
+    uncoveredRequirements: number;
+    unlinkedTestSteps: number;
+    incompleteTestSteps: number;
+    unverifiedTestSteps: number;
+    suspectLinks: number;
+    retestCandidates: number;
+    failedLatestExecutions: number;
+  };
+  issues: Array<{
+    rule: string;
+    severity: "error" | "warning";
+    rowId: string;
+    objectNumber: number | null;
+    title: string;
+  }>;
+  retestCandidates: Array<{
+    rowId: string;
+    objectNumber: number;
+    title: string;
+    document: { id: string; title: string; documentType: DocumentType };
+    reason: string;
+  }>;
+  failedExecutions: Array<{
+    rowId: string;
+    objectNumber: number;
+    title: string;
+    status: string;
+    completedAt: string | null;
+  }>;
+  latestReview: { id: string; title: string; status: string; updatedAt: string } | null;
+  baseline: {
+    revisionNumber: number;
+    semanticVersion: string;
+    createdAt: string;
+    changedRows: number;
+    removedRows: number;
+    current: boolean;
+  } | null;
+}
+
+export interface ImpactAnalysis {
+  impactDepth: number;
+  baseline: { revisionNumber: number; semanticVersion: string; createdAt: string } | null;
+  changedRows: Array<{ rowId: string; objectNumber: number; title: string; rowType: string }>;
+  affectedRowCount: number;
+  traversedLinkCount: number;
+  retestCandidates: Array<{
+    rowId: string;
+    objectNumber: number;
+    title: string;
+    rowType: "test_case" | "test_step";
+    document: { id: string; title: string; documentType: DocumentType };
+    reason: "suspect_link" | "baseline_change";
+    sourceRowIds: string[];
+  }>;
+}
+
+export interface RetestPackage {
+  id: string;
+  name: string;
+  status: "draft" | "active" | "completed" | "canceled";
+  sourceRevisionNumber: number | null;
+  impactDepth: number;
+  createdAt: string;
+  completedAt: string | null;
+  createdBy: { id: string; displayName: string };
+  sourceDocument: { id: string; title: string; documentType: DocumentType };
+  progress: { total: number; completed: number; passed: number; failed: number };
+  items: Array<{
+    id: string;
+    reason: string;
+    sourceRowIds: string[];
+    testRow: { id: string; objectNumber: number; title: string; rowType: string; deletedAt: string | null; document: { id: string; title: string; documentType: DocumentType } };
+    executions: Array<{ id: string; status: string; createdAt: string; completedAt: string | null }>;
+  }>;
+}
+
+export interface DocumentTemplateSummary {
+  id: string;
+  name: string;
+  documentType: DocumentType;
+  templateKind: "document" | "section";
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  createdById: string | null;
+}
+
 export interface RowComment {
   id: string;
   body: string;
   mentions: string[];
+  anchor: { field?: "title" | "description" | "action" | "expectedResult"; start?: number; end?: number; quotedText?: string };
+  suggestedReplacement: string | null;
   resolvedAt: string | null;
   createdAt: string;
   author: { id: string; displayName: string; email: string };

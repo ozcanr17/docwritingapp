@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface MenuEntry {
   key: string;
@@ -8,16 +10,35 @@ export interface MenuEntry {
   disabled?: boolean;
   danger?: boolean;
   separator?: boolean;
+  children?: MenuEntry[];
 }
 
 export function Menu({ label, entries, testId }: { label: string; entries: MenuEntry[]; testId?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    const update = () => {
+      const rect = ref.current?.getBoundingClientRect();
+      if (rect) setPosition({ left: rect.left, top: rect.bottom + 4 });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onClick = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!ref.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
@@ -39,35 +60,53 @@ export function Menu({ label, entries, testId }: { label: string; entries: MenuE
       >
         {label}
       </button>
-      {open && (
+      {open && createPortal(
         <div
+          ref={panelRef}
           role="menu"
-          className="absolute left-0 top-full z-[70] mt-1 min-w-56 rounded-xl border border-border bg-surfaceElevated p-1.5 shadow-2xl"
+          data-testid={`${testId ?? "menu"}-popover`}
+          style={position}
+          className="fixed z-[190] min-w-56 rounded-xl border border-border bg-surfaceElevated p-1.5 shadow-2xl"
         >
-          {entries.map((entry) =>
-            entry.separator ? (
-              <div key={entry.key} className="my-1 border-t border-border" />
-            ) : (
-              <button
-                key={entry.key}
-                role="menuitem"
-                data-testid={`menuitem-${entry.key}`}
-                disabled={entry.disabled}
-                className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-40 ${
-                  entry.danger ? "text-destructive" : "text-foreground"
-                }`}
-                onClick={() => {
-                  entry.onSelect?.();
-                  setOpen(false);
-                }}
-              >
-                <span className="w-4 text-xs">{entry.checked ? "✓" : ""}</span>
-                {entry.label}
-              </button>
-            ),
-          )}
-        </div>
+          <MenuItems entries={entries} onClose={() => setOpen(false)} />
+        </div>,
+        document.body,
       )}
     </div>
   );
+}
+
+function MenuItems({ entries, onClose }: { entries: MenuEntry[]; onClose: () => void }) {
+  const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
+  return entries.map((entry) => entry.separator ? (
+    <div key={entry.key} className="my-1 border-t border-border" />
+  ) : (
+    <div key={entry.key} className="relative" onMouseEnter={() => setActiveSubmenu(entry.children ? entry.key : null)}>
+      <button
+        role="menuitem"
+        data-testid={`menuitem-${entry.key}`}
+        disabled={entry.disabled}
+        aria-haspopup={entry.children ? "menu" : undefined}
+        aria-expanded={entry.children ? activeSubmenu === entry.key : undefined}
+        className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-40 ${entry.danger ? "text-destructive" : "text-foreground"}`}
+        onClick={() => {
+          if (entry.children) {
+            setActiveSubmenu(entry.key);
+            return;
+          }
+          entry.onSelect?.();
+          onClose();
+        }}
+      >
+        <span className="w-4 text-xs">{entry.checked ? "✓" : ""}</span>
+        <span className="min-w-0 flex-1">{entry.label}</span>
+        {entry.children && <ChevronRight size={14} className="shrink-0 text-mutedForeground" />}
+      </button>
+      {entry.children && activeSubmenu === entry.key && (
+        <div role="menu" className="absolute left-full top-0 z-[71] ml-1 min-w-64 rounded-xl border border-border bg-surfaceElevated p-1.5 shadow-2xl">
+          <MenuItems entries={entry.children} onClose={onClose} />
+        </div>
+      )}
+    </div>
+  ));
 }

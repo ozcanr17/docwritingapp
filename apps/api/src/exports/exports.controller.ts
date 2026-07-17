@@ -9,6 +9,12 @@ const createExportSchema = z.object({
   format: z.enum(["csv", "docx", "xlsx", "pdf", "reqif"]),
   templateId: z.string().uuid().optional(),
   locale: z.enum(["tr", "en"]).default("tr"),
+  scope: z.enum(["document", "traceability"]).default("document"),
+  traceabilityDirection: z.enum(["requirement_to_test", "test_to_requirement"]).default("requirement_to_test"),
+}).superRefine((value, context) => {
+  if (value.scope === "traceability" && value.format !== "docx" && value.format !== "xlsx") {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["format"], message: "Traceability exports support DOCX and XLSX" });
+  }
 });
 const importSchema = z.object({ csv: z.string().min(1).max(5_000_000) });
 const reqifImportSchema = z.object({ reqif: z.string().min(1).max(20_000_000) });
@@ -29,7 +35,7 @@ export class ExportsController {
     @Param("documentId", ParseUUIDPipe) documentId: string,
     @Body(new ZodBodyPipe(createExportSchema)) body: z.infer<typeof createExportSchema>,
   ) {
-    return this.exports.createExport(user.userId, documentId, body.format, body.templateId, body.locale);
+    return this.exports.createExport(user.userId, documentId, body.format, body.templateId, body.locale, body.scope, body.traceabilityDirection);
   }
 
   @Get("exports/:jobId")

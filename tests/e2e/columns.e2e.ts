@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createTreeNode } from "./helpers";
+import { createTreeNode, openTreeDocument } from "./helpers";
 
 test("test document: add rows, edit test step fields, add a custom column", async ({ page }) => {
   const suffix = Date.now();
@@ -16,9 +16,8 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
   await page.getByTestId("bootstrap-submit").click();
   await expect(page.getByTestId("tree-empty")).toBeVisible();
 
-  // A test document imported with a test case + steps (expected result column).
   await createTreeNode(page, "menu-newTestDocument", "Test Plan");
-  await page.getByRole("button", { name: "Test Plan" }).click();
+  await openTreeDocument(page, "Test Plan");
 
   await page.getByTestId("menubar-file-input").setInputFiles({
     name: "tests.csv",
@@ -37,7 +36,6 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
   await expect(page.getByTestId("grid-row-1")).toBeVisible();
   await expect(page.getByTestId("grid-row-1.1")).toBeVisible();
 
-  // The expected-result column exists for test steps; edit it inline.
   const stepRow = page.getByTestId("grid-row-1.1");
   const expectedCell = stepRow.getByTestId("cell-value-expectedResult");
   await expectedCell.click();
@@ -48,9 +46,8 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
 
   const resultCell = stepRow.getByTestId("cell-value-testResult");
   await resultCell.click();
-  await resultCell.press("Enter");
   await page.getByTestId("cell-input-testResult").fill("Passed");
-  await page.keyboard.press("Control+Enter");
+  await page.keyboard.press("Enter");
   await expect(page.getByText("Passed")).toBeVisible();
 
   await page.getByTestId("menu-insert").click();
@@ -68,8 +65,7 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
   await page.getByTestId("column-create-submit").click();
   const platformCell = stepRow.locator('[data-testid^="cell-value-custom:platforms_"]');
   await platformCell.scrollIntoViewIfNeeded();
-  await platformCell.click();
-  await platformCell.press("Enter");
+  await platformCell.dblclick();
   await page.getByTestId("choice-option-0").check();
   await page.getByTestId("choice-option-1").check();
   await page.getByTestId("choice-save").click();

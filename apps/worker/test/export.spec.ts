@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numberRows, toCsv, toDocx, toPdf, toReqif, toXlsx } from "../src/export";
+import { numberRows, toCsv, toDocx, toPdf, toReqif, toTraceabilityDocx, toTraceabilityXlsx, toXlsx } from "../src/export";
 
 const rawRows = [
   { id: "a", objectNumber: 1, parentId: null, rank: "b", depth: 0, rowType: "heading", title: "Intro", description: null },
@@ -68,5 +68,21 @@ describe("export generation", () => {
     expect(pdf.subarray(0, 4).toString("latin1")).toBe("%PDF");
     expect(reqif.toString("utf8")).toContain("<REQ-IF");
     expect(reqif.toString("utf8")).toContain("REQ-IF-VERSION>1.2");
+  });
+
+  it("produces bidirectional traceability XLSX and DOCX artifacts", async () => {
+    const matrix = [{
+      id: "test-1",
+      primary: "Authentication verification",
+      documentTitle: "Verification Tests",
+      related: [
+        { id: "req-1", label: "GER-001", description: "Login requirement", suspect: false },
+        { id: "req-2", label: "GER-002", description: "Lockout requirement", suspect: true },
+      ],
+    }];
+    const xlsx = await toTraceabilityXlsx("Verification Tests", matrix, "test_to_requirement", "tr");
+    const docx = await toTraceabilityDocx("Verification Tests", matrix, "test_to_requirement", "tr");
+    expect(xlsx.subarray(0, 2).toString("latin1")).toBe("PK");
+    expect(docx.subarray(0, 2).toString("latin1")).toBe("PK");
   });
 });

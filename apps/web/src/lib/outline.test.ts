@@ -19,6 +19,7 @@ function row(partial: Pick<OutlineRow, "id" | "parentId" | "depth" | "rowType" |
     testResult: null,
     requirementNo: null,
     linkedRequirements: [],
+    linkedObjects: [],
     linkCount: 0,
     stepNumber: null,
     updatedAt: "2026-07-15T12:00:00.000Z",

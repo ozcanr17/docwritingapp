@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, LogOut, Redo2, Search, Settings, Trash2, Undo2, Users } from "lucide-react";
+import { FileText, LogOut, Settings, Trash2, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { MenuBar } from "../components/MenuBar";
 import { DocumentTabsBar } from "../components/DocumentTabsBar";
 import { ResizeHandle } from "../components/ResizeHandle";
@@ -44,16 +45,20 @@ export function ShellPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"documents" | "trash">("documents");
-  const [report, setReport] = useState<"baselines" | "coverage" | "matrix" | "reviews" | "runs" | null>(null);
+  const [report, setReport] = useState<"readiness" | "baselines" | "coverage" | "matrix" | "reviews" | "runs" | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
   const [presenceOpen, setPresenceOpen] = useState(false);
+  const [presenceProfileUserId, setPresenceProfileUserId] = useState<string | null>(null);
   const presenceCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const presenceTriggerRef = useRef<HTMLDivElement>(null);
   const closeReport = useCallback(() => setReport(null), []);
   const tabs = useDocumentTabsStore((s) => s.tabs);
   const activeDocumentId = useDocumentTabsStore((s) => s.activeId);
   const secondaryDocumentId = useDocumentTabsStore((s) => s.secondaryId);
+  const focusedDocumentId = useDocumentTabsStore((s) => s.focusedId);
   const openDocumentTab = useDocumentTabsStore((s) => s.open);
   const activateDocumentTab = useDocumentTabsStore((s) => s.activate);
   const closeDocumentTab = useDocumentTabsStore((s) => s.close);
@@ -63,9 +68,6 @@ export function ShellPage() {
   const focusDocumentPane = useDocumentTabsStore((s) => s.focus);
   const resetDocumentTabs = useDocumentTabsStore((s) => s.reset);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
-  const undoCount = useEditHistoryStore((s) => selectedDocumentId ? s.documents[selectedDocumentId]?.undo.length ?? 0 : 0);
-  const redoCount = useEditHistoryStore((s) => selectedDocumentId ? s.documents[selectedDocumentId]?.redo.length ?? 0 : 0);
-  const historyBusy = useEditHistoryStore((s) => selectedDocumentId ? Boolean(s.busy[selectedDocumentId]) : false);
   const clearEditHistory = useEditHistoryStore((s) => s.clear);
   const resetEditHistory = useEditHistoryStore((s) => s.reset);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
@@ -75,6 +77,10 @@ export function ShellPage() {
   const detailWidth = useLayoutStore((s) => s.detailWidth);
   const setTreeWidth = useLayoutStore((s) => s.setTreeWidth);
   const setDetailWidth = useLayoutStore((s) => s.setDetailWidth);
+  const splitDirection = useLayoutStore((s) => s.splitDirection);
+  const splitRatio = useLayoutStore((s) => s.splitRatio);
+  const setSplitDirection = useLayoutStore((s) => s.setSplitDirection);
+  const setSplitRatio = useLayoutStore((s) => s.setSplitRatio);
 
   const activateDocument = useCallback((id: string) => {
     activateDocumentTab(id);
@@ -91,37 +97,42 @@ export function ShellPage() {
   const closeDocument = useCallback((id: string) => {
     clearEditHistory(id);
     closeDocumentTab(id);
-    setSelectedDocumentId(useDocumentTabsStore.getState().activeId);
+    setSelectedDocumentId(useDocumentTabsStore.getState().focusedId);
   }, [clearEditHistory, closeDocumentTab, setSelectedDocumentId]);
+
+  useEffect(() => {
+    if (focusedDocumentId !== selectedDocumentId) setSelectedDocumentId(focusedDocumentId);
+  }, [focusedDocumentId, selectedDocumentId, setSelectedDocumentId]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen(true);
+        window.requestAnimationFrame(() => document.getElementById("docsys-global-search-input")?.focus());
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "Tab") {
         event.preventDefault();
         const state = useDocumentTabsStore.getState();
-        if (state.tabs.length < 2 || !state.activeId) return;
-        const index = state.tabs.findIndex((tab) => tab.id === state.activeId);
+        if (state.tabs.length < 2 || !state.focusedId) return;
+        const index = state.tabs.findIndex((tab) => tab.id === state.focusedId);
         const next = state.tabs[(index + (event.shiftKey ? -1 : 1) + state.tabs.length) % state.tabs.length];
         if (next) activateDocument(next.id);
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "w") {
         const target = event.target as HTMLElement | null;
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-        const activeId = useDocumentTabsStore.getState().activeId;
-        if (activeId) {
+        const focusedId = useDocumentTabsStore.getState().focusedId;
+        if (focusedId) {
           event.preventDefault();
-          closeDocument(activeId);
+          closeDocument(focusedId);
         }
       }
       const target = event.target as HTMLElement | null;
       const editingText = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
       if (!editingText && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
-        const documentId = useDocumentTabsStore.getState().activeId;
+        const documentId = useDocumentTabsStore.getState().focusedId;
         if (documentId) window.dispatchEvent(new CustomEvent(event.shiftKey ? "docsys:redo" : "docsys:undo", { detail: { documentId } }));
       }
     };
@@ -141,6 +152,16 @@ export function ShellPage() {
     window.addEventListener("docsys:open-profile", openProfile);
     return () => window.removeEventListener("docsys:open-profile", openProfile);
   }, []);
+
+  useEffect(() => {
+    const openDocumentRow = (event: Event) => {
+      const detail = (event as CustomEvent<{ document: DocumentSummary; rowId: string }>).detail;
+      openDocument({ id: detail.document.id, title: detail.document.title, documentType: detail.document.documentType });
+      window.setTimeout(() => useSelectionStore.getState().openDetail(detail.rowId), 0);
+    };
+    window.addEventListener("docsys:open-document-row", openDocumentRow);
+    return () => window.removeEventListener("docsys:open-document-row", openDocumentRow);
+  }, [openDocument]);
 
   const profile = useQuery({
     queryKey: ["me"],
@@ -164,6 +185,11 @@ export function ShellPage() {
 
   const workspaceId = workspaces.data?.[0]?.id ?? null;
   const presence = useDocumentEvents(selectedDocumentId);
+  const presenceProfile = useQuery({
+    queryKey: ["user-profile", presenceProfileUserId],
+    queryFn: () => api<UserProfile>(`/auth/users/${presenceProfileUserId}`),
+    enabled: presenceProfileUserId !== null && presenceOpen,
+  });
 
   const selectedDocument = useQuery({
     queryKey: ["document", selectedDocumentId],
@@ -224,21 +250,27 @@ export function ShellPage() {
         view={view}
         setView={setView}
         onOpenReport={setReport}
+        onOpenSearch={() => setSearchOpen(true)}
+        onCloseSearch={() => setSearchOpen(false)}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        searchOpen={searchOpen}
       />
       <Suspense fallback={null}>
         {report && selectedDocumentId && <ReportsDialog documentId={selectedDocumentId} tab={report} onClose={closeReport} />}
         {searchOpen && workspaceId && (
           <GlobalSearchDialog
             workspaceId={workspaceId}
+            query={searchQuery}
             onClose={() => setSearchOpen(false)}
             onSelect={(document, rowId) => {
               openDocument({ id: document.id, title: document.title, documentType: document.documentType as DocumentType });
               setSearchOpen(false);
-              window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0);
+              if (rowId) window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0);
             }}
           />
         )}
-        {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} onClose={() => setSettingsOpen(false)} />}
+        {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} documentId={selectedDocumentId} onClose={() => setSettingsOpen(false)} />}
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
       </Suspense>
       <div className="flex flex-1 gap-1.5 overflow-hidden p-2 pt-1.5">
@@ -258,16 +290,8 @@ export function ShellPage() {
             onClick={() => setView("documents")}
             testId="nav-documents"
           />
-          <SidebarItem
-            icon={<Trash2 size={15} />}
-            label={t("trash")}
-            active={view === "trash"}
-            onClick={() => setView("trash")}
-            testId="nav-trash"
-          />
-          <SidebarItem icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} />
         </nav>
-        <section aria-label={t("documentTree")} className="min-h-0 flex-1 overflow-hidden border-t border-white/10 bg-surface text-foreground">
+        <section data-testid="tree-section" aria-label={t("documentTree")} className="min-h-0 flex-1 overflow-hidden border-t border-white/10 bg-surface text-foreground">
           {workspaceId &&
             (view === "trash" ? (
               <TrashPanel workspaceId={workspaceId} />
@@ -279,6 +303,10 @@ export function ShellPage() {
               />
             ))}
         </section>
+        <div className="border-t border-white/10 p-2 text-sm">
+          <SidebarItem icon={<Trash2 size={15} />} label={t("trash")} active={view === "trash"} onClick={() => setView("trash")} testId="nav-trash" />
+          <SidebarItem icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} testId="nav-settings" />
+        </div>
         <div className="border-t border-white/10 p-3 text-sm">
           <div className="flex items-center gap-1">
             <button data-testid="open-profile" className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left hover:bg-white/10" onClick={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}>{profile.data.displayName}</button>
@@ -302,38 +330,40 @@ export function ShellPage() {
         </div>
       </aside>
       <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />
-      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-        <DocumentTabsBar
+      <main id="main-content" tabIndex={-1} className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+        {tabs.length > 0 && view === "documents" && <DocumentTabsBar
           tabs={tabs}
-          activeId={activeDocumentId}
+          activeId={selectedDocumentId}
+          primaryId={activeDocumentId}
           secondaryId={secondaryDocumentId}
           onActivate={activateDocument}
           onClose={closeDocument}
           onSecondaryChange={setSecondaryDocument}
           onTogglePin={togglePinnedDocument}
           onReorder={reorderDocumentTabs}
+          splitDirection={splitDirection}
+          onSplitDirectionChange={setSplitDirection}
           onOpenWindow={(id) => {
             const tab = tabs.find((item) => item.id === id);
             if (tab) void openDocumentWindow(id, tab.title);
           }}
-        />
-        <header className="relative z-20 flex items-center justify-between border-b border-border bg-surface/85 px-4 py-2.5 text-sm backdrop-blur-xl">
-          <div className="flex items-center gap-1">
-            <button title={t("globalSearchHelp")} className="flex items-center gap-2 rounded-lg px-2 py-1 text-mutedForeground hover:bg-muted" onClick={() => setSearchOpen(true)}>
-              <Search size={14} />{t("globalSearch")} <span className="rounded border border-border px-1.5 text-[10px]">⌘K</span>
-            </button>
-            <span className="mx-1 h-5 border-l border-border" />
-            <button data-testid="undo-action" title={`${t("undoLastChange")} · Ctrl/Cmd+Z`} aria-label={t("undoLastChange")} disabled={!selectedDocumentId || undoCount === 0 || historyBusy} className="rounded-lg p-1.5 text-mutedForeground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35" onClick={() => selectedDocumentId && window.dispatchEvent(new CustomEvent("docsys:undo", { detail: { documentId: selectedDocumentId } }))}>
-              <Undo2 size={15} />
-            </button>
-            <button data-testid="redo-action" title={`${t("redoLastChange")} · Ctrl/Cmd+Shift+Z`} aria-label={t("redoLastChange")} disabled={!selectedDocumentId || redoCount === 0 || historyBusy} className="rounded-lg p-1.5 text-mutedForeground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35" onClick={() => selectedDocumentId && window.dispatchEvent(new CustomEvent("docsys:redo", { detail: { documentId: selectedDocumentId } }))}>
-              <Redo2 size={15} />
-            </button>
+        />}
+        {selectedDocumentId && view === "documents" && <header className="relative z-30 flex min-h-11 min-w-0 items-center justify-between gap-2 border-b border-border bg-surface/85 px-2.5 py-1 text-sm backdrop-blur-xl">
+          <div className="relative min-w-0 flex-1 self-stretch">
+            {[activeDocumentId, secondaryDocumentId].filter((id): id is string => Boolean(id)).map((id) => (
+              <div
+                key={id}
+                id={`docsys-toolbar-${id}`}
+                aria-hidden={selectedDocumentId !== id}
+                className={`absolute inset-0 flex min-w-0 items-center transition-opacity duration-100 ${selectedDocumentId === id ? "z-10 opacity-100" : "pointer-events-none invisible opacity-0"}`}
+              />
+            ))}
           </div>
           {selectedDocumentId && view === "documents" && (
-            <div className="flex items-center gap-2 text-mutedForeground">
+            <div className="flex shrink-0 items-center gap-2 text-mutedForeground">
               <Users size={14} />
               <div
+                ref={presenceTriggerRef}
                 className="relative"
                 onMouseEnter={() => {
                   if (presenceCloseTimer.current) clearTimeout(presenceCloseTimer.current);
@@ -344,46 +374,84 @@ export function ShellPage() {
                 }}
               >
                 <span data-testid="presence-count" title={t("showOnlineUsers")} className="block rounded-md px-1.5 py-1">{t("onlineUsers")}: {presence.length}</span>
-                {presenceOpen && (
-                  <div data-testid="presence-popover" className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-surfaceElevated p-2 shadow-2xl">
-                    <div className="px-2 pb-1.5 pt-1 text-xs font-medium text-mutedForeground">{t("onlineEditors")}</div>
-                    {presence.map((person) => (
-                      <button key={person.userId} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-muted" title={t("openUserProfile", { name: person.displayName })} onClick={() => { setPresenceOpen(false); setProfileTarget({ userId: person.userId, allowEdit: false }); }}>
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/30 bg-surface p-0.5"><span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primaryForeground">{initials(person.displayName)}</span></span>
-                        <span className="min-w-0 flex-1 truncate font-medium text-foreground">{person.displayName}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
               <span className="flex gap-1">
                 {presence.slice(0, 8).map((p) => (
-                  <button
+                  <span
                     key={p.userId}
                     title={p.displayName}
                     className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/30 bg-surface p-0.5 shadow-sm ring-1 ring-primary/15"
-                    onClick={() => setProfileTarget({ userId: p.userId, allowEdit: false })}
                   >
                     <span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primaryForeground">{initials(p.displayName)}</span>
-                  </button>
+                  </span>
                 ))}
               </span>
             </div>
           )}
-        </header>
+        </header>}
+        {selectedDocumentId && presenceOpen && presenceTriggerRef.current && createPortal(
+          <div
+            data-testid="presence-popover"
+            className="fixed z-[180] w-72 rounded-xl border border-border bg-surfaceElevated p-2 shadow-2xl"
+            style={{ top: presenceTriggerRef.current.getBoundingClientRect().bottom + 6, right: Math.max(8, window.innerWidth - presenceTriggerRef.current.getBoundingClientRect().right) }}
+            onMouseEnter={() => { if (presenceCloseTimer.current) clearTimeout(presenceCloseTimer.current); }}
+            onMouseLeave={() => { presenceCloseTimer.current = setTimeout(() => { setPresenceOpen(false); setPresenceProfileUserId(null); }, 140); }}
+          >
+            <div className="px-2 pb-1.5 pt-1 text-xs font-medium text-mutedForeground">{t("onlineEditors")}</div>
+            {presence.map((person) => (
+              <div key={person.userId} className={`flex items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-muted ${presenceProfileUserId === person.userId ? "bg-muted" : ""}`} title={t("hoverProfilePreview")} onMouseEnter={() => setPresenceProfileUserId(person.userId)}>
+                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/30 bg-surface p-0.5"><span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primaryForeground">{initials(person.displayName)}</span></span>
+                <span className="min-w-0 flex-1 truncate font-medium text-foreground">{person.displayName}</span>
+              </div>
+            ))}
+            {presenceProfile.data && (
+              <div data-testid="presence-profile-preview" className="mt-1 rounded-lg border border-border bg-editorBackground p-3 text-xs">
+                <div className="font-semibold text-foreground">{presenceProfile.data.displayName}</div>
+                <div className="mt-0.5 truncate text-mutedForeground">{presenceProfile.data.email}</div>
+                {(presenceProfile.data.jobTitle || presenceProfile.data.department) && <div className="mt-2 text-foreground">{[presenceProfile.data.jobTitle, presenceProfile.data.department].filter(Boolean).join(" · ")}</div>}
+                {presenceProfile.data.bio && <div className="mt-2 line-clamp-3 text-mutedForeground">{presenceProfile.data.bio}</div>}
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
         {view === "documents" && selectedDocumentId ? (
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-            <DocumentPane tab={tabs.find((tab) => tab.id === selectedDocumentId) ?? null} displayName={profile.data.displayName} active onFocus={() => undefined} />
-            {secondaryDocumentId && (
+          <div
+            data-testid="document-split-container"
+            className={`min-h-0 flex-1 overflow-hidden ${secondaryDocumentId ? `flex bg-background p-1.5 ${splitDirection === "horizontal" ? "flex-row" : "flex-col"}` : "flex"}`}
+          >
+            <div className="flex min-h-0 min-w-0" style={secondaryDocumentId ? { flex: `0 0 ${splitRatio * 100}%` } : { flex: "1 1 auto" }}>
               <DocumentPane
-                tab={tabs.find((tab) => tab.id === secondaryDocumentId) ?? null}
-                displayName={profile.data.displayName}
-                active={false}
-                onFocus={() => {
-                  focusDocumentPane(secondaryDocumentId);
-                  setSelectedDocumentId(secondaryDocumentId);
-                }}
+              tab={tabs.find((tab) => tab.id === activeDocumentId) ?? null}
+              displayName={profile.data.displayName}
+              focused={selectedDocumentId === activeDocumentId}
+              split={Boolean(secondaryDocumentId)}
+              position="primary"
+              onFocus={() => {
+                if (!activeDocumentId || selectedDocumentId === activeDocumentId) return;
+                focusDocumentPane(activeDocumentId);
+                setSelectedDocumentId(activeDocumentId);
+              }}
               />
+            </div>
+            {secondaryDocumentId && (
+              <>
+                <SplitResizeHandle direction={splitDirection} ratio={splitRatio} onChange={setSplitRatio} />
+                <div className="flex min-h-0 min-w-0 flex-1">
+                  <DocumentPane
+                    tab={tabs.find((tab) => tab.id === secondaryDocumentId) ?? null}
+                    displayName={profile.data.displayName}
+                    focused={selectedDocumentId === secondaryDocumentId}
+                    split
+                    position="secondary"
+                    onFocus={() => {
+                      if (selectedDocumentId === secondaryDocumentId) return;
+                      focusDocumentPane(secondaryDocumentId);
+                      setSelectedDocumentId(secondaryDocumentId);
+                    }}
+                  />
+                </div>
+              </>
             )}
           </div>
         ) : view === "documents" ? (
@@ -411,16 +479,58 @@ export function ShellPage() {
   );
 }
 
-function DocumentPane({ tab, displayName, active, onFocus }: { tab: DocumentTab | null; displayName: string; active: boolean; onFocus: () => void }) {
+function DocumentPane({ tab, displayName, focused, split, position, onFocus }: { tab: DocumentTab | null; displayName: string; focused: boolean; split: boolean; position: "primary" | "secondary"; onFocus: () => void }) {
   const { t } = useTranslation();
   if (!tab) return <PanelLoading />;
   return (
-    <section aria-label={tab.title} className={`flex min-w-0 flex-1 flex-col overflow-hidden ${active ? "" : "border-l border-border"}`} onMouseDownCapture={onFocus}>
-      {!active && <div className="flex h-8 shrink-0 items-center justify-between border-b border-border bg-editorBackground px-3 text-xs"><span className="truncate font-medium">{tab.title}</span><span className="text-[10px] uppercase tracking-wide text-mutedForeground">{t("secondaryPane")}</span></div>}
+    <section data-testid={`document-pane-${position}`} data-document-id={tab.id} data-focused={focused ? "true" : "false"} aria-label={tab.title} className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-surface transition-shadow ${focused && split ? "ring-1 ring-primary/50" : split ? "ring-1 ring-border" : ""}`} onMouseDownCapture={onFocus}>
+      {split && <div className={`flex h-8 shrink-0 items-center justify-between border-b px-3 text-xs ${focused ? "border-primary/30 bg-primary/5" : "border-border bg-editorBackground"}`}><span className="truncate font-medium">{tab.title}</span><span className="text-[10px] uppercase tracking-wide text-mutedForeground">{focused ? t("focusedPane") : t("secondaryPane")}</span></div>}
       <Suspense fallback={<PanelLoading />}>
-        {tab.documentType === "general_document" ? <RichTextEditor documentId={tab.id} displayName={displayName} /> : <DocumentGrid documentId={tab.id} documentType={tab.documentType === "test" ? "test" : "requirement"} />}
+        {tab.documentType === "general_document" ? <RichTextEditor documentId={tab.id} displayName={displayName} /> : <DocumentGrid documentId={tab.id} documentType={tab.documentType === "test" ? "test" : "requirement"} advancedTargetId={`docsys-toolbar-${tab.id}`} showAdvancedControls />}
       </Suspense>
     </section>
+  );
+}
+
+function SplitResizeHandle({ direction, ratio, onChange }: { direction: "horizontal" | "vertical"; ratio: number; onChange: (ratio: number) => void }) {
+  const { t } = useTranslation();
+  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const container = event.currentTarget.parentElement;
+    if (!container) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const move = (moveEvent: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      onChange(direction === "horizontal" ? (moveEvent.clientX - rect.left) / rect.width : (moveEvent.clientY - rect.top) / rect.height);
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+  };
+  const adjust = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const backward = direction === "horizontal" ? event.key === "ArrowLeft" : event.key === "ArrowUp";
+    const forward = direction === "horizontal" ? event.key === "ArrowRight" : event.key === "ArrowDown";
+    if (!backward && !forward) return;
+    event.preventDefault();
+    onChange(ratio + (backward ? -0.05 : 0.05));
+  };
+  return (
+    <div
+      role="separator"
+      aria-label={t("resizeSplitView")}
+      aria-orientation={direction === "horizontal" ? "vertical" : "horizontal"}
+      aria-valuenow={Math.round(ratio * 100)}
+      tabIndex={0}
+      data-testid="split-resize-handle"
+      className={`group relative shrink-0 touch-none rounded-full outline-none ${direction === "horizontal" ? "mx-1 w-1.5 cursor-col-resize" : "my-1 h-1.5 cursor-row-resize"}`}
+      onPointerDown={startResize}
+      onKeyDown={adjust}
+    >
+      <span className={`absolute rounded-full bg-border transition-colors group-hover:bg-primary group-focus:bg-primary ${direction === "horizontal" ? "inset-y-0 left-1/2 w-px -translate-x-1/2" : "inset-x-0 top-1/2 h-px -translate-y-1/2"}`} />
+    </div>
   );
 }
 

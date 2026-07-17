@@ -13,6 +13,7 @@ describe("document tabs", () => {
     useDocumentTabsStore.getState().open(requirement);
     expect(useDocumentTabsStore.getState().tabs).toHaveLength(2);
     expect(useDocumentTabsStore.getState().activeId).toBe("requirement");
+    expect(useDocumentTabsStore.getState().focusedId).toBe("requirement");
   });
 
   it("selects a neighboring tab when the active tab closes", () => {
@@ -28,15 +29,15 @@ describe("document tabs", () => {
     useDocumentTabsStore.getState().setSecondary("requirement");
     expect(useDocumentTabsStore.getState().secondaryId).toBe("requirement");
     useDocumentTabsStore.getState().activate("requirement");
-    expect(useDocumentTabsStore.getState().secondaryId).toBeNull();
+    expect(useDocumentTabsStore.getState()).toMatchObject({ activeId: "test", secondaryId: "requirement", focusedId: "requirement" });
   });
 
-  it("swaps panes when the secondary document receives focus", () => {
+  it("keeps pane positions stable when the secondary document receives focus", () => {
     useDocumentTabsStore.getState().open(requirement);
     useDocumentTabsStore.getState().open(test);
     useDocumentTabsStore.getState().setSecondary("requirement");
     useDocumentTabsStore.getState().focus("requirement");
-    expect(useDocumentTabsStore.getState()).toMatchObject({ activeId: "requirement", secondaryId: "test" });
+    expect(useDocumentTabsStore.getState()).toMatchObject({ activeId: "test", secondaryId: "requirement", focusedId: "requirement" });
   });
 
   it("pins tabs ahead of unpinned documents and preserves the state", () => {

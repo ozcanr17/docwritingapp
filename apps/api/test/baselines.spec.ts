@@ -125,11 +125,16 @@ describe("baselines and coverage", () => {
 
     const req1 = await makeRow({ rowType: "requirement", title: "Covered req", parentId: null });
     await makeRow({ rowType: "requirement", title: "Uncovered req", parentId: null });
-    const test = await makeRow({ rowType: "test_case", title: "Verifies req1", parentId: null }, testDocument.id);
+    const test = await makeRow({ rowType: "heading", title: "Brake verification", parentId: null }, testDocument.id);
+    const testSteps = await makeRow({ rowType: "heading", title: "Test Steps", parentId: test.id }, testDocument.id);
+    const step = await makeRow({ rowType: "test_step", title: "", parentId: testSteps.id }, testDocument.id);
+    const unlinkedTest = await makeRow({ rowType: "heading", title: "Unlinked verification", parentId: null }, testDocument.id);
+    const unlinkedSteps = await makeRow({ rowType: "heading", title: "Test Steps", parentId: unlinkedTest.id }, testDocument.id);
+    await makeRow({ rowType: "test_step", title: "", parentId: unlinkedSteps.id }, testDocument.id);
 
     await app.inject({
       method: "POST",
-      url: `/rows/${test.id}/links`,
+      url: `/rows/${step.id}/links`,
       headers: { cookie: actor.cookie },
       payload: { targetRowId: req1.id, linkType: "verifies" },
     });
@@ -149,10 +154,59 @@ describe("baselines and coverage", () => {
       url: `/documents/${doc}/traceability`,
       headers: { cookie: actor.cookie },
     });
-    const rows = JSON.parse(matrix.body) as Array<{ id: string; links: { sourceId: string }[] }>;
+    const rows = JSON.parse(matrix.body) as Array<{ id: string; requirementNo: string | null; links: { sourceId: string; sourceScenarioId: string; sourceTitle: string; sourceDocument: { id: string; title: string; documentType: string } }[] }>;
     expect(rows).toHaveLength(2);
     const coveredRow = rows.find((r) => r.id === req1.id);
+    expect(coveredRow?.requirementNo).toBe("REQ-001");
     expect(coveredRow?.links).toHaveLength(1);
-    expect(coveredRow?.links[0]?.sourceId).toBe(test.id);
+    expect(coveredRow?.links[0]?.sourceId).toBe(step.id);
+    expect(coveredRow?.links[0]?.sourceScenarioId).toBe(test.id);
+    expect(coveredRow?.links[0]?.sourceTitle).toBe("Brake verification");
+    expect(coveredRow?.links[0]?.sourceDocument).toEqual({ id: testDocument.id, title: "Verification tests", documentType: "test" });
+
+    const testCoverage = await app.inject({
+      method: "GET",
+      url: `/documents/${testDocument.id}/coverage`,
+      headers: { cookie: actor.cookie },
+    });
+    const testCoverageBody = JSON.parse(testCoverage.body) as { mode: string; totalItems: number; covered: number; uncovered: number; uncoveredRows: Array<{ id: string; title: string }> };
+    expect(testCoverageBody).toEqual(expect.objectContaining({ mode: "test", totalItems: 2, covered: 1, uncovered: 1 }));
+    expect(testCoverageBody.uncoveredRows).toEqual([expect.objectContaining({ id: unlinkedTest.id, title: "Unlinked verification" })]);
+
+    const testMatrix = await app.inject({
+      method: "GET",
+      url: `/documents/${testDocument.id}/traceability`,
+      headers: { cookie: actor.cookie },
+    });
+    const testMatrixRows = JSON.parse(testMatrix.body) as Array<{ id: string; links: Array<{ sourceScenarioId: string; sourceTitle: string }> }>;
+    expect(testMatrixRows).toEqual([
+      expect.objectContaining({
+        id: req1.id,
+        links: [expect.objectContaining({ sourceScenarioId: test.id, sourceTitle: "Brake verification" })],
+      }),
+    ]);
+
+    const reverseMatrix = await app.inject({
+      method: "GET",
+      url: `/documents/${testDocument.id}/traceability?direction=test_to_requirement`,
+      headers: { cookie: actor.cookie },
+    });
+    const reverseRows = JSON.parse(reverseMatrix.body) as Array<{
+      id: string;
+      title: string;
+      requirements: Array<{ requirementId: string; requirementNo: string | null }>;
+    }>;
+    expect(reverseRows).toEqual([
+      expect.objectContaining({
+        id: test.id,
+        title: "Brake verification",
+        requirements: [expect.objectContaining({ requirementId: req1.id, requirementNo: "REQ-001" })],
+      }),
+      expect.objectContaining({
+        id: unlinkedTest.id,
+        title: "Unlinked verification",
+        requirements: [],
+      }),
+    ]);
   });
 });

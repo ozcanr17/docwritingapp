@@ -19,6 +19,22 @@ const savedViewSchema = z.object({
 const commentSchema = z.object({
   body: z.string().min(1).max(20000),
   mentionUserIds: z.array(z.string().uuid()).default([]),
+  anchor: z.object({
+    field: z.enum(["title", "description", "action", "expectedResult"]),
+    start: z.number().int().min(0),
+    end: z.number().int().min(1),
+    quotedText: z.string().min(1).max(20000),
+  }).optional(),
+  suggestedReplacement: z.string().max(20000).nullable().optional(),
+});
+
+const templateSchema = z.object({
+  name: z.string().min(1).max(200),
+  sourceRowId: z.string().uuid().nullable().optional(),
+});
+
+const applyTemplateSchema = z.object({
+  parentId: z.string().uuid().nullable().default(null),
 });
 const attachmentSchema = z.object({
   fileName: z.string().min(1).max(500),
@@ -32,6 +48,13 @@ const executionSchema = z.object({
   buildReference: z.string().max(300).optional(),
   iteration: z.string().max(200).optional(),
   notes: z.string().max(20000).optional(),
+  retestPackageItemId: z.string().uuid().optional(),
+});
+
+const retestPackageSchema = z.object({
+  name: z.string().min(1).max(300),
+  candidateRowIds: z.array(z.string().uuid()).min(1).max(500),
+  impactDepth: z.number().int().min(1).max(3).default(1),
 });
 
 const stepExecutionSchema = z.object({
@@ -132,6 +155,39 @@ export class LifecycleController {
     return this.lifecycle.deleteView(user.userId, viewId);
   }
 
+  @Get("documents/:documentId/templates")
+  listTemplates(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.lifecycle.listTemplates(user.userId, documentId);
+  }
+
+  @Post("documents/:documentId/templates")
+  createTemplate(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(templateSchema)) body: z.infer<typeof templateSchema>,
+  ) {
+    return this.lifecycle.createTemplate(user.userId, documentId, body.name, body.sourceRowId ?? null);
+  }
+
+  @Post("documents/:documentId/templates/:templateId/apply")
+  applyTemplate(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Param("templateId", ParseUUIDPipe) templateId: string,
+    @Body(new ZodBodyPipe(applyTemplateSchema)) body: z.infer<typeof applyTemplateSchema>,
+  ) {
+    return this.lifecycle.applyTemplate(user.userId, documentId, templateId, body.parentId);
+  }
+
+  @Delete("documents/:documentId/templates/:templateId")
+  deleteTemplate(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Param("templateId", ParseUUIDPipe) templateId: string,
+  ) {
+    return this.lifecycle.deleteTemplate(user.userId, documentId, templateId);
+  }
+
   @Get("workspaces/:workspaceId/search")
   search(
     @CurrentUser() user: SessionUser,
@@ -152,6 +208,39 @@ export class LifecycleController {
     return this.lifecycle.dashboard(user.userId, documentId);
   }
 
+  @Get("documents/:documentId/release-readiness")
+  releaseReadiness(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.lifecycle.releaseReadiness(user.userId, documentId);
+  }
+
+  @Get("documents/:documentId/impact-analysis")
+  impactAnalysis(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Query("depth") depth?: string,
+  ) {
+    return this.lifecycle.impactAnalysis(user.userId, documentId, Math.min(3, Math.max(1, Number(depth) || 1)));
+  }
+
+  @Get("documents/:documentId/retest-packages")
+  retestPackages(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.lifecycle.listRetestPackages(user.userId, documentId);
+  }
+
+  @Post("documents/:documentId/retest-packages")
+  createRetestPackage(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(retestPackageSchema)) body: z.infer<typeof retestPackageSchema>,
+  ) {
+    return this.lifecycle.createRetestPackage(user.userId, documentId, body);
+  }
+
+  @Post("retest-packages/:packageId/cancel")
+  cancelRetestPackage(@CurrentUser() user: SessionUser, @Param("packageId", ParseUUIDPipe) packageId: string) {
+    return this.lifecycle.cancelRetestPackage(user.userId, packageId);
+  }
+
   @Get("documents/:documentId/assistant/suggestions")
   assistantSuggestions(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
     return this.lifecycle.assistantSuggestions(user.userId, documentId);
@@ -162,13 +251,22 @@ export class LifecycleController {
     return this.lifecycle.listComments(user.userId, rowId);
   }
 
+  @Get("rows/:rowId/people")
+  people(
+    @CurrentUser() user: SessionUser,
+    @Param("rowId", ParseUUIDPipe) rowId: string,
+    @Query("q") query = "",
+  ) {
+    return this.lifecycle.people(user.userId, rowId, query);
+  }
+
   @Post("rows/:rowId/comments")
   addComment(
     @CurrentUser() user: SessionUser,
     @Param("rowId", ParseUUIDPipe) rowId: string,
     @Body(new ZodBodyPipe(commentSchema)) body: z.infer<typeof commentSchema>,
   ) {
-    return this.lifecycle.addComment(user.userId, rowId, body.body, body.mentionUserIds);
+    return this.lifecycle.addComment(user.userId, rowId, body.body, body.mentionUserIds, body.anchor, body.suggestedReplacement);
   }
 
   @Post("comments/:commentId/resolve")
@@ -208,6 +306,15 @@ export class LifecycleController {
   @Get("notifications")
   notifications(@CurrentUser() user: SessionUser) {
     return this.lifecycle.notifications(user.userId);
+  }
+
+  @Get("my-work")
+  myWork(
+    @CurrentUser() user: SessionUser,
+    @Query("q") query = "",
+    @Query("kind") kind = "all",
+  ) {
+    return this.lifecycle.myWork(user.userId, query, kind);
   }
 
   @Post("notifications/:notificationId/read")

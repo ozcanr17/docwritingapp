@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@tanstack/react-virtual", () => ({
@@ -12,6 +12,7 @@ vi.mock("@tanstack/react-virtual", () => ({
   }),
 }));
 import { OutlineRow } from "../lib/api";
+import { useAuthoringPreferencesStore } from "../stores/authoringPreferences";
 import { DocumentGrid } from "./DocumentGrid";
 
 function makeRow(partial: Partial<OutlineRow> & Pick<OutlineRow, "id" | "parentId" | "depth" | "rowType" | "title" | "displayNumber">): OutlineRow {
@@ -30,6 +31,7 @@ function makeRow(partial: Partial<OutlineRow> & Pick<OutlineRow, "id" | "parentI
     testResult: null,
     requirementNo: null,
     linkedRequirements: [],
+    linkedObjects: [],
     linkCount: 0,
     stepNumber: null,
     updatedAt: "2026-07-15T12:00:00.000Z",
@@ -66,6 +68,22 @@ describe("DocumentGrid", () => {
     expect(screen.getAllByText("3").length).toBeGreaterThan(0);
   });
 
+  it("scrolls the ID column normally while freezing only content columns", () => {
+    renderGrid(rows);
+    expect(screen.getByRole("columnheader", { name: "ID" })).not.toHaveClass("sticky");
+    expect(screen.getByRole("columnheader", { name: "Nitelik" })).toHaveClass("sticky");
+  });
+
+  it("applies the preferred document typeface and text size", () => {
+    act(() => {
+      useAuthoringPreferencesStore.getState().setDocumentFontSize(18);
+      useAuthoringPreferencesStore.getState().setDocumentFontFamily("serif");
+    });
+    renderGrid(rows);
+    expect(screen.getByTestId("grid-row-1")).toHaveStyle({ fontSize: "18px", fontFamily: "Georgia, 'Times New Roman', serif" });
+    act(() => useAuthoringPreferencesStore.getState().reset());
+  });
+
   it("shows the empty state for a document without rows", () => {
     renderGrid([]);
     expect(screen.getByTestId("grid-empty")).toBeInTheDocument();
@@ -92,12 +110,79 @@ describe("DocumentGrid", () => {
     expect(screen.getByTestId("grid-row-1.1")).toBeInTheDocument();
   });
 
+  it("collapses and expands every group from the document toolbar", () => {
+    renderGrid(rows);
+    fireEvent.click(screen.getByTestId("collapse-all"));
+    expect(screen.queryByTestId("grid-row-1.1")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("expand-all"));
+    expect(screen.getByTestId("grid-row-1.1")).toBeInTheDocument();
+  });
+
   it("filters by object type and shows a compact link count", () => {
     renderGrid([{ ...rows[0]!, linkCount: 2 }, rows[1]!, rows[2]!]);
     expect(screen.getByLabelText("2 ba\u011flant\u0131")).toBeInTheDocument();
     fireEvent.change(screen.getByTestId("grid-type-filter"), { target: { value: "heading" } });
     expect(screen.getByText("1 Giris")).toBeInTheDocument();
     expect(screen.queryByText("Gereksinim A")).not.toBeInTheDocument();
+  });
+
+  it("opens linked object previews from the compact link count", () => {
+    renderGrid([{
+      ...rows[0]!,
+      linkCount: 1,
+      linkedObjects: [{
+        id: "linked-step",
+        rowType: "test_step",
+        requirementNo: null,
+        title: "",
+        description: null,
+        action: "Open the login page and submit valid credentials.",
+        expectedResult: "The user dashboard opens.",
+        document: { id: "test-document", title: "Verification Tests", documentType: "test" },
+      }],
+    }, rows[1]!, rows[2]!]);
+    fireEvent.click(screen.getByTestId("link-count-1"));
+    expect(screen.getByTestId("link-preview")).toBeInTheDocument();
+    expect(screen.getByText("Verification Tests")).toBeInTheDocument();
+    expect(screen.getByText(/Open the login page/)).toBeInTheDocument();
+  });
+
+  it("combines advanced filters and preserves matching hierarchy context", () => {
+    renderGrid(rows);
+    fireEvent.click(screen.getByTestId("advanced-filter-toggle"));
+    fireEvent.click(screen.getByTestId("add-filter-condition"));
+    fireEvent.change(screen.getByLabelText("S\u00fctun"), { target: { value: "title" } });
+    fireEvent.change(screen.getByLabelText("De\u011fer"), { target: { value: "Gereksinim A" } });
+    expect(screen.getByTestId("grid-row-1")).toBeInTheDocument();
+    expect(screen.getByTestId("grid-row-1.1")).toHaveClass("ring-primary/40");
+    expect(screen.queryByTestId("grid-row-1.2")).not.toBeInTheDocument();
+  });
+
+  it("previews scoped find and replace without changing rows", () => {
+    renderGrid(rows);
+    fireEvent.click(screen.getByTestId("find-replace-toggle"));
+    fireEvent.change(screen.getByTestId("find-text"), { target: { value: "Gereksinim" } });
+    fireEvent.change(screen.getByTestId("replace-text"), { target: { value: "\u0130ster" } });
+    expect(screen.getByText("2 h\u00fccrede 2 e\u015fle\u015fme")).toBeInTheDocument();
+    expect(screen.getByText("\u0130ster A")).toBeInTheDocument();
+    expect(screen.getAllByText("Gereksinim A").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("opens the reusable template library without leaving the document", () => {
+    renderGrid(rows);
+    fireEvent.click(screen.getByTestId("template-library-toggle"));
+    expect(screen.getByTestId("template-library")).toBeInTheDocument();
+    expect(screen.getByTestId("template-name")).toBeInTheDocument();
+  });
+
+  it("offers the main row operations as compact toolbar commands", () => {
+    renderGrid(rows);
+    fireEvent.click(screen.getByTestId("grid-row-1.1"));
+    expect(screen.getByTestId("add-object")).toHaveAccessibleName(/Nesne ekle/);
+    expect(screen.getByTestId("toolbar-indent")).toBeEnabled();
+    expect(screen.getByTestId("toolbar-outdent")).toBeEnabled();
+    expect(screen.getByTestId("toolbar-open-details")).toBeEnabled();
+    expect(screen.getByTestId("toolbar-delete")).toBeEnabled();
   });
 
   it("opens numbering controls for a heading", () => {
@@ -141,7 +226,7 @@ describe("DocumentGrid", () => {
 
   it("hides a column from the active view immediately", () => {
     renderGrid(rows);
-    fireEvent.click(screen.getByRole("button", { name: "Gereksinim No" }));
+    fireEvent.contextMenu(screen.getByRole("columnheader", { name: "Gereksinim No" }));
     fireEvent.click(screen.getByTestId("menu-hide"));
     expect(screen.queryByRole("button", { name: "Gereksinim No" })).not.toBeInTheDocument();
   });
