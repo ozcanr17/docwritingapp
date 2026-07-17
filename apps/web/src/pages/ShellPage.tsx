@@ -18,6 +18,7 @@ import { useKeyboardShortcutsStore } from "../stores/keyboardShortcuts";
 import { useEditHistoryStore } from "../stores/editHistory";
 import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
+import { useOnboardingStore } from "../stores/onboarding";
 
 const DocumentGrid = lazy(() => import("../components/DocumentGrid").then((module) => ({ default: module.DocumentGrid })));
 const GlobalSearchDialog = lazy(() => import("../components/GlobalSearchDialog").then((module) => ({ default: module.GlobalSearchDialog })));
@@ -28,6 +29,7 @@ const WorkspaceSettingsDialog = lazy(() => import("../components/WorkspaceSettin
 const ProfileDialog = lazy(() => import("../components/ProfileDialog").then((module) => ({ default: module.ProfileDialog })));
 const HistoryDialog = lazy(() => import("../components/HistoryDialog").then((module) => ({ default: module.HistoryDialog })));
 const CommandPalette = lazy(() => import("../components/CommandPalette").then((module) => ({ default: module.CommandPalette })));
+const OnboardingDialog = lazy(() => import("../components/OnboardingDialog").then((module) => ({ default: module.OnboardingDialog })));
 
 interface Organization {
   id: string;
@@ -56,6 +58,7 @@ export function ShellPage() {
   const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
   const [historyMode, setHistoryMode] = useState<"row" | "document" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [presenceOpen, setPresenceOpen] = useState(false);
   const [presenceProfileUserId, setPresenceProfileUserId] = useState<string | null>(null);
   const presenceCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,6 +81,8 @@ export function ShellPage() {
   const shortcutBindings = useKeyboardShortcutsStore((s) => s.bindings);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);
+  const onboardingCompleted = useOnboardingStore((s) => s.completed);
+  const completeOnboarding = useOnboardingStore((s) => s.complete);
   const clearEditHistory = useEditHistoryStore((s) => s.clear);
   const resetEditHistory = useEditHistoryStore((s) => s.reset);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
@@ -220,6 +225,9 @@ export function ShellPage() {
   });
 
   const workspaceId = workspaces.data?.[0]?.id ?? null;
+  useEffect(() => {
+    if (workspaceId && !onboardingCompleted) setOnboardingOpen(true);
+  }, [onboardingCompleted, workspaceId]);
   const presence = useDocumentEvents(selectedDocumentId);
   const presenceProfile = useQuery({
     queryKey: ["user-profile", presenceProfileUserId],
@@ -306,8 +314,10 @@ export function ShellPage() {
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         commandPaletteShortcut={formatShortcut(shortcutBindings.commandPalette)}
         searchShortcut={formatShortcut(shortcutBindings.globalSearch)}
+        onOpenOnboarding={() => setOnboardingOpen(true)}
       />
       <Suspense fallback={null}>
+        {onboardingOpen && <OnboardingDialog onComplete={() => { completeOnboarding(); setOnboardingOpen(false); }} />}
         {commandPaletteOpen && workspaceId && <CommandPalette
           workspaceId={workspaceId}
           commands={paletteCommands}

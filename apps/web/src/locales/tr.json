@@ -656,6 +656,51 @@
   "affectedLinkedObjects": "Etkilenebilecek bağlı nesneler",
   "editImpactWarning": "Anlamsal bir değişiklik kaydedildiğinde bağlı izlenebilirlik bağlantıları şüpheli olarak işaretlenir; böylece gözden geçirenler etkiyi değerlendirip ilgili testleri yeniden koşabilir.",
   "saveAndMarkSuspect": "Kaydet ve bağlantıları şüpheli işaretle",
+  "onboardingEyebrow": "Başlangıç rehberi",
+  "onboardingTitle": "DocSys'e kısa bir giriş",
+  "skipOnboarding": "Girişi atla",
+  "onboardingProgress": "Giriş ilerlemesi",
+  "previous": "Önceki",
+  "next": "Sonraki",
+  "startUsingDocSys": "DocSys'i kullanmaya başla",
+  "openGettingStarted": "Başlangıç rehberini aç",
+  "onboarding": {
+    "workspace": {
+      "title": "Spesifikasyon çalışma alanınızı düzenleyin",
+      "description": "Explorer; klasörleri, gereksinim dokümanlarını ve test dokümanlarını bir arada tutar. Birden fazla dokümanı sekmelerde açabilir veya ikisini bölünmüş görünümde karşılaştırabilirsiniz.",
+      "tip": "Bir gereksinim dokümanı ve bir doğrulama testi dokümanı ile başlayın."
+    },
+    "authoring": {
+      "title": "Yapılandırılmış, gözden geçirilebilir nesneler yazın",
+      "description": "Hiyerarşi için başlıkları, kontrollü içerik için nesneleri kullanın. ID'ler sabit kalırken başlık numaraları doküman yapısını izler.",
+      "tip": "Araç çubuğunu, sağ tık menüsünü veya özelleştirilebilir klavye kısayollarınızı kullanın."
+    },
+    "traceability": {
+      "title": "Gereksinimleri doğrulamaya bağlayın",
+      "description": "Gereksinimleri test adımlarına iki yönde bağlayın. Bağlı nesne önizlemeleri, matrisler ve şüpheli bağlantı göstergeleri etkiyi görünür tutar.",
+      "tip": "İlişki oluşturmak ve incelemek için seçili nesnenin Bağlantılar sekmesini açın."
+    },
+    "verification": {
+      "title": "Baseline alın, gözden geçirin ve test koşun",
+      "description": "Değiştirilemez baseline'lar yayınlayın, değişiklikleri inceleyin, kanıtlarla test koşun ve kapsam ya da içerik boşluklarını düzeltmek için hazırlık bulgularını kullanın.",
+      "tip": "Analiz menüsü hazırlık, kapsam, izlenebilirlik, gözden geçirme ve koşum geçmişini sunar."
+    }
+  },
+  "rolesAndAccess": "Roller ve erişim",
+  "rolesAndAccessHelp": "Kullanıcıya dönük rol adlarını anlayın. Etkin izinler yine bir yöneticinin atadığı organizasyon, çalışma alanı ve proje kapsamına bağlıdır.",
+  "roleName": {
+    "viewer": "Görüntüleyici",
+    "editor": "Düzenleyici",
+    "reviewer": "Gözden geçiren",
+    "administrator": "Yönetici"
+  },
+  "roleDescription": {
+    "viewer": "Kontrollü içeriği değiştirmeden dokümanları, bağlantıları, baseline'ları ve raporları okur.",
+    "editor": "Atandığı kapsam içinde doküman nesnelerini, bağlantıları, yorumları ve test tanımlarını yazar ve düzenler.",
+    "reviewer": "Baseline alınmış içeriği değerlendirir, resmi gözden geçirme kararlarını kaydeder ve doğrulama kanıtlarını inceler.",
+    "administrator": "Üyeliği, erişim kapsamını ve çalışma alanı yapılandırmasını yönetir. Doküman sahibi olmak yönetici erişimi vermez."
+  },
+  "roleGuideScopeHelp": "Bu adlar rolün amacını açıklar; sunucu her işlemde somut izni ve kapsamı ayrıca değerlendirir.",
   "shortcutCategory": {
     "navigation": "Gezinme",
     "authoring": "Doküman yazımı",

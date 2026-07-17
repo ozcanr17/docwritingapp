@@ -657,6 +657,51 @@
   "affectedLinkedObjects": "Potentially affected linked objects",
   "editImpactWarning": "Saving a semantic change marks the connected traceability links as suspect so reviewers can assess and rerun affected tests.",
   "saveAndMarkSuspect": "Save and mark links suspect",
+  "onboardingEyebrow": "Getting started",
+  "onboardingTitle": "A short introduction to DocSys",
+  "skipOnboarding": "Skip introduction",
+  "onboardingProgress": "Introduction progress",
+  "previous": "Previous",
+  "next": "Next",
+  "startUsingDocSys": "Start using DocSys",
+  "openGettingStarted": "Open getting started guide",
+  "onboarding": {
+    "workspace": {
+      "title": "Organize your specification workspace",
+      "description": "Explorer keeps folders, requirement documents and test documents together. Open several documents as tabs or compare two in split view.",
+      "tip": "Start with one requirement document and one verification test document."
+    },
+    "authoring": {
+      "title": "Author structured, reviewable objects",
+      "description": "Use headings for hierarchy and objects for controlled content. IDs remain stable while outline numbering follows the document structure.",
+      "tip": "Use the toolbar, context menu or your configurable keyboard shortcuts."
+    },
+    "traceability": {
+      "title": "Connect requirements and verification",
+      "description": "Link requirements to test steps in either direction. Linked-object previews, matrices and suspect-link indicators keep impact visible.",
+      "tip": "Open a selected object's Links tab to create and inspect relationships."
+    },
+    "verification": {
+      "title": "Baseline, review and execute",
+      "description": "Publish immutable baselines, review changes, run tests with evidence and use readiness findings to correct coverage or content gaps.",
+      "tip": "Analysis provides readiness, coverage, traceability, reviews and run history."
+    }
+  },
+  "rolesAndAccess": "Roles and access",
+  "rolesAndAccessHelp": "Understand the product-facing role names. Effective permissions still depend on the organization, workspace and project scope assigned by an administrator.",
+  "roleName": {
+    "viewer": "Viewer",
+    "editor": "Editor",
+    "reviewer": "Reviewer",
+    "administrator": "Administrator"
+  },
+  "roleDescription": {
+    "viewer": "Reads documents, links, baselines and reports without changing controlled content.",
+    "editor": "Authors and organizes document objects, links, comments and test definitions within the assigned scope.",
+    "reviewer": "Evaluates baselined content, records formal review decisions and inspects verification evidence.",
+    "administrator": "Manages membership, access scope and workspace configuration. Administrator access is not implied by document ownership."
+  },
+  "roleGuideScopeHelp": "These names explain intent; the server always evaluates the concrete permission and scope for every operation.",
   "shortcutCategory": {
     "navigation": "Navigation",
     "authoring": "Authoring",

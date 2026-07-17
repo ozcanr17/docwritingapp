@@ -28,6 +28,7 @@ interface MenuBarProps {
   onOpenCommandPalette?: () => void;
   commandPaletteShortcut?: string;
   searchShortcut?: string;
+  onOpenOnboarding?: () => void;
 }
 
 function slugifyKey(name: string): string {
@@ -47,7 +48,7 @@ async function pollExport(jobId: string): Promise<{ ready: boolean; status: stri
   throw new Error("timeout");
 }
 
-export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen, onOpenCommandPalette = () => undefined, commandPaletteShortcut = "", searchShortcut = "" }: MenuBarProps) {
+export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen, onOpenCommandPalette = () => undefined, commandPaletteShortcut = "", searchShortcut = "", onOpenOnboarding = () => undefined }: MenuBarProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
@@ -283,6 +284,8 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
   ];
 
   const helpEntries: MenuEntry[] = [
+    { key: "onboarding", label: t("openGettingStarted"), onSelect: onOpenOnboarding },
+    { key: "help-sep", label: "", separator: true },
     { key: "about", label: t("about"), onSelect: () => pushToast("info", `${t("appName")} — ${t("aboutText")}`) },
   ];
 

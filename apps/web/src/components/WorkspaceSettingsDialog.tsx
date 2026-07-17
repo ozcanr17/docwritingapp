@@ -1,17 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, FileCog, Keyboard, Plug, RotateCcw, ShieldCheck, SlidersHorizontal, X } from "lucide-react";
+import { Boxes, FileCog, Keyboard, Plug, RotateCcw, ShieldCheck, SlidersHorizontal, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentSummary } from "../lib/api";
 import { useToastStore } from "../stores/toasts";
 import { DocumentFontFamily, documentFontFamilies, useAuthoringPreferencesStore } from "../stores/authoringPreferences";
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
+import { RoleGuide } from "./RoleGuide";
 
 export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentId, onClose }: { organizationId: string; workspaceId: string; documentId: string | null; onClose: () => void }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const toast = useToastStore((state) => state.push);
-  const [tab, setTab] = useState<"document" | "authoring" | "keyboard" | "configurations" | "integrations" | "sso">("authoring");
+  const [tab, setTab] = useState<"document" | "authoring" | "keyboard" | "roles" | "configurations" | "integrations" | "sso">("authoring");
   const [name, setName] = useState("");
   const [kind, setKind] = useState("variant");
   const [integrationUrl, setIntegrationUrl] = useState("");
@@ -60,6 +61,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
           {document.data?.documentType === "requirement" && <Tab active={tab === "document"} onClick={() => setTab("document")} icon={<FileCog size={14} />} label={t("documentSettings")} />}
           <Tab active={tab === "authoring"} onClick={() => setTab("authoring")} icon={<SlidersHorizontal size={14} />} label={t("authoringSettings")} />
           <Tab active={tab === "keyboard"} onClick={() => setTab("keyboard")} icon={<Keyboard size={14} />} label={t("keyboardShortcuts")} />
+          <Tab active={tab === "roles"} onClick={() => setTab("roles")} icon={<Users size={14} />} label={t("rolesAndAccess")} />
           <Tab active={tab === "configurations"} onClick={() => setTab("configurations")} icon={<Boxes size={14} />} label={t("configurations")} />
           <Tab active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<Plug size={14} />} label={t("integrations")} />
           <Tab active={tab === "sso"} onClick={() => setTab("sso")} icon={<ShieldCheck size={14} />} label={t("sso")} />
@@ -92,6 +94,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
           <div className="flex justify-end"><button className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={preferences.reset}><RotateCcw size={14} />{t("restoreDefaults")}</button></div>
         </div>}
         {tab === "keyboard" && <SettingsSection title={t("keyboardShortcuts")} description={t("keyboardShortcutsHelp")}><KeyboardShortcutsSettings /></SettingsSection>}
+        {tab === "roles" && <SettingsSection title={t("rolesAndAccess")} description={t("rolesAndAccessHelp")}><RoleGuide /></SettingsSection>}
         {tab === "configurations" && <div className="space-y-3">
           <div className="grid max-h-56 grid-cols-2 gap-2 overflow-auto">{configurations.data?.map((item) => <div key={item.id} className="rounded-xl border border-border bg-editorBackground p-3"><div className="font-medium">{item.name}</div><div className="text-xs text-mutedForeground">{item.kind}</div></div>)}</div>
           <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (name.trim()) createConfiguration.mutate(); }}><input className="min-w-0 flex-1 rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder={t("configurationName")} value={name} onChange={(event) => setName(event.target.value)} /><select className="rounded-lg border border-border bg-editorBackground px-2" value={kind} onChange={(event) => setKind(event.target.value)}><option value="stream">Stream</option><option value="baseline">Baseline</option><option value="variant">Variant</option></select><button className="rounded-lg bg-primary px-3 text-primaryForeground">{t("create")}</button></form>
