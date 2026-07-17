@@ -19,6 +19,7 @@ interface MenuBarProps {
   view: "documents" | "trash";
   setView: (view: "documents" | "trash") => void;
   onOpenReport: (tab: "readiness" | "baselines" | "coverage" | "matrix" | "reviews" | "runs") => void;
+  onOpenHistory: (mode: "row" | "document") => void;
   onOpenSearch: () => void;
   onCloseSearch: () => void;
   searchQuery: string;
@@ -43,7 +44,7 @@ async function pollExport(jobId: string): Promise<{ ready: boolean; status: stri
   throw new Error("timeout");
 }
 
-export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen }: MenuBarProps) {
+export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen }: MenuBarProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
@@ -181,6 +182,9 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
   ];
 
   const editEntries: MenuEntry[] = [
+    { key: "selected-row-history", label: t("selectedRowHistory"), disabled: !gridDoc || !selectedRowId, onSelect: () => onOpenHistory("row") },
+    { key: "document-history", label: t("documentHistory"), disabled: !gridDoc, onSelect: () => onOpenHistory("document") },
+    { key: "history-sep", label: "", separator: true },
     {
       key: "add-object",
       label: `${t("addObject")}\tInsert`,

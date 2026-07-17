@@ -14,7 +14,7 @@ describe("MenuBar", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MenuBar documentId={null} documentType={null} view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenSearch={onOpenSearch} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
+        <MenuBar documentId={null} documentType={null} view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={vi.fn()} onOpenSearch={onOpenSearch} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
       </QueryClientProvider>,
     );
     fireEvent.focus(screen.getByTestId("global-search-input"));
@@ -26,7 +26,7 @@ describe("MenuBar", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MenuBar documentId={null} documentType={null} view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={onSearchQueryChange} searchOpen={false} />
+        <MenuBar documentId={null} documentType={null} view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={onSearchQueryChange} searchOpen={false} />
       </QueryClientProvider>,
     );
     fireEvent.change(screen.getByTestId("global-search-input"), { target: { value: "REQ-42" } });
@@ -37,7 +37,7 @@ describe("MenuBar", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MenuBar documentId={null} documentType={null} view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
+        <MenuBar documentId={null} documentType={null} view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
       </QueryClientProvider>,
     );
     for (const menu of ["file", "edit", "view", "insert", "help"]) {
@@ -52,11 +52,24 @@ describe("MenuBar", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MenuBar documentId="document" documentType="requirement" view="documents" setView={vi.fn()} onOpenReport={onOpenReport} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
+        <MenuBar documentId="document" documentType="requirement" view="documents" setView={vi.fn()} onOpenReport={onOpenReport} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
       </QueryClientProvider>,
     );
     fireEvent.click(screen.getByTestId("menu-analysis"));
     fireEvent.click(screen.getByTestId("menuitem-readiness"));
     expect(onOpenReport).toHaveBeenCalledWith("readiness");
+  });
+
+  it("opens document history from edit", () => {
+    const onOpenHistory = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MenuBar documentId="document" documentType="requirement" view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={onOpenHistory} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByTestId("menu-edit"));
+    fireEvent.click(screen.getByTestId("menuitem-document-history"));
+    expect(onOpenHistory).toHaveBeenCalledWith("document");
   });
 });

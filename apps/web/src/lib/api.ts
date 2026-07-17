@@ -228,6 +228,39 @@ export interface RowDetail {
   rowProjects: { id: string; projectId: string }[];
 }
 
+export interface RowHistoryEntry {
+  id: string;
+  eventId: string;
+  side: "before" | "after";
+  action: "row.updated" | "row.version_restored";
+  version: number;
+  createdAt: string;
+  current: boolean;
+  actor: { id: string; displayName: string; email: string } | null;
+  snapshot: {
+    snapshotVersion: 1;
+    version: number;
+    title: string;
+    description: string | null;
+    numberingStart: number | null;
+    customFields: Record<string, unknown>;
+    requirementDetail: Record<string, unknown> | null;
+    testCaseDetail: Record<string, unknown> | null;
+    testStepDetail: Record<string, unknown> | null;
+  };
+}
+
+export interface DocumentHistoryEntry {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+  actor: { id: string; displayName: string; email: string } | null;
+  row: { id: string; objectNumber: number; title: string; rowType: RowType } | null;
+  metadata: Record<string, unknown> | null;
+}
+
 export interface DocumentSummary {
   id: string;
   title: string;

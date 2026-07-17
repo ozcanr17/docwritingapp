@@ -213,6 +213,48 @@ describe("document rows", () => {
     expect(current.version).toBe(row.version + 1);
   });
 
+  it("keeps row history and restores a historical version as a new version", async () => {
+    const row = await createRow({ rowType: "requirement", title: "History v1", description: "First", parentId: null });
+    const second = await app.inject({
+      method: "PATCH",
+      url: `/rows/${row.id}`,
+      headers: { cookie: actor.cookie },
+      payload: { expectedVersion: row.version, title: "History v2", description: "Second" },
+    });
+    expect(second.statusCode).toBe(200);
+    const secondBody = JSON.parse(second.body) as { version: number };
+    const third = await app.inject({
+      method: "PATCH",
+      url: `/rows/${row.id}`,
+      headers: { cookie: actor.cookie },
+      payload: { expectedVersion: secondBody.version, title: "History v3", description: "Third" },
+    });
+    expect(third.statusCode).toBe(200);
+    const thirdBody = JSON.parse(third.body) as { version: number };
+
+    const history = await app.inject({ method: "GET", url: `/rows/${row.id}/history`, headers: { cookie: actor.cookie } });
+    expect(history.statusCode).toBe(200);
+    const entries = JSON.parse(history.body) as Array<{ eventId: string; side: "before" | "after"; version: number; snapshot: { title: string } }>;
+    expect(entries.map((entry) => entry.version)).toEqual([3, 2, 1]);
+    const original = entries.find((entry) => entry.version === 1);
+    expect(original?.snapshot.title).toBe("History v1");
+
+    const restore = await app.inject({
+      method: "POST",
+      url: `/rows/${row.id}/history/${original?.eventId}/restore`,
+      headers: { cookie: actor.cookie },
+      payload: { expectedVersion: thirdBody.version, side: original?.side },
+    });
+    expect(restore.statusCode).toBe(201);
+    expect(JSON.parse(restore.body)).toMatchObject({ title: "History v1", description: "First", version: 4 });
+
+    const documentHistory = await app.inject({ method: "GET", url: `/documents/${documentId}/history`, headers: { cookie: actor.cookie } });
+    expect(documentHistory.statusCode).toBe(200);
+    expect(JSON.parse(documentHistory.body)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "row.version_restored", entityId: row.id }),
+    ]));
+  });
+
   it("moves a row under a new parent and rejects cycles", async () => {
     const parentA = await createRow({ rowType: "heading", title: "A", parentId: null });
     const parentB = await createRow({ rowType: "heading", title: "B", parentId: null });

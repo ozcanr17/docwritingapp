@@ -24,6 +24,7 @@ const RichTextEditor = lazy(() => import("../components/RichTextEditor").then((m
 const RowDetailPanel = lazy(() => import("../components/RowDetailPanel").then((module) => ({ default: module.RowDetailPanel })));
 const WorkspaceSettingsDialog = lazy(() => import("../components/WorkspaceSettingsDialog").then((module) => ({ default: module.WorkspaceSettingsDialog })));
 const ProfileDialog = lazy(() => import("../components/ProfileDialog").then((module) => ({ default: module.ProfileDialog })));
+const HistoryDialog = lazy(() => import("../components/HistoryDialog").then((module) => ({ default: module.HistoryDialog })));
 
 interface Organization {
   id: string;
@@ -50,6 +51,7 @@ export function ShellPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
+  const [historyMode, setHistoryMode] = useState<"row" | "document" | null>(null);
   const [presenceOpen, setPresenceOpen] = useState(false);
   const [presenceProfileUserId, setPresenceProfileUserId] = useState<string | null>(null);
   const presenceCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -250,6 +252,7 @@ export function ShellPage() {
         view={view}
         setView={setView}
         onOpenReport={setReport}
+        onOpenHistory={setHistoryMode}
         onOpenSearch={() => setSearchOpen(true)}
         onCloseSearch={() => setSearchOpen(false)}
         searchQuery={searchQuery}
@@ -272,6 +275,7 @@ export function ShellPage() {
         )}
         {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} documentId={selectedDocumentId} onClose={() => setSettingsOpen(false)} />}
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
+        {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
       </Suspense>
       <div className="flex flex-1 gap-1.5 overflow-hidden p-2 pt-1.5">
       <aside

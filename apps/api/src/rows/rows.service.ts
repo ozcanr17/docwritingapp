@@ -36,6 +36,48 @@ export interface UpdateRowInput {
   testStepDetail?: { stepNumber?: number | null; action?: string | null; expectedResult?: string | null; testResult?: string | null };
 }
 
+interface RowAuthoringSnapshot {
+  snapshotVersion: 1;
+  version: number;
+  title: string;
+  description: string | null;
+  numberingStart: number | null;
+  customFields: Prisma.JsonValue;
+  requirementDetail: Prisma.JsonValue | null;
+  testCaseDetail: Prisma.JsonValue | null;
+  testStepDetail: Prisma.JsonValue | null;
+}
+
+function authoringSnapshot(row: {
+  version: number;
+  title: string;
+  description: string | null;
+  numberingStart: number | null;
+  customFields: Prisma.JsonValue;
+  requirementDetail: unknown;
+  testCaseDetail: unknown;
+  testStepDetail: unknown;
+}): RowAuthoringSnapshot {
+  const requirement = row.requirementDetail as { requirementNo?: string | null; status?: string; priority?: string | null; rationale?: string | null; verificationMethod?: string | null } | null;
+  const testCase = row.testCaseDetail as { status?: string; priority?: string | null; assigneeId?: string | null; tags?: string[] } | null;
+  const testStep = row.testStepDetail as { stepNumber?: number | null; action?: string | null; expectedResult?: string | null; testResult?: string | null } | null;
+  return {
+    snapshotVersion: 1,
+    version: row.version,
+    title: row.title,
+    description: row.description,
+    numberingStart: row.numberingStart,
+    customFields: row.customFields,
+    requirementDetail: requirement ? { requirementNo: requirement.requirementNo ?? null, status: requirement.status ?? "draft", priority: requirement.priority ?? null, rationale: requirement.rationale ?? null, verificationMethod: requirement.verificationMethod ?? null } : null,
+    testCaseDetail: testCase ? { status: testCase.status ?? "draft", priority: testCase.priority ?? null, assigneeId: testCase.assigneeId ?? null, tags: testCase.tags ?? [] } : null,
+    testStepDetail: testStep ? { stepNumber: testStep.stepNumber ?? null, action: testStep.action ?? null, expectedResult: testStep.expectedResult ?? null, testResult: testStep.testResult ?? null } : null,
+  };
+}
+
+function isAuthoringSnapshot(value: Prisma.JsonValue | null): value is RowAuthoringSnapshot & Prisma.JsonObject {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && value.snapshotVersion === 1 && typeof value.version === "number");
+}
+
 export interface TemplateRowSnapshot {
   key: string;
   parentKey: string | null;
@@ -476,6 +518,121 @@ export class RowsService {
     });
   }
 
+  async rowHistory(actorId: string, rowId: string) {
+    const row = await this.requireRow(rowId);
+    const document = await this.requireDocument(row.documentId);
+    await this.access.assertPermission(actorId, "row.read", { organizationId: document.organizationId, workspaceId: document.workspaceId });
+    await this.access.assertRowAccess(actorId, rowId, "read");
+    const events = await this.prisma.auditEvent.findMany({
+      where: { entityType: "document_row", entityId: rowId, action: { in: ["row.updated", "row.version_restored"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, action: true, actorId: true, previousData: true, nextData: true, createdAt: true },
+    });
+    const actorIds = [...new Set(events.map((event) => event.actorId).filter((id): id is string => Boolean(id)))];
+    const actors = actorIds.length ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, displayName: true, email: true } }) : [];
+    const actorById = new Map(actors.map((actor) => [actor.id, actor]));
+    const entries = events.flatMap((event, index) => {
+      const snapshots: Array<{ side: "before" | "after"; snapshot: RowAuthoringSnapshot }> = [];
+      if (isAuthoringSnapshot(event.nextData)) snapshots.push({ side: "after", snapshot: event.nextData });
+      if (index === events.length - 1 && isAuthoringSnapshot(event.previousData)) snapshots.push({ side: "before", snapshot: event.previousData });
+      return snapshots.map(({ side, snapshot }) => ({
+        id: `${event.id}:${side}`,
+        eventId: event.id,
+        side,
+        action: event.action,
+        version: snapshot.version,
+        createdAt: event.createdAt,
+        actor: event.actorId ? actorById.get(event.actorId) ?? null : null,
+        snapshot,
+        current: snapshot.version === row.version,
+      }));
+    });
+    return entries.sort((left, right) => right.version - left.version);
+  }
+
+  async documentHistory(actorId: string, documentId: string) {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "document.read", { organizationId: document.organizationId, workspaceId: document.workspaceId });
+    const events = await this.prisma.auditEvent.findMany({
+      where: { documentId },
+      orderBy: { createdAt: "desc" },
+      take: 250,
+      select: { id: true, action: true, entityType: true, entityId: true, actorId: true, metadata: true, createdAt: true },
+    });
+    const actorIds = [...new Set(events.map((event) => event.actorId).filter((id): id is string => Boolean(id)))];
+    const actors = actorIds.length ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, displayName: true, email: true } }) : [];
+    const actorById = new Map(actors.map((actor) => [actor.id, actor]));
+    const rowIds = [...new Set(events.filter((event) => event.entityType === "document_row").map((event) => event.entityId))];
+    const rows = rowIds.length ? await this.prisma.documentRow.findMany({ where: { id: { in: rowIds } }, select: { id: true, objectNumber: true, title: true, rowType: true } }) : [];
+    const rowById = new Map(rows.map((item) => [item.id, item]));
+    return events.map((event) => ({
+      id: event.id,
+      action: event.action,
+      entityType: event.entityType,
+      entityId: event.entityId,
+      createdAt: event.createdAt,
+      actor: event.actorId ? actorById.get(event.actorId) ?? null : null,
+      row: event.entityType === "document_row" ? rowById.get(event.entityId) ?? null : null,
+      metadata: event.metadata,
+    }));
+  }
+
+  async restoreRowVersion(actorId: string, rowId: string, eventId: string, expectedVersion: number, side: "before" | "after") {
+    const row = await this.requireRow(rowId);
+    const document = await this.requireDocument(row.documentId);
+    await this.access.assertPermission(actorId, "row.write", { organizationId: document.organizationId, workspaceId: document.workspaceId });
+    await this.access.assertRowAccess(actorId, rowId, "write");
+    const event = await this.prisma.auditEvent.findFirst({ where: { id: eventId, entityType: "document_row", entityId: rowId } });
+    const snapshotValue = side === "before" ? event?.previousData ?? null : event?.nextData ?? null;
+    if (!event || !isAuthoringSnapshot(snapshotValue)) throw new UnprocessableEntityException("This history entry cannot be restored");
+    const target = snapshotValue;
+    const restored = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.documentRow.findUniqueOrThrow({ where: { id: rowId }, include: { requirementDetail: true, testCaseDetail: true, testStepDetail: true } });
+      if (current.version !== expectedVersion) throw new ConflictException(current);
+      const validatedCustomFields = validateCustomFields(await this.fieldDefinitions(tx, document.id), target.customFields as Record<string, unknown>);
+      const requirement = target.requirementDetail as { requirementNo?: string | null; status?: string; priority?: string | null; rationale?: string | null; verificationMethod?: string | null } | null;
+      if (requirement?.requirementNo) {
+        const duplicate = await tx.requirementDetail.findFirst({ where: { requirementNo: { equals: requirement.requirementNo, mode: "insensitive" }, rowId: { not: rowId }, row: { documentId: document.id, deletedAt: null } }, select: { rowId: true } });
+        if (duplicate) throw new UnprocessableEntityException("Historical requirement number is already in use");
+      }
+      await tx.documentRow.update({
+        where: { id: rowId },
+        data: { title: target.title, description: target.description, numberingStart: target.numberingStart, customFields: validatedCustomFields as Prisma.InputJsonValue, version: { increment: 1 }, updatedById: actorId },
+      });
+      if (requirement) {
+        const data = { requirementNo: requirement.requirementNo ?? null, status: requirement.status ?? "draft", priority: requirement.priority ?? null, rationale: requirement.rationale ?? null, verificationMethod: requirement.verificationMethod ?? null };
+        await tx.requirementDetail.upsert({ where: { rowId }, create: { rowId, ...data }, update: data });
+      }
+      const testCase = target.testCaseDetail as { status?: string; priority?: string | null; assigneeId?: string | null; tags?: string[] } | null;
+      if (testCase) {
+        const data = { status: testCase.status ?? "draft", priority: testCase.priority ?? null, assigneeId: testCase.assigneeId ?? null, tags: testCase.tags ?? [] };
+        await tx.testCaseDetail.upsert({ where: { rowId }, create: { rowId, ...data }, update: data });
+      }
+      const testStep = target.testStepDetail as { stepNumber?: number | null; action?: string | null; expectedResult?: string | null; testResult?: string | null } | null;
+      if (testStep) {
+        const data = { stepNumber: testStep.stepNumber ?? null, action: testStep.action ?? null, expectedResult: testStep.expectedResult ?? null, testResult: testStep.testResult ?? null };
+        await tx.testStepDetail.upsert({ where: { rowId }, create: { rowId, ...data }, update: data });
+      }
+      const suspectResult = await tx.requirementLink.updateMany({ where: { deletedAt: null, suspect: false, OR: [{ sourceRowId: rowId }, { targetRowId: rowId }] }, data: { suspect: true, suspectSince: new Date(), suspectReason: "historical row version restored" } });
+      const next = await tx.documentRow.findUniqueOrThrow({ where: { id: rowId }, include: { requirementDetail: true, testCaseDetail: true, testStepDetail: true } });
+      await this.audit.record(tx, {
+        organizationId: document.organizationId,
+        workspaceId: document.workspaceId,
+        actorId,
+        action: "row.version_restored",
+        entityType: "document_row",
+        entityId: rowId,
+        documentId: document.id,
+        previousData: authoringSnapshot(current) as unknown as Prisma.InputJsonValue,
+        nextData: authoringSnapshot(next) as unknown as Prisma.InputJsonValue,
+        metadata: { sourceEventId: eventId, sourceSide: side, restoredVersion: target.version, suspectLinksMarked: suspectResult.count },
+      });
+      return next;
+    });
+    await this.events.publish({ type: "row.updated", documentId: document.id, organizationId: document.organizationId, entityId: rowId, version: restored.version, actorId });
+    return restored;
+  }
+
   async linkCandidates(actorId: string, documentId: string, query: string) {
     const document = await this.requireDocument(documentId);
     await this.access.assertPermission(actorId, "row.read", {
@@ -514,6 +671,11 @@ export class RowsService {
 
   async updateRow(actorId: string, rowId: string, input: UpdateRowInput) {
     const row = await this.requireRow(rowId);
+    const rowWithDetails = await this.prisma.documentRow.findUniqueOrThrow({
+      where: { id: rowId },
+      include: { requirementDetail: true, testCaseDetail: true, testStepDetail: true },
+    });
+    const beforeSnapshot = authoringSnapshot(rowWithDetails);
     const document = await this.requireDocument(row.documentId);
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
@@ -594,6 +756,10 @@ export class RowsService {
         },
         data: { suspect: true, suspectSince: new Date(), suspectReason: "linked row changed" },
       });
+      const nextRow = await tx.documentRow.findUniqueOrThrow({
+        where: { id: rowId },
+        include: { requirementDetail: true, testCaseDetail: true, testStepDetail: true },
+      });
       await this.audit.record(tx, {
         organizationId: document.organizationId,
         workspaceId: document.workspaceId,
@@ -602,13 +768,11 @@ export class RowsService {
         entityType: "document_row",
         entityId: rowId,
         documentId: document.id,
-        previousData: { title: row.title, version: row.version },
-        nextData: { title: input.title ?? row.title, suspectLinksMarked: suspectResult.count },
+        previousData: beforeSnapshot as unknown as Prisma.InputJsonValue,
+        nextData: authoringSnapshot(nextRow) as unknown as Prisma.InputJsonValue,
+        metadata: { suspectLinksMarked: suspectResult.count },
       });
-      return tx.documentRow.findUniqueOrThrow({
-        where: { id: rowId },
-        include: { requirementDetail: true, testCaseDetail: true, testStepDetail: true },
-      });
+      return nextRow;
     });
     await this.events.publish({
       type: "row.updated",

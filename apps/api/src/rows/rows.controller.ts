@@ -66,6 +66,8 @@ const updateRowSchema = z.object({
     .optional(),
 });
 
+const restoreRowVersionSchema = z.object({ expectedVersion: z.number().int().positive(), side: z.enum(["before", "after"]) });
+
 const moveRowSchema = z.object({
   newParentId: z.string().uuid().nullable(),
   afterRowId: z.string().uuid().optional(),
@@ -167,6 +169,11 @@ export class RowsController {
     return this.rows.outline(user.userId, documentId);
   }
 
+  @Get("documents/:documentId/history")
+  documentHistory(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.rows.documentHistory(user.userId, documentId);
+  }
+
   @Get("documents/:documentId/link-candidates")
   linkCandidates(
     @CurrentUser() user: SessionUser,
@@ -179,6 +186,21 @@ export class RowsController {
   @Get("rows/:rowId")
   getRow(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
     return this.rows.getRow(user.userId, rowId);
+  }
+
+  @Get("rows/:rowId/history")
+  rowHistory(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
+    return this.rows.rowHistory(user.userId, rowId);
+  }
+
+  @Post("rows/:rowId/history/:eventId/restore")
+  restoreRowVersion(
+    @CurrentUser() user: SessionUser,
+    @Param("rowId", ParseUUIDPipe) rowId: string,
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @Body(new ZodBodyPipe(restoreRowVersionSchema)) body: z.infer<typeof restoreRowVersionSchema>,
+  ) {
+    return this.rows.restoreRowVersion(user.userId, rowId, eventId, body.expectedVersion, body.side);
   }
 
   @Patch("rows/:rowId")
