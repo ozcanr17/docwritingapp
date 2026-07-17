@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock3, FileText, LogOut, Settings, Star, Trash2, Users } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
@@ -13,6 +13,8 @@ import { useDocumentEvents } from "../hooks/useDocumentEvents";
 import { api, DocumentSummary, DocumentType, setSessionToken, UserProfile } from "../lib/api";
 import { openDocumentWindow } from "../lib/documentWindows";
 import { DocumentTab, useDocumentTabsStore } from "../stores/documentTabs";
+import { formatShortcut, isTextEditingTarget, matchesShortcut, SHORTCUT_COMMANDS, ShortcutCommandId } from "../lib/keyboardShortcuts";
+import { useKeyboardShortcutsStore } from "../stores/keyboardShortcuts";
 import { useEditHistoryStore } from "../stores/editHistory";
 import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
@@ -25,6 +27,7 @@ const RowDetailPanel = lazy(() => import("../components/RowDetailPanel").then((m
 const WorkspaceSettingsDialog = lazy(() => import("../components/WorkspaceSettingsDialog").then((module) => ({ default: module.WorkspaceSettingsDialog })));
 const ProfileDialog = lazy(() => import("../components/ProfileDialog").then((module) => ({ default: module.ProfileDialog })));
 const HistoryDialog = lazy(() => import("../components/HistoryDialog").then((module) => ({ default: module.HistoryDialog })));
+const CommandPalette = lazy(() => import("../components/CommandPalette").then((module) => ({ default: module.CommandPalette })));
 
 interface Organization {
   id: string;
@@ -52,6 +55,7 @@ export function ShellPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
   const [historyMode, setHistoryMode] = useState<"row" | "document" | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [presenceOpen, setPresenceOpen] = useState(false);
   const [presenceProfileUserId, setPresenceProfileUserId] = useState<string | null>(null);
   const presenceCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,7 +75,9 @@ export function ShellPage() {
   const reorderDocumentTabs = useDocumentTabsStore((s) => s.reorder);
   const focusDocumentPane = useDocumentTabsStore((s) => s.focus);
   const resetDocumentTabs = useDocumentTabsStore((s) => s.reset);
+  const shortcutBindings = useKeyboardShortcutsStore((s) => s.bindings);
   const selectedDocumentId = useSelectionStore((s) => s.selectedDocumentId);
+  const selectedRowId = useSelectionStore((s) => s.selectedRowId);
   const clearEditHistory = useEditHistoryStore((s) => s.clear);
   const resetEditHistory = useEditHistoryStore((s) => s.reset);
   const setSelectedDocumentId = useSelectionStore((s) => s.setDocument);
@@ -108,41 +114,67 @@ export function ShellPage() {
     if (focusedDocumentId !== selectedDocumentId) setSelectedDocumentId(focusedDocumentId);
   }, [focusedDocumentId, selectedDocumentId, setSelectedDocumentId]);
 
+  const executeCommand = useCallback((commandId: ShortcutCommandId) => {
+    if (commandId === "commandPalette") {
+      setCommandPaletteOpen(true);
+      return;
+    }
+    if (commandId === "globalSearch") {
+      setSearchOpen(true);
+      window.requestAnimationFrame(() => document.getElementById("docsys-global-search-input")?.focus());
+      return;
+    }
+    if (commandId === "nextDocument" || commandId === "previousDocument") {
+      const state = useDocumentTabsStore.getState();
+      if (state.tabs.length < 2 || !state.focusedId) return;
+      const index = state.tabs.findIndex((tab) => tab.id === state.focusedId);
+      const offset = commandId === "previousDocument" ? -1 : 1;
+      const next = state.tabs[(index + offset + state.tabs.length) % state.tabs.length];
+      if (next) activateDocument(next.id);
+      return;
+    }
+    if (commandId === "closeDocument") {
+      const focusedId = useDocumentTabsStore.getState().focusedId;
+      if (focusedId) closeDocument(focusedId);
+      return;
+    }
+    if (commandId === "undo" || commandId === "redo") {
+      const documentId = useDocumentTabsStore.getState().focusedId;
+      if (documentId) window.dispatchEvent(new CustomEvent(commandId === "undo" ? "docsys:undo" : "docsys:redo", { detail: { documentId } }));
+      return;
+    }
+    if (commandId === "selectedRowHistory") {
+      if (selectedDocumentId && selectedRowId) setHistoryMode("row");
+      return;
+    }
+    if (commandId === "documentHistory") {
+      if (selectedDocumentId) setHistoryMode("document");
+      return;
+    }
+    if (commandId === "openSettings") {
+      setSettingsOpen(true);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("docsys:execute-document-command", { detail: { commandId, documentId: selectedDocumentId } }));
+  }, [activateDocument, closeDocument, selectedDocumentId, selectedRowId]);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setSearchOpen(true);
-        window.requestAnimationFrame(() => document.getElementById("docsys-global-search-input")?.focus());
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key === "Tab") {
-        event.preventDefault();
-        const state = useDocumentTabsStore.getState();
-        if (state.tabs.length < 2 || !state.focusedId) return;
-        const index = state.tabs.findIndex((tab) => tab.id === state.focusedId);
-        const next = state.tabs[(index + (event.shiftKey ? -1 : 1) + state.tabs.length) % state.tabs.length];
-        if (next) activateDocument(next.id);
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "w") {
-        const target = event.target as HTMLElement | null;
-        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-        const focusedId = useDocumentTabsStore.getState().focusedId;
-        if (focusedId) {
-          event.preventDefault();
-          closeDocument(focusedId);
-        }
-      }
-      const target = event.target as HTMLElement | null;
-      const editingText = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
-      if (!editingText && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
-        event.preventDefault();
-        const documentId = useDocumentTabsStore.getState().focusedId;
-        if (documentId) window.dispatchEvent(new CustomEvent(event.shiftKey ? "docsys:redo" : "docsys:undo", { detail: { documentId } }));
-      }
+      if (event.defaultPrevented) return;
+      const command = SHORTCUT_COMMANDS.find((definition) => matchesShortcut(event, shortcutBindings[definition.id]));
+      if (!command) return;
+      if (isTextEditingTarget(event.target) && command.id !== "commandPalette" && command.id !== "globalSearch") return;
+      if (command.scope !== "global" && !selectedDocumentId) return;
+      if (command.scope === "row" && !selectedRowId) return;
+      const shortcut = shortcutBindings[command.id];
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!shortcut.includes("+") && !target?.closest('[data-testid="document-grid-scroll"]')) return;
+      event.preventDefault();
+      executeCommand(command.id);
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [activateDocument, closeDocument]);
+  }, [executeCommand, selectedDocumentId, selectedRowId, shortcutBindings]);
 
   useEffect(() => {
     setPresenceOpen(false);
@@ -204,6 +236,17 @@ export function ShellPage() {
     if (selectedDocument.data) useDocumentTabsStore.getState().update(selectedDocument.data);
   }, [selectedDocument.data]);
 
+  const paletteCommands = useMemo(() => SHORTCUT_COMMANDS.map((definition) => ({
+    id: definition.id,
+    label: t(definition.labelKey),
+    category: t(`shortcutCategory.${definition.category}`),
+    shortcut: formatShortcut(shortcutBindings[definition.id]),
+    disabled: (definition.scope !== "global" && !selectedDocumentId)
+      || (definition.scope === "row" && !selectedRowId)
+      || (definition.id === "addTestStep" && selectedDocument.data?.documentType !== "test"),
+    run: () => executeCommand(definition.id),
+  })), [executeCommand, selectedDocument.data?.documentType, selectedDocumentId, selectedRowId, shortcutBindings, t]);
+
   useEffect(() => {
     if (!profile.isSuccess) return;
     const documentId = new URLSearchParams(window.location.search).get("document");
@@ -260,8 +303,21 @@ export function ShellPage() {
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         searchOpen={searchOpen}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        commandPaletteShortcut={formatShortcut(shortcutBindings.commandPalette)}
+        searchShortcut={formatShortcut(shortcutBindings.globalSearch)}
       />
       <Suspense fallback={null}>
+        {commandPaletteOpen && workspaceId && <CommandPalette
+          workspaceId={workspaceId}
+          commands={paletteCommands}
+          onClose={() => setCommandPaletteOpen(false)}
+          onSelectResult={(result) => {
+            openDocument({ id: result.document.id, title: result.document.title, documentType: result.document.documentType as DocumentType });
+            setCommandPaletteOpen(false);
+            if (result.rowId) window.setTimeout(() => useSelectionStore.getState().openDetail(result.rowId as string), 0);
+          }}
+        />}
         {report && selectedDocumentId && <ReportsDialog documentId={selectedDocumentId} tab={report} onClose={closeReport} />}
         {searchOpen && workspaceId && (
           <GlobalSearchDialog

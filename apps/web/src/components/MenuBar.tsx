@@ -25,6 +25,9 @@ interface MenuBarProps {
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
   searchOpen: boolean;
+  onOpenCommandPalette?: () => void;
+  commandPaletteShortcut?: string;
+  searchShortcut?: string;
 }
 
 function slugifyKey(name: string): string {
@@ -44,7 +47,7 @@ async function pollExport(jobId: string): Promise<{ ready: boolean; status: stri
   throw new Error("timeout");
 }
 
-export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen }: MenuBarProps) {
+export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen, onOpenCommandPalette = () => undefined, commandPaletteShortcut = "", searchShortcut = "" }: MenuBarProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
@@ -182,6 +185,8 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
   ];
 
   const editEntries: MenuEntry[] = [
+    { key: "command-palette", label: t("commandPalette"), shortcut: commandPaletteShortcut, onSelect: onOpenCommandPalette },
+    { key: "command-sep", label: "", separator: true },
     { key: "selected-row-history", label: t("selectedRowHistory"), disabled: !gridDoc || !selectedRowId, onSelect: () => onOpenHistory("row") },
     { key: "document-history", label: t("documentHistory"), disabled: !gridDoc, onSelect: () => onOpenHistory("document") },
     { key: "history-sep", label: "", separator: true },
@@ -319,7 +324,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
             }
           }}
         />
-        {!searchQuery && <span className="shrink-0 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px]">⌘K</span>}
+        {!searchQuery && <span className="shrink-0 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px]">{searchShortcut}</span>}
       </div>
       <div className="flex justify-end"><NotificationCenter /></div>
       <input

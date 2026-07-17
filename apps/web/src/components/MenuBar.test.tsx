@@ -72,4 +72,18 @@ describe("MenuBar", () => {
     fireEvent.click(screen.getByTestId("menuitem-document-history"));
     expect(onOpenHistory).toHaveBeenCalledWith("document");
   });
+
+  it("opens the command palette from edit and displays its assigned shortcut", () => {
+    const onOpenCommandPalette = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MenuBar documentId={null} documentType={null} view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} onOpenCommandPalette={onOpenCommandPalette} commandPaletteShortcut="Ctrl + Shift + P" />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByTestId("menu-edit"));
+    expect(screen.getByText("Ctrl + Shift + P")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("menuitem-command-palette"));
+    expect(onOpenCommandPalette).toHaveBeenCalledOnce();
+  });
 });

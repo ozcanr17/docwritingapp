@@ -1,4 +1,4 @@
-import { ChevronsDown, ChevronsUp, CornerDownRight, FilePlus2, Filter, IndentDecrease, IndentIncrease, LayoutDashboard, Layers3, Link2, ListPlus, MoreHorizontal, PanelRightOpen, Pin, Plus, Redo2, Replace, Save, Search, SlidersHorizontal, Trash2, Undo2, X } from "lucide-react";
+import { ChevronsDown, ChevronsUp, CornerDownRight, FilePlus2, Filter, IndentDecrease, IndentIncrease, LayoutDashboard, Layers3, Link2, ListPlus, PanelRightOpen, Pin, Plus, Redo2, Replace, Save, Search, SlidersHorizontal, Trash2, Undo2, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -6,6 +6,8 @@ import { DashboardSummary, OutlineRow, SavedView } from "../lib/api";
 import { AdvancedFilterConfig } from "../lib/advancedFilters";
 import { GridColumn } from "../lib/columns";
 import { AdvancedFilterPopover } from "./AdvancedFilterPopover";
+import { formatShortcut } from "../lib/keyboardShortcuts";
+import { useKeyboardShortcutsStore } from "../stores/keyboardShortcuts";
 
 interface ProductivityBarProps {
   columns: GridColumn[];
@@ -61,7 +63,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
   const [scope, setScope] = useState<"personal" | "team">("personal");
   const [isDefault, setIsDefault] = useState(false);
   const [activeViewId, setActiveViewId] = useState("");
-  const [overflowOpen, setOverflowOpen] = useState(false);
+  const shortcuts = useKeyboardShortcutsStore((state) => state.bindings);
   const [advancedTarget, setAdvancedTarget] = useState<HTMLElement | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -69,13 +71,12 @@ export function ProductivityBar(props: ProductivityBarProps) {
     setAdvancedTarget(props.advancedTargetId ? document.getElementById(props.advancedTargetId) : null);
   }, [props.advancedTargetId]);
   useEffect(() => {
-    if (!saveOpen && !dashboardOpen && !filterOpen && !overflowOpen) return;
+    if (!saveOpen && !dashboardOpen && !filterOpen) return;
     const closeOutside = (event: PointerEvent) => {
       if (!barRef.current?.contains(event.target as Node) && !toolbarRef.current?.contains(event.target as Node)) {
         setSaveOpen(false);
         setDashboardOpen(false);
         setFilterOpen(false);
-        setOverflowOpen(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -83,7 +84,6 @@ export function ProductivityBar(props: ProductivityBarProps) {
         setSaveOpen(false);
         setDashboardOpen(false);
         setFilterOpen(false);
-        setOverflowOpen(false);
       }
     };
     document.addEventListener("pointerdown", closeOutside);
@@ -92,7 +92,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
       document.removeEventListener("pointerdown", closeOutside);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [dashboardOpen, filterOpen, overflowOpen, saveOpen]);
+  }, [dashboardOpen, filterOpen, saveOpen]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!viewName.trim()) return;
@@ -238,35 +238,29 @@ export function ProductivityBar(props: ProductivityBarProps) {
       <div ref={toolbarRef} className="relative z-20 min-w-0 border-b border-border bg-surface/90 px-2.5 py-1 text-xs backdrop-blur-xl">
         <div className="overflow-x-auto [scrollbar-width:thin]">
         <div className="flex min-w-max items-center gap-1">
-          <ToolbarButton testId="add-object" label={`${t("addObject")} · Insert`} onClick={props.onAddObject}><Plus size={16} /></ToolbarButton>
-          <ToolbarButton testId="add-object-below" label={`${t("addObjectBelow")} · Shift+Insert`} disabled={!props.canAddObjectBelow} onClick={props.onAddObjectBelow}><CornerDownRight size={16} /></ToolbarButton>
-          {props.onAddTestStep && props.selectedRowType && <ToolbarButton testId="toolbar-add-test-step" label={t("addTestStep")} onClick={props.onAddTestStep}><ListPlus size={16} /></ToolbarButton>}
+          <ToolbarButton testId="add-object" label={`${t("addObject")} · ${formatShortcut(shortcuts.addObject)}`} onClick={props.onAddObject}><Plus size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-object-below" label={`${t("addObjectBelow")} · ${formatShortcut(shortcuts.addObjectBelow)}`} disabled={!props.canAddObjectBelow} onClick={props.onAddObjectBelow}><CornerDownRight size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-blank-object" label={`${t("addBlankObjectHelp")} · ${formatShortcut(shortcuts.addBlankObject)}`} onClick={props.onAddBlankObject}><FilePlus2 size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-blank-object-below" label={`${t("addBlankObjectBelowHelp")} · ${formatShortcut(shortcuts.addBlankObjectBelow)}`} disabled={!props.canAddObjectBelow} onClick={props.onAddBlankObjectBelow}><FilePlus2 size={16} /></ToolbarButton>
+          {props.onAddTestStep && props.selectedRowType && <ToolbarButton testId="toolbar-add-test-step" label={`${t("addTestStep")} · ${formatShortcut(shortcuts.addTestStep)}`} onClick={props.onAddTestStep}><ListPlus size={16} /></ToolbarButton>}
+          {props.onAddTestTemplate && <ToolbarButton testId="toolbar-add-test-template" label={t("addTestTemplate")} onClick={props.onAddTestTemplate}><Layers3 size={16} /></ToolbarButton>}
           <span className="mx-1 h-5 w-px bg-border" />
-          <ToolbarButton testId="toolbar-open-details" label={t("openDetails")} disabled={!props.canModifySelected} onClick={props.onOpenDetails}><PanelRightOpen size={16} /></ToolbarButton>
-          <ToolbarButton testId="toolbar-open-links" label={t("openLinks")} disabled={!props.canModifySelected} onClick={props.onOpenLinks}><Link2 size={16} /></ToolbarButton>
-          <ToolbarButton testId="toolbar-more" label={t("moreActions")} onClick={() => setOverflowOpen((current) => !current)}><MoreHorizontal size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-indent" label={`${t("indent")} · ${formatShortcut(shortcuts.indent)}`} disabled={!props.canModifySelected} onClick={props.onIndent}><IndentIncrease size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-outdent" label={`${t("outdent")} · ${formatShortcut(shortcuts.outdent)}`} disabled={!props.canModifySelected} onClick={props.onOutdent}><IndentDecrease size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-open-details" label={`${t("openDetails")} · ${formatShortcut(shortcuts.openDetails)}`} disabled={!props.canModifySelected} onClick={props.onOpenDetails}><PanelRightOpen size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-open-links" label={`${t("openLinks")} · ${formatShortcut(shortcuts.openLinks)}`} disabled={!props.canModifySelected} onClick={props.onOpenLinks}><Link2 size={16} /></ToolbarButton>
+          <ToolbarButton testId="expand-all" label={`${t("expandAllGroups")} · ${formatShortcut(shortcuts.expandAll)}`} onClick={props.onExpandAll}><ChevronsDown size={16} /></ToolbarButton>
+          <ToolbarButton testId="collapse-all" label={`${t("collapseAllGroups")} · ${formatShortcut(shortcuts.collapseAll)}`} onClick={props.onCollapseAll}><ChevronsUp size={16} /></ToolbarButton>
+          <span className="mx-1 h-5 w-px bg-border" />
+          <ToolbarButton testId="undo-action" label={`${t("undoLastChange")} · ${formatShortcut(shortcuts.undo)}`} disabled={props.undoDisabled} onClick={props.onUndo}><Undo2 size={16} /></ToolbarButton>
+          <ToolbarButton testId="redo-action" label={`${t("redoLastChange")} · ${formatShortcut(shortcuts.redo)}`} disabled={props.redoDisabled} onClick={props.onRedo}><Redo2 size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-delete" label={`${t("deleteAction")} · ${formatShortcut(shortcuts.deleteSelection)}`} disabled={!props.canModifySelected} danger onClick={props.onDeleteSelected}><Trash2 size={16} /></ToolbarButton>
         </div>
         </div>
-        {overflowOpen && <div data-testid="toolbar-overflow" className="absolute left-2 top-full z-50 mt-1 grid w-64 grid-cols-2 gap-1 rounded-xl border border-border bg-surfaceElevated p-2 shadow-2xl" onClick={() => setOverflowOpen(false)}>
-          <OverflowAction testId="add-blank-object" label={t("addBlankObjectHelp")} onClick={props.onAddBlankObject}><FilePlus2 size={14} /></OverflowAction>
-          <OverflowAction testId="add-blank-object-below" label={t("addBlankObjectBelowHelp")} disabled={!props.canAddObjectBelow} onClick={props.onAddBlankObjectBelow}><FilePlus2 size={14} /></OverflowAction>
-          {props.onAddTestTemplate && <OverflowAction testId="toolbar-add-test-template" label={t("addTestTemplate")} onClick={props.onAddTestTemplate}><Layers3 size={14} /></OverflowAction>}
-          <OverflowAction testId="toolbar-indent" label={t("indent")} disabled={!props.canModifySelected} onClick={props.onIndent}><IndentIncrease size={14} /></OverflowAction>
-          <OverflowAction testId="toolbar-outdent" label={t("outdent")} disabled={!props.canModifySelected} onClick={props.onOutdent}><IndentDecrease size={14} /></OverflowAction>
-          <OverflowAction testId="expand-all" label={t("expandAllGroups")} onClick={props.onExpandAll}><ChevronsDown size={14} /></OverflowAction>
-          <OverflowAction testId="collapse-all" label={t("collapseAllGroups")} onClick={props.onCollapseAll}><ChevronsUp size={14} /></OverflowAction>
-          <OverflowAction testId="undo-action" label={`${t("undoLastChange")} · Ctrl/Cmd+Z`} disabled={props.undoDisabled} onClick={props.onUndo}><Undo2 size={14} /></OverflowAction>
-          <OverflowAction testId="redo-action" label={`${t("redoLastChange")} · Ctrl/Cmd+Shift+Z`} disabled={props.redoDisabled} onClick={props.onRedo}><Redo2 size={14} /></OverflowAction>
-          <OverflowAction testId="toolbar-delete" label={t("deleteAction")} disabled={!props.canModifySelected} danger onClick={props.onDeleteSelected}><Trash2 size={14} /></OverflowAction>
-        </div>}
       </div>
       {(props.showAdvancedControls ?? true) && (advancedTarget ? createPortal(advancedControls, advancedTarget) : advancedControls)}
     </>
   );
-}
-
-function OverflowAction({ testId, label, disabled, danger, onClick, children }: { testId: string; label: string; disabled?: boolean; danger?: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" data-testid={testId} disabled={disabled} className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted disabled:opacity-35 ${danger ? "text-destructive" : "text-foreground"}`} onClick={onClick}>{children}<span className="truncate">{label}</span></button>;
 }
 
 function ToolbarButton({ testId, label, disabled, danger, onClick, children }: { testId: string; label: string; disabled?: boolean; danger?: boolean; onClick: () => void; children: React.ReactNode }) {

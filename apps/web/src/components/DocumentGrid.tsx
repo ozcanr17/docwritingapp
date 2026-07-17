@@ -21,6 +21,7 @@ import { AddColumnDialog } from "./AddColumnDialog";
 import { FindReplacePanel } from "./FindReplacePanel";
 import { TemplateLibraryPanel } from "./TemplateLibraryPanel";
 import { OperationImpactSummary } from "./OperationImpactSummary";
+import { ShortcutCommandId } from "../lib/keyboardShortcuts";
 
 interface GridProps {
   documentId: string;
@@ -770,17 +771,6 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   useEffect(() => {
-    const onFindReplace = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "h") {
-        event.preventDefault();
-        setFindReplaceOpen(true);
-      }
-    };
-    document.addEventListener("keydown", onFindReplace);
-    return () => document.removeEventListener("keydown", onFindReplace);
-  }, []);
-
-  useEffect(() => {
     const requestDelete = () => {
       const row = rows.find((candidate) => candidate.id === selectedRowId);
       if (row) setDeleteTarget(row);
@@ -797,6 +787,42 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
     window.addEventListener("docsys:add-test-template", requestTemplate);
     return () => window.removeEventListener("docsys:add-test-template", requestTemplate);
   }, []);
+
+  useEffect(() => {
+    const execute = (event: Event) => {
+      const detail = (event as CustomEvent<{ commandId: ShortcutCommandId; documentId: string | null }>).detail;
+      if (detail.documentId !== documentId) return;
+      const commandId = detail.commandId;
+      const selected = rows.find((row) => row.id === selectedRowId);
+      if (commandId === "addObject") addObject(selected);
+      if (commandId === "addObjectBelow") addObjectBelow(selected);
+      if (commandId === "addBlankObject") addBlankObject(selected);
+      if (commandId === "addBlankObjectBelow") addBlankObjectBelow(selected);
+      if (commandId === "addTestStep" && documentType === "test") createRow.mutate({ parentId: selected?.rowType === "heading" || selected?.rowType === "test_case" ? selected.id : selected?.parentId ?? null, afterRowId: selected?.rowType === "test_step" ? selected.id : undefined, rowType: "test_step" });
+      if (commandId === "openDetails" && selected) {
+        openDetail(selected.id);
+        void queryClient.invalidateQueries({ queryKey: ["row", selected.id] });
+      }
+      if (commandId === "openLinks" && selected) {
+        openDetail(selected.id);
+        void queryClient.invalidateQueries({ queryKey: ["row", selected.id] });
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("docsys:open-detail-tab", { detail: { rowId: selected.id, tab: "links" } })), 0);
+      }
+      if (commandId === "indent" && selected) indent(selected);
+      if (commandId === "outdent" && selected) outdent(selected);
+      if (commandId === "expandAll") setCollapsedRowIds([]);
+      if (commandId === "collapseAll") setCollapsedRowIds(rows.filter((candidate) => rows.some((row) => row.parentId === candidate.id)).map((candidate) => candidate.id));
+      if (commandId === "findReplace") setFindReplaceOpen((current) => !current);
+      if (commandId === "documentSearch") document.querySelector<HTMLInputElement>('[data-testid="grid-search"]')?.focus();
+      if (commandId === "selectAll") selectAll(displayedRows.map((row) => row.id));
+      if (commandId === "deleteSelection" && selectedRowIds.length > 0) {
+        if (selectedRowIds.length === 1 && selected) setDeleteTarget(selected);
+        else setConfirmBulkDelete(true);
+      }
+    };
+    window.addEventListener("docsys:execute-document-command", execute);
+    return () => window.removeEventListener("docsys:execute-document-command", execute);
+  });
 
   const menuItems = (row: OutlineRow | null): MenuItem[] => {
     const addUnder = (rowType: OutlineRow["rowType"], parentId: string | null, afterRowId?: string) =>
@@ -1018,29 +1044,6 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           if (event.key === "ArrowRight" && selected && collapsedRows.has(selected.id)) {
             event.preventDefault();
             setCollapsedRowIds((current) => current.filter((id) => id !== selected.id));
-          }
-          if (event.key === "Insert") {
-            event.preventDefault();
-            if (event.shiftKey) addObjectBelow(selected);
-            else addObject(selected);
-          }
-          if (event.key === "Tab" && selected) {
-            event.preventDefault();
-            if (event.shiftKey) outdent(selected);
-            else indent(selected);
-          }
-          if (event.key === "Delete" && selectedRowIds.length > 0) {
-            event.preventDefault();
-            if (selectedRowIds.length === 1 && selected) setDeleteTarget(selected);
-            else setConfirmBulkDelete(true);
-          }
-          if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
-            event.preventDefault();
-            document.querySelector<HTMLInputElement>('[data-testid="grid-search"]')?.focus();
-          }
-          if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
-            event.preventDefault();
-            selectAll(displayedRows.map((row) => row.id));
           }
           if (event.key === "Escape") clearRows();
         }}

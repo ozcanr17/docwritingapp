@@ -10,6 +10,7 @@ export interface MenuEntry {
   disabled?: boolean;
   danger?: boolean;
   separator?: boolean;
+  shortcut?: string;
   children?: MenuEntry[];
 }
 
@@ -100,6 +101,7 @@ function MenuItems({ entries, onClose }: { entries: MenuEntry[]; onClose: () => 
       >
         <span className="w-4 text-xs">{entry.checked ? "✓" : ""}</span>
         <span className="min-w-0 flex-1">{entry.label}</span>
+        {entry.shortcut && <kbd className="shrink-0 text-[10px] text-mutedForeground">{entry.shortcut}</kbd>}
         {entry.children && <ChevronRight size={14} className="shrink-0 text-mutedForeground" />}
       </button>
       {entry.children && activeSubmenu === entry.key && (
