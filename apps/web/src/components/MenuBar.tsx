@@ -1,13 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, CustomFieldType, DocumentType, FieldDefinition, OutlineRow } from "../lib/api";
 import { columnsForDocument } from "../lib/columns";
-import { setLanguage, storedLanguage } from "../lib/i18n";
+import { storedLanguage } from "../lib/i18n";
 import { useColumnStore } from "../stores/columns";
 import { useSelectionStore } from "../stores/selection";
-import { ThemeMode, useThemeStore } from "../stores/theme";
 import { useToastStore } from "../stores/toasts";
 import { Menu, MenuEntry } from "./Menu";
 import { AddColumnDialog } from "./AddColumnDialog";
@@ -48,12 +47,16 @@ async function pollExport(jobId: string): Promise<{ ready: boolean; status: stri
   throw new Error("timeout");
 }
 
+export function resolveEditMenuTrailing(current: boolean, leadingRight: number, searchLeft: number, editWidth: number): boolean {
+  if (!current && leadingRight > searchLeft - 8) return true;
+  if (current && leadingRight + editWidth <= searchLeft - 24) return false;
+  return current;
+}
+
 export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen, onOpenCommandPalette = () => undefined, commandPaletteShortcut = "", searchShortcut = "", onOpenOnboarding = () => undefined }: MenuBarProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
-  const themeMode = useThemeStore((s) => s.mode);
-  const setThemeMode = useThemeStore((s) => s.setMode);
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);
   const hiddenByDocument = useColumnStore((s) => s.hidden);
   const hiddenColumns = documentId ? hiddenByDocument[documentId] ?? [] : [];
@@ -62,6 +65,29 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
   const reqifInput = useRef<HTMLInputElement>(null);
   const xlsxInput = useRef<HTMLInputElement>(null);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
+  const [editMenuTrailing, setEditMenuTrailing] = useState(false);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const leadingRef = useRef<HTMLDivElement>(null);
+  const editMenuRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const update = () => {
+      const searchRect = searchRef.current?.getBoundingClientRect();
+      const leadingRect = leadingRef.current?.getBoundingClientRect();
+      const editWidth = editMenuRef.current?.getBoundingClientRect().width ?? 0;
+      if (!searchRect || !leadingRect) return;
+      setEditMenuTrailing((current) => resolveEditMenuTrailing(current, leadingRect.right, searchRect.left, editWidth));
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    if (headerRef.current) observer.observe(headerRef.current);
+    if (searchRef.current) observer.observe(searchRef.current);
+    if (leadingRef.current) observer.observe(leadingRef.current);
+    if (editMenuRef.current) observer.observe(editMenuRef.current);
+    return () => observer.disconnect();
+  }, [editMenuTrailing]);
 
   const gridDoc = documentId !== null && (documentType === "requirement" || documentType === "test") && view === "documents";
 
@@ -154,7 +180,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
 
   const isDocumentsView = view === "documents";
   const isTrashView = view === "trash";
-  const fileEntry: MenuEntry[] = [
+  const baseFileEntries: MenuEntry[] = [
     ...(gridDoc
       ? [
           {
@@ -243,22 +269,6 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
     { key: "delete", label: t("deleteAction"), danger: true, disabled: !gridDoc || !selectedRowId, onSelect: () => window.dispatchEvent(new Event("docsys:delete-selected-row")) },
   ];
 
-  const themeItem = (mode: ThemeMode, label: string): MenuEntry => ({
-    key: `theme-${mode}`,
-    label,
-    checked: themeMode === mode,
-    onSelect: () => setThemeMode(mode),
-  });
-
-  const viewEntries: MenuEntry[] = [
-    themeItem("light", t("themeLight")),
-    themeItem("dark", t("themeDark")),
-    themeItem("system", t("themeSystem")),
-    { key: "sep", label: "", separator: true },
-    { key: "lang-tr", label: t("langTurkish"), checked: storedLanguage() === "tr", onSelect: () => setLanguage("tr") },
-    { key: "lang-en", label: t("langEnglish"), checked: storedLanguage() === "en", onSelect: () => setLanguage("en") },
-  ];
-
   const insertEntries: MenuEntry[] = [
     { key: "add-column", label: t("addColumn"), disabled: !gridDoc, onSelect: () => setAddColumnOpen(true) },
   ];
@@ -289,20 +299,35 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
     { key: "about", label: t("about"), onSelect: () => pushToast("info", `${t("appName")} — ${t("aboutText")}`) },
   ];
 
+  const fileEntries: MenuEntry[] = [
+    ...baseFileEntries,
+    { key: "workspace-sep", label: "", separator: true },
+    { key: "analysis", label: t("menuAnalysis"), children: analysisEntries },
+    { key: "help", label: t("menuHelp"), children: helpEntries },
+  ];
+  const mergedEditEntries: MenuEntry[] = [
+    ...editEntries,
+    { key: "tools-sep", label: "", separator: true },
+    { key: "insert", label: t("menuInsert"), children: insertEntries },
+    { key: "columns", label: t("menuColumns"), disabled: !gridDoc, children: columnEntries },
+  ];
+
+  const editMenu = <div ref={editMenuRef}><Menu testId="menu-edit" label={t("menuEdit")} entries={mergedEditEntries} /></div>;
+
   return (
     <>
-    <div className="relative z-50 grid grid-cols-[auto_minmax(12rem,34rem)_minmax(0,1fr)] items-center gap-2 border-b border-border bg-surface/90 px-2 py-1 backdrop-blur-xl">
-      <div className="flex min-w-0 items-center gap-0.5">
+    <div ref={headerRef} className="relative z-50 flex min-h-11 items-center border-b border-border bg-surface/90 px-2 py-1 backdrop-blur-xl">
+      <div ref={leadingRef} data-testid="menubar-leading-actions" className="flex min-w-0 items-center gap-0.5">
         <span className="shrink-0 px-2 text-sm font-semibold">{t("appName")}</span>
-        <Menu testId="menu-file" label={t("menuFile")} entries={fileEntry} />
-        <Menu testId="menu-edit" label={t("menuEdit")} entries={editEntries} />
-        <Menu testId="menu-view" label={t("menuView")} entries={viewEntries} />
+        <Menu testId="menu-file" label={t("menuFile")} entries={fileEntries} />
+        {!editMenuTrailing && editMenu}
       </div>
       <div
+        ref={searchRef}
         id="docsys-global-search"
         data-testid="global-search-trigger"
         title={t("globalSearchHelp")}
-        className={`flex min-w-0 items-center gap-2 border border-border bg-editorBackground/80 px-3 py-1.5 text-xs text-mutedForeground shadow-sm transition-colors focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-primary/35 hover:bg-muted ${searchOpen ? "rounded-t-xl rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-lg"}`}
+        className={`absolute left-1/2 flex w-[clamp(14rem,36vw,34rem)] min-w-0 -translate-x-1/2 items-center gap-2 border border-border bg-editorBackground/80 px-3 py-1.5 text-xs text-mutedForeground shadow-sm transition-[border-color,background-color,width] focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-primary/35 hover:bg-muted ${searchOpen ? "rounded-t-xl rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-lg"}`}
       >
         <Search size={14} className="shrink-0" />
         <input
@@ -325,11 +350,8 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
         />
         {!searchQuery && <span className="shrink-0 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px]">{searchShortcut}</span>}
       </div>
-      <div data-testid="menubar-trailing-actions" className="flex min-w-0 items-center justify-end gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <Menu testId="menu-insert" label={t("menuInsert")} entries={insertEntries} />
-        {gridDoc && <Menu testId="menu-columns" label={t("menuColumns")} entries={columnEntries} />}
-        {gridDoc && <Menu testId="menu-analysis" label={t("menuAnalysis")} entries={analysisEntries} />}
-        <Menu testId="menu-help" label={t("menuHelp")} entries={helpEntries} />
+      <div data-testid="menubar-trailing-actions" className="ml-auto flex min-w-0 items-center justify-end gap-0.5">
+        {editMenuTrailing && editMenu}
         <span className="ml-auto shrink-0"><NotificationCenter /></span>
       </div>
       <input

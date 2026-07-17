@@ -3,7 +3,9 @@ import { Boxes, FileCog, Keyboard, Plug, RotateCcw, ShieldCheck, SlidersHorizont
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentSummary } from "../lib/api";
+import { setLanguage, storedLanguage } from "../lib/i18n";
 import { useToastStore } from "../stores/toasts";
+import { useThemeStore } from "../stores/theme";
 import { DocumentFontFamily, documentFontFamilies, useAuthoringPreferencesStore } from "../stores/authoringPreferences";
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
 import { RoleGuide } from "./RoleGuide";
@@ -14,6 +16,8 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
   useEscapeClose(onClose);
   const queryClient = useQueryClient();
   const toast = useToastStore((state) => state.push);
+  const themeMode = useThemeStore((state) => state.mode);
+  const setThemeMode = useThemeStore((state) => state.setMode);
   const [tab, setTab] = useState<"document" | "authoring" | "keyboard" | "roles" | "configurations" | "integrations" | "sso">("authoring");
   const [name, setName] = useState("");
   const [kind, setKind] = useState("variant");
@@ -77,6 +81,15 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
         </SettingsSection>}
         {tab === "authoring" && <div className="space-y-4">
           <SettingsSection title={t("documentAppearanceSettings")} description={t("documentAppearanceSettingsHelp")}>
+            <div className="grid grid-cols-3 gap-2">
+              <ChoiceButton active={themeMode === "light"} label={t("themeLight")} onClick={() => setThemeMode("light")} />
+              <ChoiceButton active={themeMode === "dark"} label={t("themeDark")} onClick={() => setThemeMode("dark")} />
+              <ChoiceButton active={themeMode === "system"} label={t("themeSystem")} onClick={() => setThemeMode("system")} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <ChoiceButton active={storedLanguage() === "tr"} label={t("langTurkish")} onClick={() => setLanguage("tr")} />
+              <ChoiceButton active={storedLanguage() === "en"} label={t("langEnglish")} onClick={() => setLanguage("en")} />
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <ChoiceButton active={preferences.rowDensity === "comfortable"} label={t("comfortableDensity")} onClick={() => preferences.setRowDensity("comfortable")} />
               <ChoiceButton active={preferences.rowDensity === "compact"} label={t("compactDensity")} onClick={() => preferences.setRowDensity("compact")} />

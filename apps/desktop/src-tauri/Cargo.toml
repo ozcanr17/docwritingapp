@@ -1,6 +1,6 @@
 [package]
 name = "docsys-desktop"
-version = "0.1.1"
+version = "0.1.2"
 description = "DocSys desktop client"
 authors = ["DocSys"]
 edition = "2021"

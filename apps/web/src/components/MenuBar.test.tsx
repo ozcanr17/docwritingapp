@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { MenuBar } from "./MenuBar";
+import { MenuBar, resolveEditMenuTrailing } from "./MenuBar";
 
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
@@ -21,17 +21,16 @@ describe("MenuBar", () => {
     expect(onOpenSearch).toHaveBeenCalledOnce();
   });
 
-  it("places secondary menus after global search when horizontal space is constrained", () => {
+  it("keeps search geometrically centered and relocates menus after a measured collision", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
         <MenuBar documentId="document" documentType="requirement" view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
       </QueryClientProvider>,
     );
-    const search = screen.getByTestId("global-search-trigger");
-    const trailing = screen.getByTestId("menubar-trailing-actions");
-    expect(search.compareDocumentPosition(trailing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(trailing).toContainElement(screen.getByTestId("menu-analysis"));
+    expect(screen.getByTestId("global-search-trigger")).toHaveClass("left-1/2", "-translate-x-1/2");
+    expect(resolveEditMenuTrailing(false, 320, 300, 70)).toBe(true);
+    expect(resolveEditMenuTrailing(true, 200, 300, 70)).toBe(false);
   });
 
   it("writes the workspace query directly in the top search field", () => {
@@ -53,7 +52,7 @@ describe("MenuBar", () => {
         <MenuBar documentId={null} documentType={null} view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
       </QueryClientProvider>,
     );
-    for (const menu of ["file", "edit", "view", "insert", "help"]) {
+    for (const menu of ["file", "edit"]) {
       fireEvent.click(screen.getByTestId(`menu-${menu}`));
       expect(screen.getByTestId(`menu-${menu}-popover`).parentElement).toBe(document.body);
       fireEvent.click(screen.getByTestId(`menu-${menu}`));
@@ -68,9 +67,22 @@ describe("MenuBar", () => {
         <MenuBar documentId="document" documentType="requirement" view="documents" setView={vi.fn()} onOpenReport={onOpenReport} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByTestId("menu-analysis"));
+    fireEvent.click(screen.getByTestId("menu-file"));
+    fireEvent.click(screen.getByTestId("menuitem-analysis"));
     fireEvent.click(screen.getByTestId("menuitem-readiness"));
     expect(onOpenReport).toHaveBeenCalledWith("readiness");
+  });
+
+  it("groups insert and column commands under edit", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MenuBar documentId="document" documentType="requirement" view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByTestId("menu-edit"));
+    expect(screen.getByTestId("menuitem-insert")).toBeInTheDocument();
+    expect(screen.getByTestId("menuitem-columns")).toBeInTheDocument();
   });
 
   it("opens document history from edit", () => {
