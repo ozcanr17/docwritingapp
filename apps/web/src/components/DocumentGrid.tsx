@@ -901,12 +901,19 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         onAddBlankObjectBelow={() => addBlankObjectBelow()}
         canAddObjectBelow={!selectedGridRow || selectedGridRow.rowType === "heading" || selectedGridRow.rowType === "test_case"}
         canModifySelected={Boolean(selectedGridRow)}
+        selectedRowType={selectedGridRow?.rowType}
         onIndent={() => selectedGridRow && indent(selectedGridRow)}
         onOutdent={() => selectedGridRow && outdent(selectedGridRow)}
         onOpenDetails={() => {
           if (!selectedGridRow) return;
           openDetail(selectedGridRow.id);
           void queryClient.invalidateQueries({ queryKey: ["row", selectedGridRow.id] });
+        }}
+        onOpenLinks={() => {
+          if (!selectedGridRow) return;
+          openDetail(selectedGridRow.id);
+          void queryClient.invalidateQueries({ queryKey: ["row", selectedGridRow.id] });
+          window.setTimeout(() => window.dispatchEvent(new CustomEvent("docsys:open-detail-tab", { detail: { rowId: selectedGridRow.id, tab: "links" } })), 0);
         }}
         onExpandAll={() => setCollapsedRowIds([])}
         onCollapseAll={() => setCollapsedRowIds(rows.filter((candidate) => rows.some((row) => row.parentId === candidate.id)).map((candidate) => candidate.id))}

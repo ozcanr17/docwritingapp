@@ -50,6 +50,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   const [commentAnchor, setCommentAnchor] = useState<{ field: "title" | "description"; start: number; end: number; quotedText: string } | null>(null);
   const [suggestionMode, setSuggestionMode] = useState(false);
   const [suggestedReplacement, setSuggestedReplacement] = useState("");
+  const [activeTab, setActiveTab] = useState<"content" | "links" | "comments" | "attachments" | "executions">("content");
 
   const { data: row, isLoading } = useQuery({
     queryKey: ["row", rowId],
@@ -90,6 +91,17 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
   useEffect(() => {
     if (row) setDescription(row.description ?? "");
   }, [row]);
+
+  useEffect(() => setActiveTab("content"), [rowId]);
+
+  useEffect(() => {
+    const openTab = (event: Event) => {
+      const detail = (event as CustomEvent<{ rowId?: string; tab?: typeof activeTab }>).detail;
+      if (detail?.rowId === rowId && detail.tab) setActiveTab(detail.tab);
+    };
+    window.addEventListener("docsys:open-detail-tab", openTab);
+    return () => window.removeEventListener("docsys:open-detail-tab", openTab);
+  }, [rowId]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -224,7 +236,18 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
         </button>
       </div>
 
+      <div role="tablist" aria-label={t("detailSections")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-surface px-3 py-1.5 [scrollbar-width:thin]">
+        {([
+          ["content", t("contentTab")],
+          ["links", `${t("links")} ${links.length ? `(${links.length})` : ""}`],
+          ["comments", `${t("comments")} ${comments.length ? `(${comments.length})` : ""}`],
+          ["attachments", `${t("attachments")} ${attachments.length ? `(${attachments.length})` : ""}`],
+          ...((row.document.documentType === "test" && (row.rowType === "test_case" || row.rowType === "heading")) ? [["executions", `${t("runs")} ${executions.length ? `(${executions.length})` : ""}`]] : []),
+        ] as Array<[typeof activeTab, string]>).map(([tab, label]) => <button key={tab} role="tab" aria-selected={activeTab === tab} data-testid={`detail-tab-${tab}`} className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs ${activeTab === tab ? "bg-primary/10 font-medium text-primary" : "text-mutedForeground hover:bg-muted hover:text-foreground"}`} onClick={() => setActiveTab(tab)}>{label}</button>)}
+      </div>
+
       <div className="space-y-4 p-4 text-sm">
+        {activeTab === "content" && <>
         <div>
           <div className="mb-1 text-xs uppercase text-mutedForeground">{t("rowType")}</div>
           <div className="flex items-center gap-2">
@@ -293,7 +316,17 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
           </div>
         )}
 
-        <div>
+        {row.rowProjects.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs uppercase text-mutedForeground">{t("projects")}</div>
+            <div className="flex flex-wrap gap-1">
+              {row.rowProjects.map((rp) => <span key={rp.id} className="rounded bg-muted px-2 py-0.5 font-mono text-xs">{rp.projectId.slice(0, 8)}</span>)}
+            </div>
+          </div>
+        )}
+        </>}
+
+        {activeTab === "links" && <><div>
           <div className="mb-1 text-xs uppercase text-mutedForeground">{t("links")}</div>
           {links.length === 0 ? (
             <div className="text-xs text-mutedForeground">{t("noLinks")}</div>
@@ -406,7 +439,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
           <div className="mt-1 text-[10px] text-mutedForeground">{t("linkSearchHint")}</div>
         </div>
 
-        <div>
+        <div className="mt-4">
           <div className="mb-2 text-xs uppercase text-mutedForeground">{t("changeProposals")}</div>
           <div className="space-y-1.5">
             {proposals.map((proposal) => <div key={proposal.id} className="flex items-center justify-between rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs"><span className="truncate">{proposal.title}</span><span className="rounded bg-muted px-1.5 py-0.5">{proposal.status}</span></div>)}
@@ -416,9 +449,9 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
             <input className="w-full rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs" value={proposedRowTitle} placeholder={t("proposedTitle")} onChange={(event) => setProposedRowTitle(event.target.value)} />
             <button className="w-full rounded-lg border border-primary px-2 py-1.5 text-xs text-primary" disabled={!proposalTitle.trim() || !proposedRowTitle.trim()}>{t("submitProposal")}</button>
           </form>
-        </div>
+        </div></>}
 
-        {row.document.documentType === "test" && (row.rowType === "test_case" || row.rowType === "heading") && (
+        {activeTab === "executions" && row.document.documentType === "test" && (row.rowType === "test_case" || row.rowType === "heading") && (
           <div>
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs uppercase text-mutedForeground"><Play size={13} />{t("testExecutions")}</div>
@@ -456,7 +489,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
           </div>
         )}
 
-        <div>
+        {activeTab === "attachments" && <div>
           <div className="mb-2 flex items-center gap-1.5 text-xs uppercase text-mutedForeground"><Paperclip size={13} />{t("attachments")}</div>
           <div className="space-y-1">
             {attachments.map((attachment) => (
@@ -486,9 +519,9 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
               }}
             />
           </label>
-        </div>
+        </div>}
 
-        <div>
+        {activeTab === "comments" && <div>
           <div className="mb-2 flex items-center gap-1.5 text-xs uppercase text-mutedForeground"><MessageSquare size={13} />{t("comments")}</div>
           <div className="max-h-52 space-y-2 overflow-auto">
             {comments.map((comment) => (
@@ -541,20 +574,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
             </button>
             {peopleOpen && <div className="absolute bottom-full right-0 z-30 mb-1 w-72 rounded-xl border border-border bg-surfaceElevated p-2 shadow-2xl"><input autoFocus className="mb-2 w-full rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs" value={peopleQuery} placeholder={t("searchPeople")} onChange={(event) => setPeopleQuery(event.target.value)} /><div className="max-h-44 overflow-auto">{people.map((person) => <button key={person.id} type="button" className="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted" onClick={() => { setMentionedPeople((current) => current.some((candidate) => candidate.id === person.id) ? current : [...current, person]); setCommentBody((current) => `${current.replace(/@$/, "")}@${person.displayName} `); setPeopleOpen(false); }}><span className="block font-medium">{person.displayName}</span><span className="block truncate text-[10px] text-mutedForeground">{person.email}{person.department ? ` · ${person.department}` : ""}</span></button>)}</div></div>}
           </form>
-        </div>
-
-        {row.rowProjects.length > 0 && (
-          <div>
-            <div className="mb-1 text-xs uppercase text-mutedForeground">{t("projects")}</div>
-            <div className="flex flex-wrap gap-1">
-              {row.rowProjects.map((rp) => (
-                <span key={rp.id} className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
-                  {rp.projectId.slice(0, 8)}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+        </div>}
       </div>
     </div>
   );

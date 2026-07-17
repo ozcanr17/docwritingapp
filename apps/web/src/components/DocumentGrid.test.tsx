@@ -112,8 +112,10 @@ describe("DocumentGrid", () => {
 
   it("collapses and expands every group from the document toolbar", () => {
     renderGrid(rows);
+    fireEvent.click(screen.getByTestId("toolbar-more"));
     fireEvent.click(screen.getByTestId("collapse-all"));
     expect(screen.queryByTestId("grid-row-1.1")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("toolbar-more"));
     fireEvent.click(screen.getByTestId("expand-all"));
     expect(screen.getByTestId("grid-row-1.1")).toBeInTheDocument();
   });
@@ -189,6 +191,8 @@ describe("DocumentGrid", () => {
     renderGrid(rows);
     fireEvent.click(screen.getByTestId("grid-row-1.1"));
     expect(screen.getByTestId("add-object")).toHaveAccessibleName(/Nesne ekle/);
+    expect(screen.getByTestId("toolbar-open-links")).toBeEnabled();
+    fireEvent.click(screen.getByTestId("toolbar-more"));
     expect(screen.getByTestId("toolbar-indent")).toBeEnabled();
     expect(screen.getByTestId("toolbar-outdent")).toBeEnabled();
     expect(screen.getByTestId("toolbar-open-details")).toBeEnabled();
