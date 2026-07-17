@@ -296,7 +296,8 @@ export class LifecycleService {
       }),
     ]);
     const readable = await this.access.readableRowIds(actorId, candidates.map((row) => row.id));
-    const documentResults = documents.map((document) => ({
+    const readableDocuments = await this.access.readableDocumentIds(actorId, documents.map((document) => document.id), { organizationId: workspace.organizationId, workspaceId });
+    const documentResults = documents.filter((document) => readableDocuments.has(document.id)).map((document) => ({
       id: `document:${document.id}`,
       rowId: null,
       rowType: "document",
@@ -1706,12 +1707,13 @@ export class LifecycleService {
 
   private assertDocument(
     actorId: string,
-    document: { organizationId: string; workspaceId: string },
+    document: { id: string; organizationId: string; workspaceId: string },
     permission: "document.read" | "document.write" | "document.manage" | "row.read" | "row.write",
   ) {
     return this.access.assertPermission(actorId, permission, {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
   }
 }

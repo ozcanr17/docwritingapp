@@ -1,4 +1,4 @@
-import { ChevronsDown, ChevronsUp, CornerDownRight, FilePlus2, Filter, IndentDecrease, IndentIncrease, LayoutDashboard, Layers3, Link2, ListPlus, PanelRightOpen, Pin, Plus, Redo2, Replace, Save, Search, SlidersHorizontal, Trash2, Undo2, X } from "lucide-react";
+import { ChevronsDown, ChevronsUp, CornerDownRight, FilePlus2, Filter, IndentDecrease, IndentIncrease, LayoutDashboard, Layers3, Link2, ListPlus, PanelRightOpen, Plus, Redo2, Replace, Save, Search, SlidersHorizontal, Trash2, Undo2, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -17,13 +17,11 @@ interface ProductivityBarProps {
   rowTypeOptions: OutlineRow["rowType"][];
   sortKey: string;
   sortDirection: "asc" | "desc";
-  frozenCount: number;
   views: SavedView[];
   dashboard?: DashboardSummary;
   onQueryChange: (value: string) => void;
   onRowTypeFilterChange: (value: OutlineRow["rowType"] | "") => void;
   onSortChange: (key: string, direction: "asc" | "desc") => void;
-  onFrozenCountChange: (count: number) => void;
   onApplyView: (view: SavedView) => void;
   onSaveView: (name: string, scope: "personal" | "team", isDefault: boolean) => void;
   onDeleteView: (id: string) => void;
@@ -33,6 +31,8 @@ interface ProductivityBarProps {
   onAddBlankObjectBelow: () => void;
   canAddObjectBelow: boolean;
   canModifySelected: boolean;
+  canCreateObjects: boolean;
+  canInspectSelected: boolean;
   selectedRowType?: OutlineRow["rowType"];
   onIndent: () => void;
   onOutdent: () => void;
@@ -153,20 +153,6 @@ export function ProductivityBar(props: ProductivityBarProps) {
       >
         {props.sortDirection === "asc" ? "A-Z" : "Z-A"}
       </button>
-      <label className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1.5">
-        <Pin size={13} />
-        <span>{t("frozenColumns")}</span>
-        <select
-          data-testid="frozen-columns"
-          className="bg-transparent outline-none"
-          value={props.frozenCount}
-          onChange={(event) => props.onFrozenCountChange(Number(event.target.value))}
-        >
-          {Array.from({ length: Math.min(5, props.columns.length) + 1 }, (_, index) => (
-            <option key={index} value={index}>{index}</option>
-          ))}
-        </select>
-      </label>
       <select
         data-testid="saved-view-select"
         className="max-w-36 rounded-lg border border-border bg-editorBackground px-2 py-1.5 2xl:max-w-44"
@@ -234,17 +220,17 @@ export function ProductivityBar(props: ProductivityBarProps) {
       <div ref={toolbarRef} className="relative z-20 min-w-0 border-b border-border bg-surface/90 px-2.5 py-1 text-xs backdrop-blur-xl">
         <div className="overflow-x-auto [scrollbar-width:thin]">
         <div className="flex min-w-max items-center gap-1">
-          <ToolbarButton testId="add-object" label={`${t("addObject")} · ${formatShortcut(shortcuts.addObject)}`} onClick={props.onAddObject}><Plus size={16} /></ToolbarButton>
-          <ToolbarButton testId="add-object-below" label={`${t("addObjectBelow")} · ${formatShortcut(shortcuts.addObjectBelow)}`} disabled={!props.canAddObjectBelow} onClick={props.onAddObjectBelow}><CornerDownRight size={16} /></ToolbarButton>
-          <ToolbarButton testId="add-blank-object" label={`${t("addBlankObjectHelp")} · ${formatShortcut(shortcuts.addBlankObject)}`} onClick={props.onAddBlankObject}><FilePlus2 size={16} /></ToolbarButton>
-          <ToolbarButton testId="add-blank-object-below" label={`${t("addBlankObjectBelowHelp")} · ${formatShortcut(shortcuts.addBlankObjectBelow)}`} disabled={!props.canAddObjectBelow} onClick={props.onAddBlankObjectBelow}><FilePlus2 size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-object" label={`${t("addObject")} · ${formatShortcut(shortcuts.addObject)}`} disabled={!props.canCreateObjects} onClick={props.onAddObject}><Plus size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-object-below" label={`${t("addObjectBelow")} · ${formatShortcut(shortcuts.addObjectBelow)}`} disabled={!props.canCreateObjects || !props.canAddObjectBelow} onClick={props.onAddObjectBelow}><CornerDownRight size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-blank-object" label={`${t("addBlankObjectHelp")} · ${formatShortcut(shortcuts.addBlankObject)}`} disabled={!props.canCreateObjects} onClick={props.onAddBlankObject}><FilePlus2 size={16} /></ToolbarButton>
+          <ToolbarButton testId="add-blank-object-below" label={`${t("addBlankObjectBelowHelp")} · ${formatShortcut(shortcuts.addBlankObjectBelow)}`} disabled={!props.canCreateObjects || !props.canAddObjectBelow} onClick={props.onAddBlankObjectBelow}><FilePlus2 size={16} /></ToolbarButton>
           {props.onAddTestStep && props.selectedRowType && <ToolbarButton testId="toolbar-add-test-step" label={`${t("addTestStep")} · ${formatShortcut(shortcuts.addTestStep)}`} onClick={props.onAddTestStep}><ListPlus size={16} /></ToolbarButton>}
           {props.onAddTestTemplate && <ToolbarButton testId="toolbar-add-test-template" label={t("addTestTemplate")} onClick={props.onAddTestTemplate}><Layers3 size={16} /></ToolbarButton>}
           <span className="mx-1 h-5 w-px bg-border" />
           <ToolbarButton testId="toolbar-indent" label={`${t("indent")} · ${formatShortcut(shortcuts.indent)}`} disabled={!props.canModifySelected} onClick={props.onIndent}><IndentIncrease size={16} /></ToolbarButton>
           <ToolbarButton testId="toolbar-outdent" label={`${t("outdent")} · ${formatShortcut(shortcuts.outdent)}`} disabled={!props.canModifySelected} onClick={props.onOutdent}><IndentDecrease size={16} /></ToolbarButton>
-          <ToolbarButton testId="toolbar-open-details" label={`${t("openDetails")} · ${formatShortcut(shortcuts.openDetails)}`} disabled={!props.canModifySelected} onClick={props.onOpenDetails}><PanelRightOpen size={16} /></ToolbarButton>
-          <ToolbarButton testId="toolbar-open-links" label={`${t("openLinks")} · ${formatShortcut(shortcuts.openLinks)}`} disabled={!props.canModifySelected} onClick={props.onOpenLinks}><Link2 size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-open-details" label={`${t("openDetails")} · ${formatShortcut(shortcuts.openDetails)}`} disabled={!props.canInspectSelected} onClick={props.onOpenDetails}><PanelRightOpen size={16} /></ToolbarButton>
+          <ToolbarButton testId="toolbar-open-links" label={`${t("openLinks")} · ${formatShortcut(shortcuts.openLinks)}`} disabled={!props.canInspectSelected} onClick={props.onOpenLinks}><Link2 size={16} /></ToolbarButton>
           <ToolbarButton testId="expand-all" label={`${t("expandAllGroups")} · ${formatShortcut(shortcuts.expandAll)}`} onClick={props.onExpandAll}><ChevronsDown size={16} /></ToolbarButton>
           <ToolbarButton testId="collapse-all" label={`${t("collapseAllGroups")} · ${formatShortcut(shortcuts.collapseAll)}`} onClick={props.onCollapseAll}><ChevronsUp size={16} /></ToolbarButton>
           <span className="mx-1 h-5 w-px bg-border" />

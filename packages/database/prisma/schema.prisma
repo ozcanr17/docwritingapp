@@ -192,6 +192,7 @@ model User {
   decidedProposals        ChangeProposal[]       @relation("ProposalDecider")
   configurationCreators   ProductConfiguration[] @relation("ConfigurationCreator")
   rowAccessGrants         RowAccessGrant[]       @relation("RowAccessUser")
+  documentAccessGrants    DocumentAccessGrant[]  @relation("DocumentAccessUser")
 
   @@index([deletedAt])
   @@map("users")
@@ -235,6 +236,7 @@ model Organization {
   changeProposals   ChangeProposal[]
   configurations    ProductConfiguration[]
   rowAccessGrants   RowAccessGrant[]
+  documentAccessGrants DocumentAccessGrant[]
   integrations      IntegrationEndpoint[]
 
   @@map("organizations")
@@ -475,6 +477,7 @@ model Document {
   reviews              Review[]
   configurations       ProductConfiguration[]
   sourceRetestPackages RetestPackage[]
+  accessGrants         DocumentAccessGrant[]
 
   @@index([workspaceId, folderId, deletedAt, rank])
   @@index([organizationId, deletedAt])
@@ -1130,6 +1133,24 @@ model RowAccessGrant {
   @@unique([rowId, userId])
   @@index([userId, accessLevel])
   @@map("row_access_grants")
+}
+
+model DocumentAccessGrant {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @db.Uuid
+  documentId     String         @db.Uuid
+  userId         String         @db.Uuid
+  accessLevel    RowAccessLevel
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  document     Document     @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  user         User         @relation("DocumentAccessUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, userId])
+  @@index([userId, accessLevel])
+  @@map("document_access_grants")
 }
 
 model IntegrationEndpoint {

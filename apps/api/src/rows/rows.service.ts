@@ -106,6 +106,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     this.assertRowTypeAllowed(document.documentType, input.rowType);
     const row = await this.prisma.$transaction(async (tx) => {
@@ -193,6 +194,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     if (document.documentType !== "test") throw new UnprocessableEntityException("Test templates require a test document");
     const localizedCopy = testTemplateCopy(locale);
@@ -317,6 +319,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     const rows = await this.prisma.documentRow.findMany({
       where: { documentId, parentId, deletedAt: null },
@@ -334,6 +337,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     const [rows, latestBaseline] = await Promise.all([this.prisma.documentRow.findMany({
       where: { documentId, deletedAt: null },
@@ -398,8 +402,14 @@ export class RowsService {
         .flatMap((snapshot) => typeof snapshot.id === "string" ? [snapshot.id] : []),
     );
     const readable = await this.access.readableRowIds(actorId, rows.map((row) => row.id));
+    const linkedRowIds = rows.flatMap((row) => [
+      ...row.outgoingLinks.map((link) => link.targetRow.id),
+      ...row.incomingLinks.map((link) => link.sourceRow.id),
+    ]);
+    const readableLinked = await this.access.readableRowIds(actorId, linkedRowIds);
     const flattened = rows.filter((row) => readable.has(row.id)).map((row) => {
       const linkedObjects = [...row.outgoingLinks.map((link) => link.targetRow), ...row.incomingLinks.map((link) => link.sourceRow)]
+        .filter((linkedRow) => readableLinked.has(linkedRow.id))
         .filter((linkedRow, index, all) => all.findIndex((candidate) => candidate.id === linkedRow.id) === index)
         .map((linkedRow) => ({
           id: linkedRow.id,
@@ -454,7 +464,7 @@ export class RowsService {
         configuredStepNumber: row.testStepDetail?.stepNumber ?? null,
         linkedRequirements: linked,
         linkedObjects,
-        linkCount: row.outgoingLinks.length + row.incomingLinks.length,
+        linkCount: linkedObjects.length,
       };
     });
     const numbered = this.numberRows(flattened);
@@ -476,9 +486,10 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     await this.access.assertRowAccess(actorId, rowId, "read");
-    return this.prisma.documentRow.findUniqueOrThrow({
+    const result = await this.prisma.documentRow.findUniqueOrThrow({
       where: { id: rowId },
       include: {
         document: { select: { id: true, title: true, documentType: true } },
@@ -516,12 +527,21 @@ export class RowsService {
         rowProjects: { where: { deletedAt: null } },
       },
     });
+    const readableLinked = await this.access.readableRowIds(actorId, [
+      ...result.outgoingLinks.map((link) => link.targetRow.id),
+      ...result.incomingLinks.map((link) => link.sourceRow.id),
+    ]);
+    return {
+      ...result,
+      outgoingLinks: result.outgoingLinks.filter((link) => readableLinked.has(link.targetRow.id)),
+      incomingLinks: result.incomingLinks.filter((link) => readableLinked.has(link.sourceRow.id)),
+    };
   }
 
   async rowHistory(actorId: string, rowId: string) {
     const row = await this.requireRow(rowId);
     const document = await this.requireDocument(row.documentId);
-    await this.access.assertPermission(actorId, "row.read", { organizationId: document.organizationId, workspaceId: document.workspaceId });
+    await this.access.assertPermission(actorId, "row.read", { organizationId: document.organizationId, workspaceId: document.workspaceId, documentId: document.id });
     await this.access.assertRowAccess(actorId, rowId, "read");
     const events = await this.prisma.auditEvent.findMany({
       where: { entityType: "document_row", entityId: rowId, action: { in: ["row.updated", "row.version_restored"] } },
@@ -552,7 +572,7 @@ export class RowsService {
 
   async documentHistory(actorId: string, documentId: string) {
     const document = await this.requireDocument(documentId);
-    await this.access.assertPermission(actorId, "document.read", { organizationId: document.organizationId, workspaceId: document.workspaceId });
+    await this.access.assertPermission(actorId, "document.read", { organizationId: document.organizationId, workspaceId: document.workspaceId, documentId });
     const events = await this.prisma.auditEvent.findMany({
       where: { documentId },
       orderBy: { createdAt: "desc" },
@@ -580,7 +600,7 @@ export class RowsService {
   async restoreRowVersion(actorId: string, rowId: string, eventId: string, expectedVersion: number, side: "before" | "after") {
     const row = await this.requireRow(rowId);
     const document = await this.requireDocument(row.documentId);
-    await this.access.assertPermission(actorId, "row.write", { organizationId: document.organizationId, workspaceId: document.workspaceId });
+    await this.access.assertPermission(actorId, "row.write", { organizationId: document.organizationId, workspaceId: document.workspaceId, documentId: document.id });
     await this.access.assertRowAccess(actorId, rowId, "write");
     const event = await this.prisma.auditEvent.findFirst({ where: { id: eventId, entityType: "document_row", entityId: rowId } });
     const snapshotValue = side === "before" ? event?.previousData ?? null : event?.nextData ?? null;
@@ -638,9 +658,10 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const normalized = query.trim();
-    return this.prisma.documentRow.findMany({
+    const candidates = await this.prisma.documentRow.findMany({
       where: {
         organizationId: document.organizationId,
         deletedAt: null,
@@ -667,6 +688,8 @@ export class RowsService {
         document: { select: { id: true, title: true, documentType: true } },
       },
     });
+    const readable = await this.access.readableRowIds(actorId, candidates.map((candidate) => candidate.id));
+    return candidates.filter((candidate) => readable.has(candidate.id));
   }
 
   async updateRow(actorId: string, rowId: string, input: UpdateRowInput) {
@@ -680,6 +703,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     await this.access.assertRowAccess(actorId, rowId, "write");
     if (input.numberingStart !== undefined && row.rowType !== "heading" && row.rowType !== "test_case") {
@@ -797,6 +821,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     await this.access.assertRowAccess(actorId, rowId, "write");
     const moved = await this.prisma.$transaction(async (tx) => {
@@ -874,6 +899,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     await this.access.assertRowAccess(actorId, rowId, "write");
     const correlationId = randomUUID();
@@ -968,6 +994,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     const deletedAt = row.deletedAt;
     await this.prisma.$transaction(async (tx) => {
@@ -1027,6 +1054,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const selected = await this.prisma.documentRow.findMany({
       where: { id: { in: rowIds }, documentId, deletedAt: null },
@@ -1147,6 +1175,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     for (const source of snapshot) this.assertRowTypeAllowed(document.documentType, source.rowType);
     const keys = new Set(snapshot.map((source) => source.key));
@@ -1259,10 +1288,12 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: sourceDoc.organizationId,
       workspaceId: sourceDoc.workspaceId,
+      documentId: sourceDoc.id,
     });
     await this.access.assertPermission(actorId, "row.read", {
       organizationId: targetDoc.organizationId,
       workspaceId: targetDoc.workspaceId,
+      documentId: targetDoc.id,
     });
     await this.access.assertRowAccess(actorId, sourceRowId, "write");
     await this.access.assertRowAccess(actorId, targetRowId, "read");
@@ -1299,6 +1330,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: sourceDoc.organizationId,
       workspaceId: sourceDoc.workspaceId,
+      documentId: sourceDoc.id,
     });
     await this.prisma.$transaction(async (tx) => {
       await tx.requirementLink.update({
@@ -1324,6 +1356,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: sourceDoc.organizationId,
       workspaceId: sourceDoc.workspaceId,
+      documentId: sourceDoc.id,
     });
     await this.prisma.$transaction(async (tx) => {
       await tx.requirementLink.update({
@@ -1346,8 +1379,9 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
-    return this.prisma.requirementLink.findMany({
+    const links = await this.prisma.requirementLink.findMany({
       where: {
         deletedAt: null,
         suspect: true,
@@ -1359,6 +1393,8 @@ export class RowsService {
       },
       orderBy: { suspectSince: "desc" },
     });
+    const readable = await this.access.readableRowIds(actorId, links.flatMap((link) => [link.sourceRow.id, link.targetRow.id]));
+    return links.filter((link) => readable.has(link.sourceRow.id) && readable.has(link.targetRow.id));
   }
 
   async coverage(actorId: string, documentId: string) {
@@ -1366,6 +1402,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const rows = await this.prisma.documentRow.findMany({
       where: { documentId, deletedAt: null },
@@ -1383,7 +1420,7 @@ export class RowsService {
       },
     });
     const rowIds = rows.map((row) => row.id);
-    const links = rowIds.length === 0 ? [] : await this.prisma.requirementLink.findMany({
+    const rawLinks = rowIds.length === 0 ? [] : await this.prisma.requirementLink.findMany({
       where: {
         deletedAt: null,
         linkType: "verifies",
@@ -1395,6 +1432,8 @@ export class RowsService {
         targetRow: { select: { id: true, rowType: true } },
       },
     });
+    const readableLinked = await this.access.readableRowIds(actorId, rawLinks.flatMap((link) => [link.sourceRow.id, link.targetRow.id]));
+    const links = rawLinks.filter((link) => readableLinked.has(link.sourceRow.id) && readableLinked.has(link.targetRow.id));
     if (document.documentType === "test") {
       const rowsById = new Map(rows.map((row) => [row.id, row]));
       const scenarios = new Map<string, typeof rows[number]>();
@@ -1453,6 +1492,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const currentRows = await this.prisma.documentRow.findMany({
       where: { documentId, deletedAt: null },
@@ -1470,7 +1510,7 @@ export class RowsService {
       },
     });
     const currentRowIds = currentRows.map((row) => row.id);
-    const links = currentRowIds.length === 0 ? [] : await this.prisma.requirementLink.findMany({
+    const rawLinks = currentRowIds.length === 0 ? [] : await this.prisma.requirementLink.findMany({
       where: {
         deletedAt: null,
         OR: [{ sourceRowId: { in: currentRowIds } }, { targetRowId: { in: currentRowIds } }],
@@ -1487,6 +1527,8 @@ export class RowsService {
         },
       },
     });
+    const readableLinked = await this.access.readableRowIds(actorId, rawLinks.flatMap((link) => [link.sourceRow.id, link.targetRow.id]));
+    const links = rawLinks.filter((link) => readableLinked.has(link.sourceRow.id) && readableLinked.has(link.targetRow.id));
     const testDocumentIds = [...new Set([
       ...(document.documentType === "test" ? [document.id] : []),
       ...links.flatMap((link) => [link.sourceRow, link.targetRow])
@@ -1622,6 +1664,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, organizationId: document.organizationId, deletedAt: null },
@@ -1640,6 +1683,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     await this.prisma.rowProject.updateMany({
       where: { rowId, projectId, deletedAt: null },
@@ -1665,6 +1709,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "document.manage", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     return this.prisma.customFieldDefinition.create({
       data: {
@@ -1687,6 +1732,7 @@ export class RowsService {
     await this.access.assertPermission(actorId, "document.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     return this.prisma.customFieldDefinition.findMany({
       where: { documentId, deletedAt: null },

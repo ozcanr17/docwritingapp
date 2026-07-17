@@ -83,7 +83,11 @@ export class TreeService {
         select: { id: true, title: true, documentType: true, folderId: true, rank: true, version: true, requirementPrefix: true, updatedAt: true },
       }),
     ]);
-    return { folders, documents };
+    const readableIds = await this.access.readableDocumentIds(actorId, documents.map((document) => document.id), {
+      organizationId: workspace.organizationId,
+      workspaceId,
+    });
+    return { folders, documents: documents.filter((document) => readableIds.has(document.id)) };
   }
 
   async listFolders(actorId: string, workspaceId: string) {
@@ -193,6 +197,20 @@ export class TreeService {
       organizationId: folder.organizationId,
       workspaceId: folder.workspaceId,
     });
+    const prefix = `${folder.ancestorPath}${folder.id}/`;
+    const documents = await this.prisma.document.findMany({
+      where: {
+        workspaceId: folder.workspaceId,
+        deletedAt: null,
+        folder: { OR: [{ id: folder.id }, { ancestorPath: { startsWith: prefix } }] },
+      },
+      select: { id: true },
+    });
+    await Promise.all(documents.map((document) => this.access.assertPermission(actorId, "document.manage", {
+      organizationId: folder.organizationId,
+      workspaceId: folder.workspaceId,
+      documentId: document.id,
+    })));
     const correlationId = randomUUID();
     const deletedAt = new Date();
     await this.prisma.$transaction(async (tx) => {
@@ -236,8 +254,21 @@ export class TreeService {
       workspaceId: folder.workspaceId,
     });
     const deletedAt = folder.deletedAt;
+    const prefix = `${folder.ancestorPath}${folder.id}/`;
+    const documents = await this.prisma.document.findMany({
+      where: {
+        workspaceId: folder.workspaceId,
+        deletedAt,
+        folder: { OR: [{ id: folder.id }, { ancestorPath: { startsWith: prefix } }] },
+      },
+      select: { id: true },
+    });
+    await Promise.all(documents.map((document) => this.access.assertPermission(actorId, "document.manage", {
+      organizationId: folder.organizationId,
+      workspaceId: folder.workspaceId,
+      documentId: document.id,
+    })));
     await this.prisma.$transaction(async (tx) => {
-      const prefix = `${folder.ancestorPath}${folder.id}/`;
       await tx.folder.updateMany({
         where: {
           workspaceId: folder.workspaceId,
@@ -314,8 +345,92 @@ export class TreeService {
     await this.access.assertPermission(actorId, "document.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
-    return document;
+    return { ...document, access: await this.access.documentAccess(actorId, documentId) };
+  }
+
+  async getDocumentAccess(actorId: string, documentId: string) {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "document.read", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+      documentId,
+    });
+    const [current, grants, members] = await Promise.all([
+      this.access.documentAccess(actorId, documentId),
+      this.prisma.documentAccessGrant.findMany({
+        where: { documentId },
+        include: { user: { select: { id: true, displayName: true, email: true, isActive: true } } },
+        orderBy: { user: { displayName: "asc" } },
+      }),
+      this.prisma.organizationMember.findMany({
+        where: { organizationId: document.organizationId, deletedAt: null, user: { deletedAt: null, isActive: true } },
+        select: { user: { select: { id: true, displayName: true, email: true } } },
+        orderBy: { user: { displayName: "asc" } },
+      }),
+    ]);
+    return {
+      current,
+      restricted: grants.length > 0,
+      grants: grants.map((grant) => ({ ...grant.user, accessLevel: grant.accessLevel })),
+      availableUsers: current.canManage ? members.map((member) => member.user) : [],
+    };
+  }
+
+  async grantDocumentAccess(actorId: string, documentId: string, userId: string, accessLevel: "read" | "write" | "manage") {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "document.manage", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+      documentId,
+    });
+    const member = await this.prisma.organizationMember.findFirst({ where: { organizationId: document.organizationId, userId, deletedAt: null } });
+    if (!member) throw new NotFoundException("Organization member not found");
+    await this.prisma.$transaction(async (tx) => {
+      const previous = await tx.documentAccessGrant.findUnique({ where: { documentId_userId: { documentId, userId } } });
+      await tx.documentAccessGrant.upsert({
+        where: { documentId_userId: { documentId, userId } },
+        update: { accessLevel },
+        create: { organizationId: document.organizationId, documentId, userId, accessLevel },
+      });
+      await this.audit.record(tx, {
+        organizationId: document.organizationId,
+        workspaceId: document.workspaceId,
+        actorId,
+        action: previous ? "document.access_updated" : "document.access_granted",
+        entityType: "document_access_grant",
+        entityId: documentId,
+        documentId,
+        previousData: previous ? { userId, accessLevel: previous.accessLevel } : undefined,
+        nextData: { userId, accessLevel },
+      });
+    });
+    return this.getDocumentAccess(actorId, documentId);
+  }
+
+  async revokeDocumentAccess(actorId: string, documentId: string, userId: string) {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "document.manage", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+      documentId,
+    });
+    await this.prisma.$transaction(async (tx) => {
+      const previous = await tx.documentAccessGrant.findUnique({ where: { documentId_userId: { documentId, userId } } });
+      await tx.documentAccessGrant.deleteMany({ where: { documentId, userId } });
+      if (previous) await this.audit.record(tx, {
+        organizationId: document.organizationId,
+        workspaceId: document.workspaceId,
+        actorId,
+        action: "document.access_revoked",
+        entityType: "document_access_grant",
+        entityId: documentId,
+        documentId,
+        previousData: { userId, accessLevel: previous.accessLevel },
+      });
+    });
+    return this.getDocumentAccess(actorId, documentId);
   }
 
   async updateDocument(
@@ -328,6 +443,7 @@ export class TreeService {
     await this.access.assertPermission(actorId, "document.manage", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.workspaceId}::text, 0))`;
@@ -388,6 +504,7 @@ export class TreeService {
     await this.access.assertPermission(actorId, "document.manage", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const correlationId = randomUUID();
     await this.prisma.$transaction(async (tx) => {
@@ -428,6 +545,7 @@ export class TreeService {
     await this.access.assertPermission(actorId, "document.manage", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const deletedAt = document.deletedAt;
     await this.prisma.$transaction(async (tx) => {
@@ -470,7 +588,11 @@ export class TreeService {
         select: { id: true, title: true, deletedAt: true, deletedById: true, deletionReason: true },
       }),
     ]);
-    return { folders, documents };
+    const readableIds = await this.access.readableDocumentIds(actorId, documents.map((document) => document.id), {
+      organizationId: workspace.organizationId,
+      workspaceId,
+    });
+    return { folders, documents: documents.filter((document) => readableIds.has(document.id)) };
   }
 
   async requireWorkspace(workspaceId: string) {

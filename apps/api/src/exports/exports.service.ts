@@ -54,6 +54,7 @@ export class ExportsService {
     await this.access.assertPermission(actorId, "document.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const job = await this.prisma.exportJob.create({
       data: {
@@ -72,7 +73,7 @@ export class ExportsService {
   async getExport(actorId: string, jobId: string) {
     const job = await this.prisma.exportJob.findFirst({ where: { id: jobId } });
     if (!job) throw new NotFoundException("Export job not found");
-    await this.access.assertPermission(actorId, "document.read", { organizationId: job.organizationId });
+    await this.access.assertPermission(actorId, "document.read", { organizationId: job.organizationId, ...(job.documentId ? { documentId: job.documentId } : {}) });
     return {
       id: job.id,
       status: job.status,
@@ -86,7 +87,7 @@ export class ExportsService {
   async downloadUrl(actorId: string, jobId: string): Promise<{ url: string }> {
     const job = await this.prisma.exportJob.findFirst({ where: { id: jobId } });
     if (!job) throw new NotFoundException("Export job not found");
-    await this.access.assertPermission(actorId, "document.read", { organizationId: job.organizationId });
+    await this.access.assertPermission(actorId, "document.read", { organizationId: job.organizationId, ...(job.documentId ? { documentId: job.documentId } : {}) });
     if (job.status !== "completed" || !job.resultStorageKey) {
       throw new UnprocessableEntityException("Export is not ready");
     }
@@ -100,6 +101,7 @@ export class ExportsService {
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const rows = parseImportCsv(csvText);
     if (rows.length === 0) throw new UnprocessableEntityException("No importable rows found");

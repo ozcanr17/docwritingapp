@@ -268,6 +268,7 @@ export interface DocumentSummary {
   folderId: string | null;
   version: number;
   requirementPrefix?: string;
+  access?: { accessLevel: "read" | "write" | "manage" | null; canRead: boolean; canWrite: boolean; canManage: boolean; restricted: boolean };
 }
 
 export interface FolderSummary {

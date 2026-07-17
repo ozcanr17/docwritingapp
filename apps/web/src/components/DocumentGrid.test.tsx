@@ -68,10 +68,10 @@ describe("DocumentGrid", () => {
     expect(screen.getAllByText("3").length).toBeGreaterThan(0);
   });
 
-  it("scrolls the ID column normally while freezing only content columns", () => {
+  it("scrolls every document column together without frozen cells", () => {
     renderGrid(rows);
     expect(screen.getByRole("columnheader", { name: "ID" })).not.toHaveClass("sticky");
-    expect(screen.getByRole("columnheader", { name: "Gereksinim No" })).toHaveClass("sticky");
+    expect(screen.getByRole("columnheader", { name: "Gereksinim No" })).not.toHaveClass("sticky");
   });
 
   it("applies the preferred document typeface and text size", () => {

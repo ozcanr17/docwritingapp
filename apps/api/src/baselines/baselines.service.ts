@@ -68,6 +68,7 @@ export class BaselinesService {
     await this.access.assertPermission(actorId, "document.manage", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const rows = await this.snapshotRows(documentId);
     return this.prisma.$transaction(async (tx) => {
@@ -110,6 +111,7 @@ export class BaselinesService {
     await this.access.assertPermission(actorId, "document.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const revisions = await this.prisma.documentRevision.findMany({
       where: { documentId },
@@ -131,6 +133,7 @@ export class BaselinesService {
     await this.access.assertPermission(actorId, "document.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId,
     });
     const revision = await this.prisma.documentRevision.findFirst({
       where: { documentId, revisionNumber },

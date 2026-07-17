@@ -115,6 +115,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     const allowed = await this.access.hasPermission(state.userId, "document.read", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
+      documentId: document.id,
     });
     if (!allowed) return { event: "error", data: "Forbidden" };
     state.documentIds.add(document.id);

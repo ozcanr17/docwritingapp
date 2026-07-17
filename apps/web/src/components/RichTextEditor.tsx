@@ -14,6 +14,7 @@ import { useSaveStatusStore } from "../stores/saveStatus";
 interface RichTextEditorProps {
   documentId: string;
   displayName: string;
+  readOnly?: boolean;
 }
 
 interface CollabBundle {
@@ -29,7 +30,7 @@ function colorFor(seed: string): string {
   return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length] as string;
 }
 
-export function RichTextEditor({ documentId, displayName }: RichTextEditorProps) {
+export function RichTextEditor({ documentId, displayName, readOnly = false }: RichTextEditorProps) {
   const { t } = useTranslation();
   const [bundle, setBundle] = useState<CollabBundle | null>(null);
   const [connected, setConnected] = useState(false);
@@ -77,7 +78,7 @@ export function RichTextEditor({ documentId, displayName }: RichTextEditorProps)
         {connected ? t("connected") : t("connecting")}
       </div>
       {bundle ? (
-        <CollabSurface bundle={bundle} displayName={displayName} />
+        <CollabSurface bundle={bundle} displayName={displayName} readOnly={readOnly} />
       ) : (
         <div className="p-6 text-sm text-mutedForeground">{t("loading")}</div>
       )}
@@ -85,7 +86,7 @@ export function RichTextEditor({ documentId, displayName }: RichTextEditorProps)
   );
 }
 
-function CollabSurface({ bundle, displayName }: { bundle: CollabBundle; displayName: string }) {
+function CollabSurface({ bundle, displayName, readOnly }: { bundle: CollabBundle; displayName: string; readOnly: boolean }) {
   const { t } = useTranslation();
   const documentFontSize = useAuthoringPreferencesStore((state) => state.documentFontSize);
   const documentFontFamily = useAuthoringPreferencesStore((state) => state.documentFontFamily);
@@ -106,13 +107,14 @@ function CollabSurface({ bundle, displayName }: { bundle: CollabBundle; displayN
           spellcheck: "true",
         },
       },
+      editable: !readOnly,
     },
     [bundle],
   );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div role="toolbar" aria-label={t("editorToolbar")} className="flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-surface/90 px-2 py-1 [scrollbar-width:thin]">
+      {!readOnly && <div role="toolbar" aria-label={t("editorToolbar")} className="flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-surface/90 px-2 py-1 [scrollbar-width:thin]">
         <EditorButton label={t("bold")} active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14} /></EditorButton>
         <EditorButton label={t("italic")} active={editor?.isActive("italic")} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14} /></EditorButton>
         <EditorButton label={t("headingLevel", { level: 1 })} active={editor?.isActive("heading", { level: 1 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}><Heading1 size={15} /></EditorButton>
@@ -125,7 +127,7 @@ function CollabSurface({ bundle, displayName }: { bundle: CollabBundle; displayN
         <span className="mx-1 h-5 border-l border-border" />
         <EditorButton label={t("undoLastChange")} disabled={!editor?.can().undo()} onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={15} /></EditorButton>
         <EditorButton label={t("redoLastChange")} disabled={!editor?.can().redo()} onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={15} /></EditorButton>
-      </div>
+      </div>}
       <div className="flex-1 overflow-auto bg-editorBackground px-4 py-5 leading-relaxed text-foreground sm:px-8" style={{ fontFamily: documentFontFamilies[documentFontFamily], fontSize: documentFontSize }}>
         <div className="mx-auto min-h-full max-w-4xl rounded-xl border border-border bg-surface px-6 py-8 shadow-sm sm:px-10">
           <EditorContent editor={editor} />

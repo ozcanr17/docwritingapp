@@ -30,6 +30,10 @@ const updateDocumentSchema = z.object({
   folderId: z.string().uuid().nullable().optional(),
   requirementPrefix: z.string().regex(/^[A-Za-z][A-Za-z0-9]{0,19}$/).optional(),
 });
+const documentAccessSchema = z.object({
+  userId: z.string().uuid(),
+  accessLevel: z.enum(["read", "write", "manage"]),
+});
 
 @Controller()
 export class TreeController {
@@ -107,6 +111,29 @@ export class TreeController {
   @Get("documents/:documentId")
   getDocument(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
     return this.tree.getDocument(user.userId, documentId);
+  }
+
+  @Get("documents/:documentId/access")
+  getDocumentAccess(@CurrentUser() user: SessionUser, @Param("documentId", ParseUUIDPipe) documentId: string) {
+    return this.tree.getDocumentAccess(user.userId, documentId);
+  }
+
+  @Post("documents/:documentId/access")
+  grantDocumentAccess(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(documentAccessSchema)) body: z.infer<typeof documentAccessSchema>,
+  ) {
+    return this.tree.grantDocumentAccess(user.userId, documentId, body.userId, body.accessLevel);
+  }
+
+  @Delete("documents/:documentId/access/:userId")
+  revokeDocumentAccess(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Param("userId", ParseUUIDPipe) userId: string,
+  ) {
+    return this.tree.revokeDocumentAccess(user.userId, documentId, userId);
   }
 
   @Patch("documents/:documentId")

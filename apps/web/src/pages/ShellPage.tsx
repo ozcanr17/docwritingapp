@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, Clock3, FileText, FlaskConical, LogOut, PenLine, Settings, Star, Trash2, Users } from "lucide-react";
+import { ClipboardCheck, Clock3, FileKey2, FileText, FlaskConical, LogOut, PenLine, Settings, ShieldCheck, Star, Trash2, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +10,7 @@ import { ResizeHandle } from "../components/ResizeHandle";
 import { TrashPanel } from "../components/TrashPanel";
 import { TreePanel } from "../components/TreePanel";
 import { useDocumentEvents } from "../hooks/useDocumentEvents";
-import { api, DocumentSummary, DocumentType, setSessionToken, UserProfile } from "../lib/api";
+import { api, ApiError, DocumentSummary, DocumentType, setSessionToken, UserProfile } from "../lib/api";
 import { openDocumentWindow } from "../lib/documentWindows";
 import { DocumentTab, useDocumentTabsStore } from "../stores/documentTabs";
 import { formatShortcut, isTextEditingTarget, matchesShortcut, SHORTCUT_COMMANDS, ShortcutCommandId } from "../lib/keyboardShortcuts";
@@ -34,6 +34,8 @@ const CommandPalette = lazy(() => import("../components/CommandPalette").then((m
 const OnboardingDialog = lazy(() => import("../components/OnboardingDialog").then((module) => ({ default: module.OnboardingDialog })));
 const RecentDocumentsDialog = lazy(() => import("../components/RecentDocumentsDialog").then((module) => ({ default: module.RecentDocumentsDialog })));
 const DocumentOverviewPanel = lazy(() => import("../components/DocumentOverviewPanel").then((module) => ({ default: module.DocumentOverviewPanel })));
+const AdminPanel = lazy(() => import("../components/AdminPanel").then((module) => ({ default: module.AdminPanel })));
+const DocumentAccessDialog = lazy(() => import("../components/DocumentAccessDialog").then((module) => ({ default: module.DocumentAccessDialog })));
 
 interface Organization {
   id: string;
@@ -59,6 +61,8 @@ export function ShellPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [documentAccessOpen, setDocumentAccessOpen] = useState(false);
   const [recentDocumentsOpen, setRecentDocumentsOpen] = useState(false);
   const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
   const [historyMode, setHistoryMode] = useState<"row" | "document" | null>(null);
@@ -230,6 +234,12 @@ export function ShellPage() {
 
   const organizationId = organizations.data?.[0]?.id ?? null;
 
+  const organizationAccess = useQuery({
+    queryKey: ["organization-access", organizationId],
+    queryFn: () => api<{ canManage: boolean }>(`/organizations/${organizationId}/me/access`),
+    enabled: organizationId !== null,
+  });
+
   const workspaces = useQuery({
     queryKey: ["workspaces", organizationId],
     queryFn: () => api<Workspace[]>(`/organizations/${organizationId}/workspaces`),
@@ -354,6 +364,8 @@ export function ShellPage() {
           />
         )}
         {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} documentId={selectedDocumentId} onClose={() => setSettingsOpen(false)} />}
+        {adminOpen && organizationId && <AdminPanel organizationId={organizationId} currentUserId={profile.data.id} onClose={() => setAdminOpen(false)} />}
+        {documentAccessOpen && selectedDocumentId && <DocumentAccessDialog documentId={selectedDocumentId} title={selectedDocument.data?.title ?? ""} onClose={() => setDocumentAccessOpen(false)} />}
         {recentDocumentsOpen && <RecentDocumentsDialog documents={recentDocuments} onClose={() => setRecentDocumentsOpen(false)} onOpen={(document) => { openDocument(document); setRecentDocumentsOpen(false); }} />}
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
         {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
@@ -390,6 +402,8 @@ export function ShellPage() {
         </section>
         <div className="border-t border-white/10 p-2 text-sm">
           <SidebarItem icon={<Clock3 size={15} />} label={t("recentDocuments")} onClick={() => setRecentDocumentsOpen(true)} testId="nav-recent-documents" />
+          {organizationAccess.data?.canManage && <SidebarItem icon={<ShieldCheck size={15} />} label={t("adminPanel")} onClick={() => setAdminOpen(true)} testId="nav-admin" />}
+          {selectedDocumentId && <SidebarItem icon={<FileKey2 size={15} />} label={t("documentPermissions")} onClick={() => setDocumentAccessOpen(true)} testId="nav-document-access" />}
           <SidebarItem icon={<Trash2 size={15} />} label={t("trash")} active={view === "trash"} onClick={() => setView("trash")} testId="nav-trash" />
           <SidebarItem icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} testId="nav-settings" />
         </div>
@@ -462,16 +476,18 @@ export function ShellPage() {
               >
                 <span data-testid="presence-count" title={t("showOnlineUsers")} className="block rounded-md px-1.5 py-1">{t("onlineUsers")}: {presence.length}</span>
               </div>
-              <span className="flex gap-1">
-                {presence.slice(0, 8).map((p) => (
+              <span className="flex -space-x-2 pl-2" aria-label={t("onlineEditors")}>
+                {presence.slice(0, 4).map((p, index) => (
                   <span
                     key={p.userId}
                     title={p.displayName}
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/30 bg-surface p-0.5 shadow-sm ring-1 ring-primary/15"
+                    className="relative flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface bg-surface p-0.5 shadow-sm transition-transform hover:z-20 hover:-translate-y-0.5"
+                    style={{ zIndex: 10 - index }}
                   >
                     <span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primaryForeground">{initials(p.displayName)}</span>
                   </span>
                 ))}
+                {presence.length > 4 && <span className="relative z-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface bg-muted text-[10px] font-semibold">+{presence.length - 4}</span>}
               </span>
             </div>
           )}
@@ -611,15 +627,27 @@ function RoleWorkspaceHeader({ focus, onChange }: { focus: WorkspaceFocus; onCha
 
 function DocumentPane({ tab, displayName, focused, split, position, onFocus }: { tab: DocumentTab | null; displayName: string; focused: boolean; split: boolean; position: "primary" | "secondary"; onFocus: () => void }) {
   const { t } = useTranslation();
-  if (!tab) return <PanelLoading />;
+  const document = useQuery({
+    queryKey: ["document", tab?.id],
+    queryFn: () => api<DocumentSummary>(`/documents/${tab?.id}`),
+    enabled: Boolean(tab),
+    retry: (failureCount, error) => !(error instanceof ApiError && error.status === 403) && failureCount < 1,
+  });
+  if (!tab || document.isLoading) return <PanelLoading />;
+  if (document.error instanceof ApiError && document.error.status === 403) return <section data-testid={`document-pane-${position}`} className="flex min-w-0 flex-1 items-center justify-center rounded-lg bg-surface p-8"><div className="max-w-md text-center"><LockAccessIcon /><h2 className="mt-4 font-semibold">{t("fileAccessDenied")}</h2><p className="mt-2 text-sm text-mutedForeground">{t("fileAccessDeniedDescription")}</p></div></section>;
+  const readOnly = !document.data?.access?.canWrite;
   return (
     <section data-testid={`document-pane-${position}`} data-document-id={tab.id} data-focused={focused ? "true" : "false"} aria-label={tab.title} className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-surface transition-shadow ${focused && split ? "ring-2 ring-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.18)]" : split ? "ring-1 ring-border opacity-[0.94]" : ""}`} onMouseDownCapture={onFocus}>
-      {split && <div className={`flex h-9 shrink-0 items-center justify-between border-b px-3 text-xs ${focused ? "border-primary bg-primary/10 text-foreground" : "border-border bg-editorBackground text-mutedForeground"}`}><span className="truncate font-semibold">{tab.title}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${focused ? "bg-primary text-primaryForeground" : "bg-muted"}`}>{focused ? t("focusedPane") : t("secondaryPane")}</span></div>}
+      {split && <div className={`flex h-9 shrink-0 items-center justify-between border-b px-3 text-xs ${focused ? "border-primary bg-primary/10 text-foreground" : "border-border bg-editorBackground text-mutedForeground"}`}><span className="truncate font-semibold">{tab.title}</span><div className="flex items-center gap-2">{readOnly && <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">{t("readOnly")}</span>}<span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${focused ? "bg-primary text-primaryForeground" : "bg-muted"}`}>{focused ? t("focusedPane") : t("secondaryPane")}</span></div></div>}
       <Suspense fallback={<PanelLoading />}>
-        {tab.documentType === "general_document" ? <RichTextEditor documentId={tab.id} displayName={displayName} /> : <DocumentGrid documentId={tab.id} documentType={tab.documentType === "test" ? "test" : "requirement"} advancedTargetId={`docsys-toolbar-${tab.id}`} showAdvancedControls />}
+        {tab.documentType === "general_document" ? <RichTextEditor documentId={tab.id} displayName={displayName} readOnly={readOnly} /> : <DocumentGrid documentId={tab.id} documentType={tab.documentType === "test" ? "test" : "requirement"} advancedTargetId={`docsys-toolbar-${tab.id}`} showAdvancedControls readOnly={readOnly} />}
       </Suspense>
     </section>
   );
+}
+
+function LockAccessIcon() {
+  return <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"><FileKey2 size={22} /></span>;
 }
 
 function SplitResizeHandle({ direction, ratio, onChange }: { direction: "horizontal" | "vertical"; ratio: number; onChange: (ratio: number) => void }) {

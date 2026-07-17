@@ -31,6 +31,7 @@ interface GridProps {
   documentType: Exclude<DocumentType, "general_document">;
   advancedTargetId?: string;
   showAdvancedControls?: boolean;
+  readOnly?: boolean;
 }
 
 interface MenuState {
@@ -128,7 +129,7 @@ function coerceCustom(column: GridColumn, value: string): unknown {
   return value;
 }
 
-export function DocumentGrid({ documentId, documentType, advancedTargetId, showAdvancedControls = true }: GridProps) {
+export function DocumentGrid({ documentId, documentType, advancedTargetId, showAdvancedControls = true, readOnly = false }: GridProps) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
@@ -140,7 +141,6 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const showHierarchyGuides = useAuthoringPreferencesStore((s) => s.showHierarchyGuides);
   const showChangeIndicators = useAuthoringPreferencesStore((s) => s.showChangeIndicators);
   const spellCheck = useAuthoringPreferencesStore((s) => s.spellCheck);
-  const defaultFrozenColumns = useAuthoringPreferencesStore((s) => s.defaultFrozenColumns);
   const documentFontSize = useAuthoringPreferencesStore((s) => s.documentFontSize);
   const documentFontFamily = useAuthoringPreferencesStore((s) => s.documentFontFamily);
   const setSelectedRow = useSelectionStore((s) => s.setRow);
@@ -181,7 +181,6 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const [rowTypeFilter, setRowTypeFilter] = useState<OutlineRow["rowType"] | "">("");
   const [sortKey, setSortKey] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [frozenCount, setFrozenCount] = useState(defaultFrozenColumns);
   const [viewVisibleColumns, setViewVisibleColumns] = useState<string[] | null>(null);
   const [linkProjection, setLinkProjection] = useState({
     fields: ["requirementNo"],
@@ -282,8 +281,6 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const template = columns.map((c) => `${c.width}px`).join(" ");
   const gridWidth = totalWidth(columns);
   const gridTemplate = template;
-  const frozenOffsets = columns.map((_, index) => columns.slice(1, index).reduce((sum, column) => sum + column.width + 8, 0));
-  const isFrozenColumn = (index: number) => index > 0 && index <= frozenCount;
   const selectedRootRowIds = useMemo(() => {
     const selected = new Set(selectedRowIds);
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -345,7 +342,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           ],
           sorting: sortKey ? [{ field: sortKey, direction: sortDirection }] : [],
           visibleColumns: columns.map((column) => column.key),
-          frozenColumns: columns.slice(1, frozenCount + 1).map((column) => column.key),
+          frozenColumns: [],
           linkProjection,
           isDefault: input.isDefault,
         }),
@@ -375,7 +372,6 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
     setSortKey(typeof sorting?.field === "string" ? sorting.field : "");
     setSortDirection(sorting?.direction === "desc" ? "desc" : "asc");
     setViewVisibleColumns(view.visibleColumns.length > 0 ? view.visibleColumns : null);
-    setFrozenCount(view.frozenColumns.length);
     setLinkProjection({
       fields: view.linkProjection.fields ?? ["requirementNo"],
       separator: view.linkProjection.separator ?? " : ",
@@ -840,6 +836,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
       if (detail.documentId !== documentId) return;
       const commandId = detail.commandId;
       const selected = rows.find((row) => row.id === selectedRowId);
+      if (readOnly && ["addObject", "addObjectBelow", "addBlankObject", "addBlankObjectBelow", "addTestStep", "indent", "outdent", "deleteSelection", "findReplace"].includes(commandId)) return;
       if (commandId === "addObject") addObject(selected);
       if (commandId === "addObjectBelow") addObjectBelow(selected);
       if (commandId === "addBlankObject") addBlankObject(selected);
@@ -873,6 +870,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const menuItems = (row: OutlineRow | null): MenuItem[] => {
     const addUnder = (rowType: OutlineRow["rowType"], parentId: string | null, afterRowId?: string) =>
       createRow.mutate({ parentId, afterRowId, rowType });
+    if (readOnly && !row) return [];
     if (!row) {
       return [
         { key: "heading", label: t("addHeading"), onSelect: () => addUnder("heading", null) },
@@ -883,7 +881,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         ...(documentType === "test" ? [{ key: "testTemplate", label: t("addTestTemplate"), onSelect: () => setTemplateParentId(null) }] : []),
       ];
     }
-    return [
+    const readItems: MenuItem[] = [
       {
         key: "detail",
         label: t("openDetails"),
@@ -892,6 +890,13 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           void queryClient.invalidateQueries({ queryKey: ["row", row.id] });
         },
       },
+      ...(rows.some((candidate) => candidate.parentId === row.id)
+        ? [{ key: "collapse", label: t(collapsedRows.has(row.id) ? "expandObject" : "collapseObject"), onSelect: () => toggleCollapsed(row.id) }]
+        : []),
+    ];
+    if (readOnly) return readItems;
+    return [
+      ...readItems,
       { key: "addObject", label: t("addObject"), shortcut: "Insert", onSelect: () => addObject(row) },
       { key: "addBlankObject", label: t("addBlankObject"), onSelect: () => addBlankObject(row) },
       {
@@ -925,9 +930,6 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
       { key: "heading", label: t("addSiblingHeading"), onSelect: () => addUnder("heading", row.parentId, row.id) },
       ...((row.rowType === "heading" || row.rowType === "test_case")
         ? [{ key: "numbering", label: t("setNumbering"), onSelect: () => openNumbering(row) }]
-        : []),
-      ...(rows.some((candidate) => candidate.parentId === row.id)
-        ? [{ key: "collapse", label: t(collapsedRows.has(row.id) ? "expandObject" : "collapseObject"), onSelect: () => toggleCollapsed(row.id) }]
         : []),
       ...(row.rowType === "test_step"
         ? (["not_run", "running", "passed", "failed", "blocked", "skipped"] as const).map((status) => ({
@@ -974,7 +976,6 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         rowTypeOptions={documentType === "test" ? ["heading", "test_case", "test_step", "note"] : ["heading", "requirement", "note"]}
         sortKey={sortKey}
         sortDirection={sortDirection}
-        frozenCount={frozenCount}
         views={savedViews}
         dashboard={dashboard}
         onQueryChange={setSearchQuery}
@@ -983,16 +984,17 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           setSortKey(key);
           setSortDirection(direction);
         }}
-        onFrozenCountChange={setFrozenCount}
         onApplyView={applyView}
         onSaveView={(name, scope, isDefault) => saveView.mutate({ name, scope, isDefault })}
         onDeleteView={(id) => deleteView.mutate(id)}
-        onAddObject={() => addObject()}
-        onAddObjectBelow={() => addObjectBelow()}
-        onAddBlankObject={() => addBlankObject()}
-        onAddBlankObjectBelow={() => addBlankObjectBelow()}
+        onAddObject={() => { if (!readOnly) addObject(); }}
+        onAddObjectBelow={() => { if (!readOnly) addObjectBelow(); }}
+        onAddBlankObject={() => { if (!readOnly) addBlankObject(); }}
+        onAddBlankObjectBelow={() => { if (!readOnly) addBlankObjectBelow(); }}
         canAddObjectBelow={!selectedGridRow || selectedGridRow.rowType === "heading" || selectedGridRow.rowType === "test_case"}
-        canModifySelected={Boolean(selectedGridRow)}
+        canModifySelected={Boolean(selectedGridRow) && !readOnly}
+        canCreateObjects={!readOnly}
+        canInspectSelected={Boolean(selectedGridRow)}
         selectedRowType={selectedGridRow?.rowType}
         onIndent={() => selectedGridRow && indent(selectedGridRow)}
         onOutdent={() => selectedGridRow && outdent(selectedGridRow)}
@@ -1009,9 +1011,9 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         }}
         onExpandAll={() => setCollapsedRowIds([])}
         onCollapseAll={() => setCollapsedRowIds(rows.filter((candidate) => rows.some((row) => row.parentId === candidate.id)).map((candidate) => candidate.id))}
-        onDeleteSelected={() => selectedGridRow && setDeleteTarget(selectedGridRow)}
-        onAddTestStep={documentType === "test" ? () => createRow.mutate({ parentId: selectedGridRow?.rowType === "heading" || selectedGridRow?.rowType === "test_case" ? selectedGridRow.id : selectedGridRow?.parentId ?? null, afterRowId: selectedGridRow?.rowType === "test_step" ? selectedGridRow.id : undefined, rowType: "test_step" }) : undefined}
-        onAddTestTemplate={documentType === "test" ? () => setTemplateParentId(selectedGridRow?.rowType === "heading" ? selectedGridRow.id : null) : undefined}
+        onDeleteSelected={() => !readOnly && selectedGridRow && setDeleteTarget(selectedGridRow)}
+        onAddTestStep={documentType === "test" && !readOnly ? () => createRow.mutate({ parentId: selectedGridRow?.rowType === "heading" || selectedGridRow?.rowType === "test_case" ? selectedGridRow.id : selectedGridRow?.parentId ?? null, afterRowId: selectedGridRow?.rowType === "test_step" ? selectedGridRow.id : undefined, rowType: "test_step" }) : undefined}
+        onAddTestTemplate={documentType === "test" && !readOnly ? () => setTemplateParentId(selectedGridRow?.rowType === "heading" ? selectedGridRow.id : null) : undefined}
         advancedFilter={advancedFilter}
         onAdvancedFilterChange={setAdvancedFilter}
         onToggleFindReplace={() => setFindReplaceOpen((current) => !current)}
@@ -1045,7 +1047,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           onClose={() => setFindReplaceOpen(false)}
         />
       )}
-      {selectedRowIds.length > 1 && (
+      {selectedRowIds.length > 1 && !readOnly && (
         <div className="flex items-center gap-3 border-b border-border bg-surface/95 px-4 py-2 text-sm shadow-sm backdrop-blur-xl">
           <span className="font-medium">{t("selectedRows", { count: selectedRowIds.length })}</span>
           <button className="rounded-md px-2 py-1 text-mutedForeground hover:bg-muted" onClick={clearRows}>
@@ -1109,13 +1111,12 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           className="sticky top-0 z-10 grid gap-2 border-b border-border bg-surface/95 px-4 text-xs font-medium uppercase tracking-wide text-mutedForeground backdrop-blur-xl"
           style={{ gridTemplateColumns: gridTemplate, width: gridWidth }}
         >
-          {columns.map((column, columnIndex) => (
+          {columns.map((column) => (
             <div
               role="columnheader"
               data-testid={`column-header-${column.key}`}
               key={column.key}
-              className={`relative flex cursor-context-menu items-center gap-1 overflow-hidden py-2 pr-2 ${isFrozenColumn(columnIndex) ? "sticky z-20 bg-surface/95" : ""}`}
-              style={isFrozenColumn(columnIndex) ? { left: frozenOffsets[columnIndex] } : undefined}
+              className="relative flex cursor-context-menu items-center gap-1 overflow-hidden py-2 pr-2"
               onContextMenu={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -1175,7 +1176,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                   role="row"
                   aria-selected={selectedRowIds.includes(row.id)}
                   aria-label={`${t("rowId")} ${row.objectNumber}: ${row.title || row.rowType}`}
-                  draggable={editing?.rowId !== row.id}
+                  draggable={!readOnly && editing?.rowId !== row.id}
                   className={`absolute left-0 top-0 grid items-stretch gap-2 border-b border-border px-4 transition-colors hover:bg-muted/70 ${rowDensity === "compact" ? "min-h-10 py-0.5" : rowDensity === "comfortable" ? "min-h-16 py-2.5" : "min-h-[52px] py-1.5"} ${
                     selectedRowIds.includes(row.id) ? "z-[1] bg-selection shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.55)]" : ""
                   } ${editing?.rowId === row.id ? "bg-primary/10 shadow-[inset_3px_0_0_hsl(var(--primary)),inset_0_0_0_1px_hsl(var(--primary)/0.7)]" : ""
@@ -1227,12 +1228,11 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                             : "bg-primary"
                     }`}
                   />}
-                  {columns.map((column, columnIndex) => (
+                  {columns.map((column) => (
                     <div
                       key={column.key}
                       role="gridcell"
-                      className={`relative ${isFrozenColumn(columnIndex) ? "sticky z-10 bg-inherit" : ""}`}
-                      style={isFrozenColumn(columnIndex) ? { left: frozenOffsets[columnIndex] } : undefined}
+                      className="relative"
                     >
                       {column.kind === "title" && hasChildren && (
                         <button
@@ -1274,7 +1274,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                             openDetail(row.id);
                             return;
                           }
-                          if (isCellEditable(column, row)) setEditing({ rowId: row.id, columnKey: column.key, value: cellValue(column, row) });
+                          if (!readOnly && isCellEditable(column, row)) setEditing({ rowId: row.id, columnKey: column.key, value: cellValue(column, row) });
                         }}
                         onChange={(value) => setEditing((current) => current ? { ...current, value } : current)}
                         onNumberingChange={(value) => setEditing((current) => current ? { ...current, numberingStart: value } : current)}

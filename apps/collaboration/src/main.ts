@@ -4,7 +4,7 @@ import { PrismaClient } from "@docsys/database";
 import jwt from "jsonwebtoken";
 import pino from "pino";
 import { z } from "zod";
-import { hasDocumentReadPermission } from "./permissions";
+import { documentPermissions } from "./permissions";
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
@@ -59,8 +59,9 @@ export function buildServer() {
           where: { id: payload.sub, deletedAt: null, isActive: true },
         });
         if (!user) throw new Error("Unknown user");
-        const allowed = await hasDocumentReadPermission(prisma, user.id, data.documentName);
-        if (!allowed) throw new Error("Forbidden");
+        const access = await documentPermissions(prisma, user.id, data.documentName);
+        if (!access.canRead) throw new Error("Forbidden");
+        data.connection.readOnly = !access.canWrite;
         return { userId: user.id, displayName: user.displayName };
       } catch (error) {
         logger.warn({ documentName: data.documentName, error: (error as Error).message }, "collab auth rejected");
