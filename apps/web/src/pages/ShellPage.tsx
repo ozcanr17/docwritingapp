@@ -30,6 +30,7 @@ const ProfileDialog = lazy(() => import("../components/ProfileDialog").then((mod
 const HistoryDialog = lazy(() => import("../components/HistoryDialog").then((module) => ({ default: module.HistoryDialog })));
 const CommandPalette = lazy(() => import("../components/CommandPalette").then((module) => ({ default: module.CommandPalette })));
 const OnboardingDialog = lazy(() => import("../components/OnboardingDialog").then((module) => ({ default: module.OnboardingDialog })));
+const RecentDocumentsDialog = lazy(() => import("../components/RecentDocumentsDialog").then((module) => ({ default: module.RecentDocumentsDialog })));
 
 interface Organization {
   id: string;
@@ -55,6 +56,7 @@ export function ShellPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [recentDocumentsOpen, setRecentDocumentsOpen] = useState(false);
   const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
   const [historyMode, setHistoryMode] = useState<"row" | "document" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -342,6 +344,7 @@ export function ShellPage() {
           />
         )}
         {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} documentId={selectedDocumentId} onClose={() => setSettingsOpen(false)} />}
+        {recentDocumentsOpen && <RecentDocumentsDialog documents={recentDocuments} onClose={() => setRecentDocumentsOpen(false)} onOpen={(document) => { openDocument(document); setRecentDocumentsOpen(false); }} />}
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
         {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
       </Suspense>
@@ -376,6 +379,7 @@ export function ShellPage() {
             ))}
         </section>
         <div className="border-t border-white/10 p-2 text-sm">
+          <SidebarItem icon={<Clock3 size={15} />} label={t("recentDocuments")} onClick={() => setRecentDocumentsOpen(true)} testId="nav-recent-documents" />
           <SidebarItem icon={<Trash2 size={15} />} label={t("trash")} active={view === "trash"} onClick={() => setView("trash")} testId="nav-trash" />
           <SidebarItem icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} testId="nav-settings" />
         </div>

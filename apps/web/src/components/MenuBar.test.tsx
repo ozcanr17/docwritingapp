@@ -21,6 +21,19 @@ describe("MenuBar", () => {
     expect(onOpenSearch).toHaveBeenCalledOnce();
   });
 
+  it("places secondary menus after global search when horizontal space is constrained", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MenuBar documentId="document" documentType="requirement" view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
+      </QueryClientProvider>,
+    );
+    const search = screen.getByTestId("global-search-trigger");
+    const trailing = screen.getByTestId("menubar-trailing-actions");
+    expect(search.compareDocumentPosition(trailing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trailing).toContainElement(screen.getByTestId("menu-analysis"));
+  });
+
   it("writes the workspace query directly in the top search field", () => {
     const onSearchQueryChange = vi.fn();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

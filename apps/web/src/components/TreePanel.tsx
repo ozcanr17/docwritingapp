@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Clock3, FilePlus2, FileText, Folder as FolderIcon, GripVertical, Star } from "lucide-react";
+import { ChevronDown, ChevronRight, FilePlus2, FileText, Folder as FolderIcon, GripVertical, Star } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentSummary, FolderSummary } from "../lib/api";
@@ -67,7 +67,6 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
     else if (createState) setCreateState(null);
   }, Boolean(createState || moveState || deleteState));
   const pushToast = useToastStore((state) => state.push);
-  const recentDocuments = useDocumentTabsStore((state) => state.recentDocuments);
   const favoriteDocuments = useDocumentTabsStore((state) => state.favoriteDocuments);
   const toggleFavorite = useDocumentTabsStore((state) => state.toggleFavorite);
   const { data: folders = [] } = useQuery({
@@ -267,7 +266,6 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
     >
       <QuickDocuments
         favorites={favoriteDocuments}
-        recent={recentDocuments.filter((document) => !favoriteDocuments.some((favorite) => favorite.id === document.id)).slice(0, 5)}
         selectedDocumentId={selectedDocumentId}
         onSelectDocument={onSelectDocument}
       />
@@ -387,15 +385,14 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   );
 }
 
-function QuickDocuments({ favorites, recent, selectedDocumentId, onSelectDocument }: {
+function QuickDocuments({ favorites, selectedDocumentId, onSelectDocument }: {
   favorites: DocumentTab[];
-  recent: DocumentTab[];
   selectedDocumentId: string | null;
   onSelectDocument: (document: DocumentSummary) => void;
 }) {
   const { t } = useTranslation();
-  if (favorites.length === 0 && recent.length === 0) return null;
-  const renderList = (documents: DocumentTab[], icon: "favorite" | "recent") => (
+  if (favorites.length === 0) return null;
+  const renderList = (documents: DocumentTab[]) => (
     <div className="space-y-0.5">
       {documents.map((document) => (
         <button
@@ -405,7 +402,7 @@ function QuickDocuments({ favorites, recent, selectedDocumentId, onSelectDocumen
           className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted ${selectedDocumentId === document.id ? "bg-selection" : ""}`}
           onClick={() => onSelectDocument(document as DocumentSummary)}
         >
-          {icon === "favorite" ? <Star size={13} className="fill-warning text-warning" /> : <Clock3 size={13} className="text-mutedForeground" />}
+          <Star size={13} className="fill-warning text-warning" />
           <span className="min-w-0 flex-1 truncate">{document.title}</span>
         </button>
       ))}
@@ -415,11 +412,7 @@ function QuickDocuments({ favorites, recent, selectedDocumentId, onSelectDocumen
     <div data-testid="tree-quick-access" className="mx-2 mb-2 space-y-2 border-b border-border pb-2">
       {favorites.length > 0 && <section>
         <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-mutedForeground">{t("favorites")}</div>
-        {renderList(favorites, "favorite")}
-      </section>}
-      {recent.length > 0 && <section>
-        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-mutedForeground">{t("recentDocuments")}</div>
-        {renderList(recent, "recent")}
+        {renderList(favorites)}
       </section>}
     </div>
   );

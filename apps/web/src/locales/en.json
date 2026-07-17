@@ -102,6 +102,8 @@
   "testDocumentShort": "Test",
   "favorites": "Favorites",
   "recentDocuments": "Recent",
+  "recentDocumentsDescription": "Continue working with documents you opened recently.",
+  "noRecentDocuments": "There are no recently used documents yet.",
   "addToFavorites": "Add to favorites",
   "removeFromFavorites": "Remove from favorites",
   "favoriteDocument": "Favorite document",

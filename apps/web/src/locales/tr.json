@@ -102,6 +102,8 @@
   "testDocumentShort": "Test",
   "favorites": "Favoriler",
   "recentDocuments": "Son kullanılanlar",
+  "recentDocumentsDescription": "Yakın zamanda açtığınız dokümanlardan çalışmaya devam edin.",
+  "noRecentDocuments": "Henüz son kullanılan bir doküman yok.",
   "addToFavorites": "Favorilere ekle",
   "removeFromFavorites": "Favorilerden çıkar",
   "favoriteDocument": "Favori doküman",

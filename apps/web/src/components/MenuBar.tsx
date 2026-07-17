@@ -291,22 +291,18 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
 
   return (
     <>
-    <div className="relative z-50 grid grid-cols-[minmax(0,1fr)_clamp(16rem,32vw,34rem)_minmax(0,1fr)] items-center border-b border-border bg-surface/90 px-2 py-1 backdrop-blur-xl">
-      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="relative z-50 grid grid-cols-[auto_minmax(12rem,34rem)_minmax(0,1fr)] items-center gap-2 border-b border-border bg-surface/90 px-2 py-1 backdrop-blur-xl">
+      <div className="flex min-w-0 items-center gap-0.5">
         <span className="shrink-0 px-2 text-sm font-semibold">{t("appName")}</span>
         <Menu testId="menu-file" label={t("menuFile")} entries={fileEntry} />
         <Menu testId="menu-edit" label={t("menuEdit")} entries={editEntries} />
         <Menu testId="menu-view" label={t("menuView")} entries={viewEntries} />
-        <Menu testId="menu-insert" label={t("menuInsert")} entries={insertEntries} />
-        {gridDoc && <Menu testId="menu-columns" label={t("menuColumns")} entries={columnEntries} />}
-        {gridDoc && <Menu testId="menu-analysis" label={t("menuAnalysis")} entries={analysisEntries} />}
-        <Menu testId="menu-help" label={t("menuHelp")} entries={helpEntries} />
       </div>
       <div
         id="docsys-global-search"
         data-testid="global-search-trigger"
         title={t("globalSearchHelp")}
-        className={`mx-3 flex min-w-0 items-center gap-2 border border-border bg-editorBackground/80 px-3 py-1.5 text-xs text-mutedForeground shadow-sm transition-colors focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-primary/35 hover:bg-muted ${searchOpen ? "rounded-t-xl rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-lg"}`}
+        className={`flex min-w-0 items-center gap-2 border border-border bg-editorBackground/80 px-3 py-1.5 text-xs text-mutedForeground shadow-sm transition-colors focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-primary/35 hover:bg-muted ${searchOpen ? "rounded-t-xl rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-lg"}`}
       >
         <Search size={14} className="shrink-0" />
         <input
@@ -329,7 +325,13 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
         />
         {!searchQuery && <span className="shrink-0 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px]">{searchShortcut}</span>}
       </div>
-      <div className="flex justify-end"><NotificationCenter /></div>
+      <div data-testid="menubar-trailing-actions" className="flex min-w-0 items-center justify-end gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <Menu testId="menu-insert" label={t("menuInsert")} entries={insertEntries} />
+        {gridDoc && <Menu testId="menu-columns" label={t("menuColumns")} entries={columnEntries} />}
+        {gridDoc && <Menu testId="menu-analysis" label={t("menuAnalysis")} entries={analysisEntries} />}
+        <Menu testId="menu-help" label={t("menuHelp")} entries={helpEntries} />
+        <span className="ml-auto shrink-0"><NotificationCenter /></span>
+      </div>
       <input
         ref={fileInput}
         type="file"

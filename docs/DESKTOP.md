@@ -25,6 +25,8 @@ pnpm desktop:build
 
 `desktop:check`, web/desktop/Cargo sürümlerinin aynı olduğunu; tüm paket hedeflerinin, updater imzasının, HTTPS manifest adresinin, CSP güvenlik sınırlarının ve ikonların eksiksiz olduğunu doğrular. Bu kontrol hem normal masaüstü CI matrisinde hem de etiketli sürüm üretiminde zorunludur.
 
+`pnpm desktop:build`, kişisel test için işletim sistemi paketini updater özel anahtarı istemeden üretir. GitHub'daki `desktop-v*` sürüm akışı ana Tauri yapılandırmasını kullanır; imzalı updater artefaktları yalnız bu güvenli sürüm akışında oluşturulur.
+
 Tauri derlemesi Rust stable araç zinciri gerektirir. Linux'ta ayrıca WebKitGTK 4.1, AppIndicator, librsvg ve patchelf sistem paketleri gerekir.
 
 ## Güncelleme ve imzalama

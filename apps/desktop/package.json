@@ -1,11 +1,11 @@
 {
   "name": "@docsys/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "check": "node scripts/check-readiness.mjs",
     "dev": "tauri dev",
-    "build": "tauri build",
+    "build": "tauri build --config src-tauri/tauri.local.conf.json",
     "build:binary": "tauri build --no-bundle",
     "build:debug": "tauri build --debug",
     "typecheck": "cargo check --manifest-path src-tauri/Cargo.toml",
