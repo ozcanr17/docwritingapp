@@ -226,6 +226,20 @@ describe("DocumentGrid", () => {
     expect(screen.getByText("1 Giris")).toBeInTheDocument();
   });
 
+  it("reviews traceability impact before saving a linked object", () => {
+    const linked = makeRow({
+      ...rows[1]!,
+      linkCount: 1,
+      linkedObjects: [{ id: "test-step", rowType: "test_step", requirementNo: null, title: "Verification", description: null, action: "Verify requirement", expectedResult: "Requirement is satisfied", document: { id: "test-doc", title: "Verification Tests", documentType: "test" } }],
+    });
+    renderGrid([rows[0]!, linked, rows[2]!]);
+    fireEvent.doubleClick(screen.getByText("Gereksinim A"));
+    fireEvent.change(screen.getByTestId("cell-input-title"), { target: { value: "Updated requirement" } });
+    fireEvent.keyDown(screen.getByTestId("cell-input-title"), { key: "Enter" });
+    expect(screen.getByTestId("edit-impact-dialog")).toBeInTheDocument();
+    expect(screen.getByText("Updated requirement")).toBeInTheDocument();
+  });
+
   it("offers another test step from a test step and edits its step number", () => {
     const step = makeRow({ id: "step-1", parentId: null, depth: 0, rowType: "test_step", title: "", displayNumber: "1", stepNumber: 3 });
     renderGrid([step], "test");

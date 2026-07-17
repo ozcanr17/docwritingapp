@@ -52,6 +52,7 @@ describe("ReleaseReadinessPanel", () => {
 
     expect(screen.getByTestId("readiness-status")).toHaveAttribute("data-status", "blocked");
     expect(screen.getByTestId("readiness-gate-traceability")).toHaveAttribute("data-status", "failed");
+    expect(screen.getByTestId("readiness-why-requirement-row")).not.toBeEmptyDOMElement();
     fireEvent.click(screen.getByTestId("readiness-issue-requirement-row"));
     fireEvent.click(screen.getByTestId("readiness-retest-test-row"));
 

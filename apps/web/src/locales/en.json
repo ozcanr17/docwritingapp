@@ -651,6 +651,12 @@
   "pressShortcut": "Press keys...",
   "unassigned": "Unassigned",
   "shortcutSettingsHelp": "Select a shortcut and press the new key combination. Delete clears it; Escape cancels recording.",
+  "editImpactTitle": "Review traceability impact",
+  "editImpactHelp": "This object has {{count}} linked reference(s). Review the proposed change before saving.",
+  "emptyValue": "Empty",
+  "affectedLinkedObjects": "Potentially affected linked objects",
+  "editImpactWarning": "Saving a semantic change marks the connected traceability links as suspect so reviewers can assess and rerun affected tests.",
+  "saveAndMarkSuspect": "Save and mark links suspect",
   "shortcutCategory": {
     "navigation": "Navigation",
     "authoring": "Authoring",
@@ -720,6 +726,30 @@
     "unlinked_test_step": "Test step is not linked to a requirement",
     "ambiguous_wording": "Requirement contains ambiguous wording",
     "weak_obligation": "Requirement uses a weak obligation"
+  },
+  "readinessRuleWhy": {
+    "missing_number": "A stable identifier is required for references, exports and change review.",
+    "duplicate_number": "Two objects cannot be distinguished reliably in traceability and external reports.",
+    "empty_description": "The requirement does not state the behavior that must be verified.",
+    "incomplete_test_step": "A repeatable test requires both an action and an observable expected result.",
+    "unverified_test_step": "No current successful execution proves this step against the latest content.",
+    "uncovered_requirement": "No verification test is connected to this requirement.",
+    "unlinked_test_step": "The step cannot contribute to requirement coverage without a traceability link.",
+    "untested_requirement": "No verification test is connected to this requirement.",
+    "ambiguous_wording": "Vague qualifiers can lead different reviewers to interpret the requirement differently.",
+    "weak_obligation": "The statement does not express a testable, binding obligation."
+  },
+  "readinessRuleAction": {
+    "missing_number": "Set number",
+    "duplicate_number": "Resolve number",
+    "empty_description": "Write content",
+    "incomplete_test_step": "Complete step",
+    "unverified_test_step": "Open test",
+    "uncovered_requirement": "Link test",
+    "unlinked_test_step": "Link requirement",
+    "untested_requirement": "Link test",
+    "ambiguous_wording": "Improve wording",
+    "weak_obligation": "Strengthen wording"
   },
   "reviewStatus": {
     "draft": "Draft",

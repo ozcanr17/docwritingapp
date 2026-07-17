@@ -113,12 +113,13 @@ export function ReleaseReadinessPanel({ report, impact, impactDepth = 1, creatin
           ) : (
             <ul className="max-h-56 divide-y divide-border overflow-auto">
               {report.issues.map((issue, index) => (
-                <li key={`${issue.rule}-${issue.rowId}-${index}`}>
-                  <button type="button" data-testid={`readiness-issue-${issue.rowId}`} className="flex w-full items-start gap-2 px-3 py-2.5 text-left hover:bg-muted/60" onClick={() => onOpenRow(issue.rowId)}>
+                <li key={`${issue.rule}-${issue.rowId}-${index}`} className="flex items-start gap-2 px-3 py-2.5 hover:bg-muted/60">
                     <AlertTriangle size={14} className={issue.severity === "error" ? "mt-0.5 shrink-0 text-destructive" : "mt-0.5 shrink-0 text-warning"} />
-                    <span className="min-w-0 flex-1"><span className="block text-xs font-medium">{t(`readinessRule.${issue.rule}`)}</span><span className="mt-0.5 block truncate text-xs text-mutedForeground">{issue.objectNumber ? `ID ${issue.objectNumber} · ` : ""}{issue.title || t("untitled")}</span></span>
-                    <ExternalLink size={13} className="mt-0.5 shrink-0 text-mutedForeground" />
-                  </button>
+                    <span className="min-w-0 flex-1"><span className="block text-xs font-medium">{t(`readinessRule.${issue.rule}`)}</span><span className="mt-0.5 block truncate text-xs text-mutedForeground">{issue.objectNumber ? `ID ${issue.objectNumber} · ` : ""}{issue.title || t("untitled")}</span><span data-testid={`readiness-why-${issue.rowId}`} className="mt-1 block text-xs leading-5 text-mutedForeground">{t(`readinessRuleWhy.${issue.rule}`)}</span></span>
+                    <button type="button" data-testid={`readiness-issue-${issue.rowId}`} className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-primary hover:bg-surface" onClick={() => {
+                      onOpenRow(issue.rowId);
+                      if (issue.rule === "uncovered_requirement" || issue.rule === "unlinked_test_step" || issue.rule === "untested_requirement") window.setTimeout(() => window.dispatchEvent(new CustomEvent("docsys:open-detail-tab", { detail: { rowId: issue.rowId, tab: "links" } })), 0);
+                    }}>{t(`readinessRuleAction.${issue.rule}`)}<ExternalLink size={12} className="ml-1 inline" /></button>
                 </li>
               ))}
             </ul>

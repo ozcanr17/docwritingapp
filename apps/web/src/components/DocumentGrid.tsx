@@ -22,6 +22,7 @@ import { FindReplacePanel } from "./FindReplacePanel";
 import { TemplateLibraryPanel } from "./TemplateLibraryPanel";
 import { OperationImpactSummary } from "./OperationImpactSummary";
 import { ShortcutCommandId } from "../lib/keyboardShortcuts";
+import { EditImpactDialog } from "./EditImpactDialog";
 
 interface GridProps {
   documentId: string;
@@ -47,6 +48,13 @@ interface EditState {
   columnKey: string;
   value: string;
   numberingStart?: string;
+}
+
+interface PendingEdit {
+  row: OutlineRow;
+  column: GridColumn;
+  value: string;
+  numberingStart?: string | null;
 }
 
 interface LinkPreviewState {
@@ -157,6 +165,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const [columnMenu, setColumnMenu] = useState<ColumnMenuState | null>(null);
   const [addColumnAt, setAddColumnAt] = useState<{ anchor: GridColumn; side: "left" | "right" } | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
+  const [pendingEdit, setPendingEdit] = useState<PendingEdit | null>(null);
   const [linkPreview, setLinkPreview] = useState<LinkPreviewState | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<OutlineRow | null>(null);
@@ -908,7 +917,9 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const commitEdit = (row: OutlineRow, column: GridColumn, explicitValue?: string) => {
     const value = explicitValue ?? editing?.value;
     if (value !== undefined && (value !== cellValue(column, row) || editing?.numberingStart !== undefined)) {
-      saveCell.mutate({ column, row, value, numberingStart: editing?.numberingStart });
+      const input = { column, row, value, numberingStart: editing?.numberingStart };
+      if (row.linkCount > 0) setPendingEdit(input);
+      else saveCell.mutate(input);
     }
     setEditing(null);
   };
@@ -1349,6 +1360,15 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           onSubmit={(input) => runBulkAction.mutate(input)}
         />
       )}
+      {pendingEdit && <EditImpactDialog
+        row={pendingEdit.row}
+        fieldLabel={pendingEdit.column.kind === "custom" ? pendingEdit.column.labelKey : t(pendingEdit.column.labelKey)}
+        beforeValue={cellValue(pendingEdit.column, pendingEdit.row)}
+        afterValue={pendingEdit.value}
+        pending={saveCell.isPending}
+        onCancel={() => setPendingEdit(null)}
+        onConfirm={() => { saveCell.mutate(pendingEdit); setPendingEdit(null); }}
+      />}
       {templateParentId !== undefined && (
         <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
           <form className="w-full max-w-sm rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl" onSubmit={(event) => { event.preventDefault(); if (templateName.trim()) createTestTemplate.mutate({ name: templateName.trim(), parentId: templateParentId }); }}>

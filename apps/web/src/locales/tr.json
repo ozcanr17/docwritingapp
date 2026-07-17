@@ -650,6 +650,12 @@
   "pressShortcut": "Tuşlara basın...",
   "unassigned": "Atanmamış",
   "shortcutSettingsHelp": "Bir kısayolu seçip yeni tuş birleşimine basın. Delete atamayı kaldırır, Escape kaydı iptal eder.",
+  "editImpactTitle": "İzlenebilirlik etkisini gözden geçirin",
+  "editImpactHelp": "Bu nesnenin {{count}} bağlı referansı var. Kaydetmeden önce önerilen değişikliği gözden geçirin.",
+  "emptyValue": "Boş",
+  "affectedLinkedObjects": "Etkilenebilecek bağlı nesneler",
+  "editImpactWarning": "Anlamsal bir değişiklik kaydedildiğinde bağlı izlenebilirlik bağlantıları şüpheli olarak işaretlenir; böylece gözden geçirenler etkiyi değerlendirip ilgili testleri yeniden koşabilir.",
+  "saveAndMarkSuspect": "Kaydet ve bağlantıları şüpheli işaretle",
   "shortcutCategory": {
     "navigation": "Gezinme",
     "authoring": "Doküman yazımı",
@@ -719,6 +725,30 @@
     "unlinked_test_step": "Test adımı bir gereksinime bağlı değil",
     "ambiguous_wording": "Gereksinim belirsiz bir ifade içeriyor",
     "weak_obligation": "Gereksinim zayıf bir yükümlülük kullanıyor"
+  },
+  "readinessRuleWhy": {
+    "missing_number": "Referanslar, dışa aktarımlar ve değişiklik incelemesi için kalıcı bir numara gereklidir.",
+    "duplicate_number": "İki nesne izlenebilirlikte ve dış raporlarda güvenilir biçimde ayırt edilemez.",
+    "empty_description": "Gereksinim doğrulanması gereken davranışı belirtmiyor.",
+    "incomplete_test_step": "Tekrarlanabilir bir test hem eylem hem de gözlenebilir beklenen sonuç gerektirir.",
+    "unverified_test_step": "Bu adımın güncel içeriğe göre başarılı olduğunu gösteren güncel bir koşum yok.",
+    "uncovered_requirement": "Bu gereksinime bağlı bir doğrulama testi bulunmuyor.",
+    "unlinked_test_step": "İzlenebilirlik bağlantısı olmadan adım gereksinim kapsamına katkı sağlayamaz.",
+    "untested_requirement": "Bu gereksinime bağlı bir doğrulama testi bulunmuyor.",
+    "ambiguous_wording": "Belirsiz nitelemeler farklı gözden geçirenlerin gereksinimi farklı yorumlamasına yol açabilir.",
+    "weak_obligation": "İfade, test edilebilir ve bağlayıcı bir yükümlülük belirtmiyor."
+  },
+  "readinessRuleAction": {
+    "missing_number": "Numara ata",
+    "duplicate_number": "Numarayı düzelt",
+    "empty_description": "İçerik yaz",
+    "incomplete_test_step": "Adımı tamamla",
+    "unverified_test_step": "Testi aç",
+    "uncovered_requirement": "Test bağla",
+    "unlinked_test_step": "Gereksinim bağla",
+    "untested_requirement": "Test bağla",
+    "ambiguous_wording": "İfadeyi iyileştir",
+    "weak_obligation": "İfadeyi güçlendir"
   },
   "reviewStatus": {
     "draft": "Taslak",
