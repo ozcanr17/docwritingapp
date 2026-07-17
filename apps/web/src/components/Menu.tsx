@@ -1,6 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export interface MenuEntry {
   key: string;
@@ -19,6 +20,7 @@ export function Menu({ label, entries, testId }: { label: string; entries: MenuE
   const ref = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: 0, top: 0 });
+  useEscapeClose(() => setOpen(false), open);
 
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
@@ -41,14 +43,9 @@ export function Menu({ label, entries, testId }: { label: string; entries: MenuE
       const target = event.target as Node;
       if (!ref.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
     };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
     document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
     };
   }, [open]);
 

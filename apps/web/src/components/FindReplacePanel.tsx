@@ -4,11 +4,13 @@ import { useTranslation } from "react-i18next";
 import { OutlineRow } from "../lib/api";
 import { GridColumn } from "../lib/columns";
 import { buildReplacements, FindReplaceOptions, TextReplacement } from "../lib/findReplace";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export type ReplaceScope = "document" | "column" | "selection" | "subtree";
 
 export function FindReplacePanel({ rows, columns, selectedRowIds, selectedRowId, pending, onApply, onClose }: { rows: OutlineRow[]; columns: GridColumn[]; selectedRowIds: string[]; selectedRowId: string | null; pending: boolean; onApply: (replacements: TextReplacement[]) => void; onClose: () => void }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const [options, setOptions] = useState<FindReplaceOptions>({ find: "", replace: "", matchCase: false, wholeWord: false, regularExpression: false });
   const [scope, setScope] = useState<ReplaceScope>("document");
   const [columnKey, setColumnKey] = useState(columns.find((column) => column.key === "title")?.key ?? columns[0]?.key ?? "");

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export interface MenuItem {
   key: string;
@@ -18,6 +19,7 @@ interface ContextMenuProps {
 }
 
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+  useEscapeClose(onClose);
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: x, top: y });
 
@@ -34,17 +36,12 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   }, [items.length, x, y]);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
     const onClick = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) onClose();
     };
-    document.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onClick);
     ref.current?.querySelector("button")?.focus();
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.removeEventListener("mousedown", onClick);
     };
   }, [onClose]);

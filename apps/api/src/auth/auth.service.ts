@@ -52,7 +52,7 @@ export class AuthService {
 
   async profile(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
+      where: { id: userId, deletedAt: null, isActive: true },
       select: { id: true, email: true, displayName: true, firstName: true, lastName: true, jobTitle: true, department: true, phone: true, bio: true, locale: true, themePreference: true },
     });
     return user;
@@ -63,7 +63,8 @@ export class AuthService {
       where: {
         userId,
         deletedAt: null,
-        organization: { members: { some: { userId: viewerId, deletedAt: null } } },
+        organization: { deletedAt: null, members: { some: { userId: viewerId, deletedAt: null, user: { deletedAt: null, isActive: true } } } },
+        user: { deletedAt: null, isActive: true },
       },
     }) > 0;
     if (!sharedOrganization) throw new ForbiddenException("User profile is not available");
@@ -170,19 +171,27 @@ export class AuthService {
     const subject = `${issuer.issuer}|${claims.sub}`;
     const email = typeof claims.email === "string" ? claims.email.toLocaleLowerCase("en") : null;
     if (!email) throw new UnauthorizedException("SSO provider did not return an email");
+    if (claims.email_verified !== true) throw new UnauthorizedException("SSO provider did not verify the email");
     const displayName = typeof claims.name === "string" ? claims.name : email;
     const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing?.oidcSubject && existing.oidcSubject !== subject) throw new UnauthorizedException("SSO identity does not match the linked account");
+    if (existing && (!existing.oidcSubject || existing.oidcSubject !== subject)) throw new UnauthorizedException("SSO identity is not linked to this account");
+    if (existing && (existing.deletedAt || !existing.isActive)) throw new UnauthorizedException("SSO account is inactive");
+    const membership = existing ? await this.prisma.organizationMember.findUnique({
+      where: { organizationId_userId: { organizationId: organization.id, userId: existing.id } },
+    }) : null;
+    if (membership?.deletedAt) throw new UnauthorizedException("SSO organization membership is inactive");
     const user = await this.prisma.user.upsert({
       where: { email },
       create: { email, displayName, oidcSubject: subject },
-      update: { displayName, oidcSubject: subject, isActive: true },
+      update: { displayName },
     });
-    await this.prisma.organizationMember.upsert({
-      where: { organizationId_userId: { organizationId: organization.id, userId: user.id } },
-      create: { organizationId: organization.id, userId: user.id },
-      update: { deletedAt: null },
-    });
+    if (!membership) {
+      await this.prisma.organizationMember.upsert({
+        where: { organizationId_userId: { organizationId: organization.id, userId: user.id } },
+        create: { organizationId: organization.id, userId: user.id },
+        update: {},
+      });
+    }
     await this.access.grantRole(user.id, "viewer", { organizationId: organization.id }, "organization");
     return this.issue(user.id, user.email, user.displayName, user.locale);
   }

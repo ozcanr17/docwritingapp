@@ -23,6 +23,7 @@ import { TemplateLibraryPanel } from "./TemplateLibraryPanel";
 import { OperationImpactSummary } from "./OperationImpactSummary";
 import { ShortcutCommandId } from "../lib/keyboardShortcuts";
 import { EditImpactDialog } from "./EditImpactDialog";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 interface GridProps {
   documentId: string;
@@ -190,6 +191,11 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
   const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
   const defaultViewApplied = useRef<string | null>(null);
+  useEscapeClose(() => {
+    if (linkPreview) setLinkPreview(null);
+    else if (confirmBulkDelete) setConfirmBulkDelete(false);
+    else if (templateParentId !== undefined) setTemplateParentId(undefined);
+  }, Boolean(linkPreview || confirmBulkDelete || templateParentId !== undefined));
 
   const outlineKey = ["outline", documentId];
   const { data: rows = [], isLoading } = useQuery({
@@ -1402,6 +1408,7 @@ function DeleteRowDialog({
   onDelete: (strategy: "delete_subtree" | "promote_children") => void;
 }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   return (
     <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
       <div role="dialog" aria-modal="true" aria-labelledby="delete-row-title" className="w-full max-w-md rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl">
@@ -1451,6 +1458,7 @@ function NumberingDialog({
   onSave: () => void;
 }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const valid = Number.isInteger(Number(value)) && Number(value) > 0;
   return (
     <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">

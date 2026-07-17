@@ -7,9 +7,11 @@ import { useToastStore } from "../stores/toasts";
 import { DocumentFontFamily, documentFontFamilies, useAuthoringPreferencesStore } from "../stores/authoringPreferences";
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
 import { RoleGuide } from "./RoleGuide";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentId, onClose }: { organizationId: string; workspaceId: string; documentId: string | null; onClose: () => void }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const queryClient = useQueryClient();
   const toast = useToastStore((state) => state.push);
   const [tab, setTab] = useState<"document" | "authoring" | "keyboard" | "roles" | "configurations" | "integrations" | "sso">("authoring");

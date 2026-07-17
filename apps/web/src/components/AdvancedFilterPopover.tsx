@@ -2,9 +2,11 @@ import { Plus, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AdvancedFilterConfig, FilterCondition, FilterOperator } from "../lib/advancedFilters";
 import { GridColumn } from "../lib/columns";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export function AdvancedFilterPopover({ config, columns, onChange, onClose }: { config: AdvancedFilterConfig; columns: GridColumn[]; onChange: (config: AdvancedFilterConfig) => void; onClose: () => void }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const updateCondition = (id: string, patch: Partial<FilterCondition>) => onChange({
     ...config,
     conditions: config.conditions.map((condition) => condition.id === id ? { ...condition, ...patch } : condition),

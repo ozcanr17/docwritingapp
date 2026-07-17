@@ -3,6 +3,7 @@ import { FileText, Search } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 interface SearchResult {
   id: string;
@@ -24,6 +25,7 @@ interface GlobalSearchDialogProps {
 
 export function GlobalSearchDialog({ workspaceId, query, onClose, onSelect }: GlobalSearchDialogProps) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const panelRef = useRef<HTMLDivElement>(null);
   const [bounds, setBounds] = useState<{ left: number; top: number; width: number } | null>(null);
   const searchable = query.trim().length >= 2 || /^\d+$/.test(query.trim());
@@ -38,14 +40,9 @@ export function GlobalSearchDialog({ workspaceId, query, onClose, onSelect }: Gl
       const search = document.getElementById("docsys-global-search");
       if (!panelRef.current?.contains(target) && !search?.contains(target)) onClose();
     };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
     document.addEventListener("pointerdown", handlePointer);
-    document.addEventListener("keydown", handleKey);
     return () => {
       document.removeEventListener("pointerdown", handlePointer);
-      document.removeEventListener("keydown", handleKey);
     };
   }, [onClose]);
   useLayoutEffect(() => {

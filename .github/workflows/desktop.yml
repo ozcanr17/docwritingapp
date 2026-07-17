@@ -32,6 +32,7 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri -> target
       - run: pnpm install --frozen-lockfile
+      - run: pnpm desktop:check
       - run: pnpm --filter @docsys/web build
       - run: pnpm --filter @docsys/desktop typecheck
       - run: pnpm --filter @docsys/desktop build:binary

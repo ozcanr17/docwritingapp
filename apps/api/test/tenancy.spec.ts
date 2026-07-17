@@ -94,6 +94,29 @@ describe("tenancy and isolation", () => {
     expect(rowWrite.statusCode).toBe(403);
   });
 
+  it("revokes role-derived access when organization membership is removed", async () => {
+    const owner = await registerActor(app, "revocation-owner");
+    const viewer = await registerActor(app, "revoked-viewer");
+    const { org, document } = await createOrgWorkspaceDocument(app, owner);
+    const addMember = await app.inject({
+      method: "POST",
+      url: `/organizations/${org.id}/members`,
+      headers: { cookie: owner.cookie },
+      payload: { userId: viewer.userId, roleKey: "viewer" },
+    });
+    expect(addMember.statusCode).toBe(201);
+    await prisma.organizationMember.update({
+      where: { organizationId_userId: { organizationId: org.id, userId: viewer.userId } },
+      data: { deletedAt: new Date() },
+    });
+    const docRead = await app.inject({
+      method: "GET",
+      url: `/documents/${document.id}`,
+      headers: { cookie: viewer.cookie },
+    });
+    expect(docRead.statusCode).toBe(403);
+  });
+
   it("moves documents between folders and soft-deletes folder trees", async () => {
     const owner = await registerActor(app, "tree-owner");
     const { workspace, document } = await createOrgWorkspaceDocument(app, owner);

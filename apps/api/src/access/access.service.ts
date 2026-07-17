@@ -80,19 +80,32 @@ export class AccessService implements OnModuleInit {
   }
 
   async hasPermission(userId: string, permission: PermissionKey, scope: PermissionScope): Promise<boolean> {
-    const assignments = await this.prisma.memberRole.findMany({
-      where: {
-        userId,
-        deletedAt: null,
-        OR: [
-          { scopeType: "system" },
-          { scopeType: "organization", organizationId: scope.organizationId },
-          ...(scope.workspaceId ? [{ scopeType: "workspace" as const, workspaceId: scope.workspaceId }] : []),
-          ...(scope.projectId ? [{ scopeType: "project" as const, projectId: scope.projectId }] : []),
-        ],
-      },
-      include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
-    });
+    const [membership, assignments] = await Promise.all([
+      this.prisma.organizationMember.findFirst({
+        where: {
+          userId,
+          organizationId: scope.organizationId,
+          deletedAt: null,
+          organization: { deletedAt: null },
+          user: { deletedAt: null, isActive: true },
+        },
+        select: { id: true },
+      }),
+      this.prisma.memberRole.findMany({
+        where: {
+          userId,
+          deletedAt: null,
+          OR: [
+            { scopeType: "system" },
+            { scopeType: "organization", organizationId: scope.organizationId },
+            ...(scope.workspaceId ? [{ scopeType: "workspace" as const, workspaceId: scope.workspaceId }] : []),
+            ...(scope.projectId ? [{ scopeType: "project" as const, projectId: scope.projectId }] : []),
+          ],
+        },
+        include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
+      }),
+    ]);
+    if (!membership) return false;
     return assignments.some((a) => a.role.rolePermissions.some((rp) => rp.permission.key === permission));
   }
 

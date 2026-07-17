@@ -6,6 +6,7 @@ import { DashboardSummary, OutlineRow, SavedView } from "../lib/api";
 import { AdvancedFilterConfig } from "../lib/advancedFilters";
 import { GridColumn } from "../lib/columns";
 import { AdvancedFilterPopover } from "./AdvancedFilterPopover";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 import { formatShortcut } from "../lib/keyboardShortcuts";
 import { useKeyboardShortcutsStore } from "../stores/keyboardShortcuts";
 
@@ -67,6 +68,10 @@ export function ProductivityBar(props: ProductivityBarProps) {
   const [advancedTarget, setAdvancedTarget] = useState<HTMLElement | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  useEscapeClose(() => {
+    setSaveOpen(false);
+    setDashboardOpen(false);
+  }, saveOpen || dashboardOpen);
   useEffect(() => {
     setAdvancedTarget(props.advancedTargetId ? document.getElementById(props.advancedTargetId) : null);
   }, [props.advancedTargetId]);
@@ -79,18 +84,9 @@ export function ProductivityBar(props: ProductivityBarProps) {
         setFilterOpen(false);
       }
     };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSaveOpen(false);
-        setDashboardOpen(false);
-        setFilterOpen(false);
-      }
-    };
     document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
     return () => {
       document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
     };
   }, [dashboardOpen, filterOpen, saveOpen]);
   const submit = (event: FormEvent) => {

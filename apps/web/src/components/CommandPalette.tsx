@@ -3,6 +3,7 @@ import { Command, FileText, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export interface PaletteCommand {
   id: string;
@@ -31,6 +32,7 @@ export function CommandPalette({ workspaceId, commands, onClose, onSelectResult 
   onSelectResult: (result: SearchResult) => void;
 }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const commandOnly = query.trimStart().startsWith(">");
@@ -47,13 +49,6 @@ export function CommandPalette({ workspaceId, commands, onClose, onSelectResult 
     ...(results.data ?? []).map((result) => ({ key: `result-${result.id}`, disabled: false, run: () => onSelectResult(result) })),
   ];
   useEffect(() => setActiveIndex(0), [query, results.data?.length]);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
   const runActive = () => {
     if (items.length === 0) return;
     for (let offset = 0; offset < items.length; offset += 1) {

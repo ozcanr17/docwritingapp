@@ -3,6 +3,7 @@ import { Bell, ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentType, RowDetail } from "../lib/api";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 interface NotificationItem {
   id: string;
@@ -38,6 +39,7 @@ export function NotificationCenter() {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("all");
   const [showRoutine, setShowRoutine] = useState(false);
+  useEscapeClose(() => setOpen(false), open);
   const { data = [] } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => api<NotificationItem[]>("/notifications"),

@@ -94,7 +94,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
       return (await api<{ url: string }>(`/exports/${created.id}/download`)).url;
     },
     onSuccess: (url) => {
-      window.open(url, "_blank");
+      window.open(url, "_blank", "noopener,noreferrer");
       pushToast("success", t("exportReady"));
     },
     onError: () => pushToast("error", t("genericError")),

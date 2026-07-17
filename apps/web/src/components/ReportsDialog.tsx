@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileSpreadsheet, FileText, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ImpactAnalysis, ReleaseReadinessReport, RetestPackage } from "../lib/api";
 import { storedLanguage } from "../lib/i18n";
 import { useToastStore } from "../stores/toasts";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 import { useSelectionStore } from "../stores/selection";
 import { TraceabilityGraph, TraceMatrixRow } from "./TraceabilityGraph";
 import { ReleaseReadinessPanel } from "./ReleaseReadinessPanel";
@@ -90,6 +91,7 @@ async function pollReportExport(jobId: string): Promise<{ ready: boolean; status
 
 export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
   const openDetail = useSelectionStore((s) => s.openDetail);
@@ -102,14 +104,6 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
   const [traceQuery, setTraceQuery] = useState("");
   const [suspectOnly, setSuspectOnly] = useState(false);
   const [impactDepth, setImpactDepth] = useState(1);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   const baselines = useQuery({
     queryKey: ["baselines", documentId],
@@ -247,7 +241,7 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
       return (await api<{ url: string }>(`/exports/${created.id}/download`)).url;
     },
     onSuccess: (url) => {
-      window.open(url, "_blank");
+      window.open(url, "_blank", "noopener,noreferrer");
       pushToast("success", t("exportReady"));
     },
     onError: () => pushToast("error", t("genericError")),

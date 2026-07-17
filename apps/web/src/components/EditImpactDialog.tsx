@@ -1,6 +1,7 @@
 import { AlertTriangle, ArrowRight, Link2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { OutlineRow } from "../lib/api";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export function EditImpactDialog({ row, fieldLabel, beforeValue, afterValue, pending, onCancel, onConfirm }: {
   row: OutlineRow;
@@ -12,6 +13,7 @@ export function EditImpactDialog({ row, fieldLabel, beforeValue, afterValue, pen
   onConfirm: () => void;
 }) {
   const { t } = useTranslation();
+  useEscapeClose(onCancel);
   return <div className="absolute inset-0 z-[205] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
     <div data-testid="edit-impact-dialog" role="dialog" aria-modal="true" aria-labelledby="edit-impact-title" className="w-full max-w-xl rounded-2xl border border-border bg-surfaceElevated p-5 shadow-2xl">
       <div className="flex items-start justify-between gap-4">

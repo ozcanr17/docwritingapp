@@ -74,7 +74,7 @@ export function ExecutionStepCard({ executionId, step, editable, onChanged }: { 
               <button className="min-w-0 flex-1 truncate text-left hover:underline" onClick={async () => {
                 if (item.kind === "attachment" && item.attachmentId) {
                   const result = await api<{ url: string }>(`/attachments/${item.attachmentId}/download`);
-                  window.open(result.url, "_blank");
+                  window.open(result.url, "_blank", "noopener,noreferrer");
                 } else if (item.url) window.open(item.url, "_blank", "noopener,noreferrer");
               }}>{item.kind === "attachment" ? item.fileName : [item.reference, item.summary].filter(Boolean).join(" · ")}</button>
               {item.url && <ExternalLink size={11} className="text-mutedForeground" />}

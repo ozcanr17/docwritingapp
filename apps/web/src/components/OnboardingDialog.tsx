@@ -1,6 +1,7 @@
 import { Check, ChevronLeft, ChevronRight, FileText, GitBranch, PlayCircle, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 const steps = [
   { key: "workspace", icon: FileText },
@@ -11,6 +12,7 @@ const steps = [
 
 export function OnboardingDialog({ onComplete }: { onComplete: () => void }) {
   const { t } = useTranslation();
+  useEscapeClose(onComplete);
   const [index, setIndex] = useState(0);
   const step = steps[index] ?? steps[0];
   const Icon = step.icon;

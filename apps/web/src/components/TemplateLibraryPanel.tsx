@@ -2,6 +2,7 @@ import { FilePlus2, Layers3, Save, Trash2, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DocumentTemplateSummary, OutlineRow } from "../lib/api";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 interface TemplateLibraryPanelProps {
   templates: DocumentTemplateSummary[];
@@ -15,6 +16,7 @@ interface TemplateLibraryPanelProps {
 
 export function TemplateLibraryPanel({ templates, selectedRow, pending, onSave, onApply, onDelete, onClose }: TemplateLibraryPanelProps) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const [name, setName] = useState("");
   const [scope, setScope] = useState<"document" | "section">("section");
   const submit = (event: FormEvent) => {

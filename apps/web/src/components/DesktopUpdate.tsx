@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isDesktopRuntime } from "../lib/desktop";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 interface AvailableUpdate {
   version: string;
@@ -11,6 +12,7 @@ export function DesktopUpdate() {
   const { t } = useTranslation();
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
   const [installing, setInstalling] = useState(false);
+  useEscapeClose(() => setUpdate(null), update !== null && !installing);
 
   useEffect(() => {
     if (!isDesktopRuntime()) return;

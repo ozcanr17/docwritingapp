@@ -17,10 +17,13 @@ Yerel kullanıcılar hem tam e-posta (`admin@docsys.local`) hem de yalnızca kul
 ## Yerel geliştirme ve paketleme
 
 ```bash
+pnpm desktop:check
 pnpm desktop:typecheck
 pnpm --filter @docsys/desktop dev
 pnpm desktop:build
 ```
+
+`desktop:check`, web/desktop/Cargo sürümlerinin aynı olduğunu; tüm paket hedeflerinin, updater imzasının, HTTPS manifest adresinin, CSP güvenlik sınırlarının ve ikonların eksiksiz olduğunu doğrular. Bu kontrol hem normal masaüstü CI matrisinde hem de etiketli sürüm üretiminde zorunludur.
 
 Tauri derlemesi Rust stable araç zinciri gerektirir. Linux'ta ayrıca WebKitGTK 4.1, AppIndicator, librsvg ve patchelf sistem paketleri gerekir.
 

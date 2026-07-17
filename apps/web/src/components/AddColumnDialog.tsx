@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CustomFieldType } from "../lib/api";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 const FIELD_TYPES: CustomFieldType[] = [
   "text",
@@ -24,6 +25,7 @@ export function AddColumnDialog({
   onSubmit: (input: { displayName: string; fieldType: CustomFieldType; allowedValues: string[] }) => void;
 }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const [displayName, setDisplayName] = useState("");
   const [fieldType, setFieldType] = useState<CustomFieldType>("text");
   const [options, setOptions] = useState("");

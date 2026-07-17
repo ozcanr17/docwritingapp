@@ -12,6 +12,7 @@ for dir in "${TARGET_DIRS[@]}"; do
     if grep -rnE "$PATTERN" "$ROOT_DIR/$dir" \
       --exclude-dir=node_modules \
       --exclude-dir=dist \
+      --exclude-dir=target \
       --exclude-dir=.turbo \
       --exclude-dir=locales \
       --include='*.ts' --include='*.tsx' --include='*.js' --include='*.json' \

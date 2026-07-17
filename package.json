@@ -20,6 +20,7 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck --filter=!@docsys/desktop",
     "desktop:typecheck": "pnpm --filter @docsys/desktop typecheck",
+    "desktop:check": "pnpm --filter @docsys/desktop check",
     "desktop:build": "pnpm --filter @docsys/desktop build",
     "verify": "pnpm db:validate && pnpm typecheck && pnpm lint && pnpm scan:chars && pnpm --filter @docsys/web test && pnpm --filter @docsys/api test && pnpm --filter @docsys/worker test && pnpm build",
     "db:format": "pnpm --filter @docsys/database format",

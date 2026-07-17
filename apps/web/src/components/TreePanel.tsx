@@ -6,6 +6,7 @@ import { api, DocumentSummary, FolderSummary } from "../lib/api";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import { DocumentTab, useDocumentTabsStore } from "../stores/documentTabs";
 import { useToastStore } from "../stores/toasts";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 interface TreePanelProps {
   workspaceId: string;
@@ -60,6 +61,11 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [draggedNode, setDraggedNode] = useState<DraggedNode | null>(null);
   const [dropTarget, setDropTarget] = useState<string | "root" | null>(null);
+  useEscapeClose(() => {
+    if (deleteState) setDeleteState(null);
+    else if (moveState) setMoveState(null);
+    else if (createState) setCreateState(null);
+  }, Boolean(createState || moveState || deleteState));
   const pushToast = useToastStore((state) => state.push);
   const recentDocuments = useDocumentTabsStore((state) => state.recentDocuments);
   const favoriteDocuments = useDocumentTabsStore((state) => state.favoriteDocuments);

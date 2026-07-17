@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "check": "node scripts/check-readiness.mjs",
     "dev": "tauri dev",
     "build": "tauri build",
     "build:binary": "tauri build --no-bundle",

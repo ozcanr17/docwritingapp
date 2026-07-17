@@ -61,6 +61,10 @@ describe("lifecycle capabilities", () => {
     const reviewResponse = await app.inject({ method: "POST", url: `/documents/${requirementDocumentId}/reviews`, headers: { cookie: actor.cookie }, payload: { title: "Formal review", reviewerIds: [actor.userId], activate: true } });
     expect(reviewResponse.statusCode).toBe(201);
     expect(JSON.parse(reviewResponse.body)).toEqual(expect.objectContaining({ baselineRevisionNumber: baseline.revisionNumber, baselineSemanticVersion: baseline.semanticVersion, contentHash: expect.stringMatching(/^[a-f0-9]{64}$/) }));
+    const outsider = await registerActor(app, "review-outsider");
+    const invalidReview = await app.inject({ method: "POST", url: `/documents/${requirementDocumentId}/reviews`, headers: { cookie: actor.cookie }, payload: { title: "Invalid external review", reviewerIds: [outsider.userId], activate: true } });
+    expect(invalidReview.statusCode).toBe(422);
+    expect(await prisma.notification.count({ where: { recipientId: outsider.userId, type: "review_requested" } })).toBe(0);
   });
 
   it("stores comments with mentions and immutable test execution history", async () => {

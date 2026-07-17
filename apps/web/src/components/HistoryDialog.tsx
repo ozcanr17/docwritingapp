@@ -5,9 +5,11 @@ import { useTranslation } from "react-i18next";
 import { api, ApiError, DocumentHistoryEntry, RowDetail, RowHistoryEntry } from "../lib/api";
 import { useToastStore } from "../stores/toasts";
 import { RowHistoryPanel } from "./RowHistoryPanel";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export function HistoryDialog({ documentId, rowId, mode, onClose, onOpenRow }: { documentId: string; rowId: string | null; mode: "row" | "document"; onClose: () => void; onOpenRow: (rowId: string) => void }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
   const [query, setQuery] = useState("");

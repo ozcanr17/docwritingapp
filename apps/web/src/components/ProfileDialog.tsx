@@ -4,9 +4,11 @@ import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, UserProfile } from "../lib/api";
 import { useToastStore } from "../stores/toasts";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export function ProfileDialog({ userId, currentUserId, allowEdit = true, onClose }: { userId: string; currentUserId: string; allowEdit?: boolean; onClose: () => void }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
   const editable = allowEdit && userId === currentUserId;

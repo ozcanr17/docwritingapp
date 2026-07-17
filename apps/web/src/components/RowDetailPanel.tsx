@@ -6,6 +6,7 @@ import { api, ApiError, LinkCandidate, RowComment, RowDetail, TestExecution } fr
 import { useSelectionStore } from "../stores/selection";
 import { useDocumentTabsStore } from "../stores/documentTabs";
 import { useToastStore } from "../stores/toasts";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 import { ExecutionStepCard } from "./ExecutionStepCard";
 
 interface RowDetailPanelProps {
@@ -103,17 +104,11 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
     return () => window.removeEventListener("docsys:open-detail-tab", openTab);
   }, [rowId]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (event.key !== "Escape" || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-      if (document.querySelector("[data-testid=reports-dialog]")) return;
-      if (variant === "linked") closeLinked();
-      else closeDetail();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [variant, closeLinked, closeDetail]);
+  useEscapeClose(() => {
+    if (peopleOpen) setPeopleOpen(false);
+    else if (variant === "linked") closeLinked();
+    else closeDetail();
+  });
 
   const saveDescription = useMutation({
     mutationFn: (value: string) =>
@@ -498,7 +493,7 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
                 className="flex w-full items-center justify-between rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-left text-xs hover:bg-muted"
                 onClick={async () => {
                   const result = await api<{ url: string }>(`/attachments/${attachment.id}/download`);
-                  window.open(result.url, "_blank");
+                  window.open(result.url, "_blank", "noopener,noreferrer");
                 }}
               >
                 <span className="truncate">{attachment.fileName}</span>

@@ -75,7 +75,7 @@ const executionEvidenceSchema = z.discriminatedUnion("kind", [
 const reviewSchema = z.object({
   title: z.string().min(1).max(300),
   description: z.string().max(10000).optional(),
-  reviewerIds: z.array(z.string().uuid()).min(1),
+  reviewerIds: z.array(z.string().uuid()).min(1).max(100),
   dueAt: z.string().datetime().optional(),
   activate: z.boolean().default(true),
 });

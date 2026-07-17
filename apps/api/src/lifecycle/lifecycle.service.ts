@@ -1079,7 +1079,13 @@ export class LifecycleService {
 
   notifications(actorId: string) {
     return this.prisma.notification.findMany({
-      where: { recipientId: actorId },
+      where: {
+        recipientId: actorId,
+        organization: {
+          deletedAt: null,
+          members: { some: { userId: actorId, deletedAt: null, user: { deletedAt: null, isActive: true } } },
+        },
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
     });
@@ -1092,19 +1098,19 @@ export class LifecycleService {
     const includeReviews = kind === "all" || kind === "review";
     const [assignments, mentions, reviews] = await Promise.all([
       includeAssignments ? this.prisma.testCaseDetail.findMany({
-        where: { assigneeId: actorId, row: { deletedAt: null, document: { deletedAt: null } } },
+        where: { assigneeId: actorId, row: { deletedAt: null, document: { deletedAt: null, organization: { members: { some: { userId: actorId, deletedAt: null, user: { deletedAt: null, isActive: true } } } } } } },
         include: { row: { include: { document: { select: { id: true, title: true, documentType: true } } } } },
         orderBy: { updatedAt: "desc" },
         take: 100,
       }) : [],
       includeMentions ? this.prisma.rowComment.findMany({
-        where: { mentions: { has: actorId }, deletedAt: null, row: { deletedAt: null, document: { deletedAt: null } } },
+        where: { mentions: { has: actorId }, deletedAt: null, row: { deletedAt: null, document: { deletedAt: null, organization: { members: { some: { userId: actorId, deletedAt: null, user: { deletedAt: null, isActive: true } } } } } } },
         include: { author: { select: { displayName: true } }, row: { include: { document: { select: { id: true, title: true, documentType: true } } } } },
         orderBy: { createdAt: "desc" },
         take: 100,
       }) : [],
       includeReviews ? this.prisma.review.findMany({
-        where: { reviewerIds: { has: actorId }, status: "active", document: { deletedAt: null } },
+        where: { reviewerIds: { has: actorId }, status: "active", document: { deletedAt: null, organization: { members: { some: { userId: actorId, deletedAt: null, user: { deletedAt: null, isActive: true } } } } } },
         include: { document: { select: { id: true, title: true, documentType: true } } },
         orderBy: { createdAt: "desc" },
         take: 100,
@@ -1419,6 +1425,16 @@ export class LifecycleService {
   async createReview(actorId: string, documentId: string, input: ReviewInput) {
     const document = await this.requireDocument(documentId);
     await this.assertDocument(actorId, document, "document.write");
+    const reviewerIds = [...new Set(input.reviewerIds)];
+    const reviewerCount = await this.prisma.organizationMember.count({
+      where: {
+        organizationId: document.organizationId,
+        userId: { in: reviewerIds },
+        deletedAt: null,
+        user: { deletedAt: null, isActive: true },
+      },
+    });
+    if (reviewerCount !== reviewerIds.length) throw new UnprocessableEntityException("Reviewers must be active organization members");
     const baseline = await this.prisma.documentRevision.findFirst({
       where: { documentId },
       orderBy: { revisionNumber: "desc" },
@@ -1434,7 +1450,7 @@ export class LifecycleService {
           createdById: actorId,
           title: input.title,
           description: input.description,
-          reviewerIds: input.reviewerIds,
+          reviewerIds,
           dueAt: input.dueAt ? new Date(input.dueAt) : null,
           baselineRevisionNumber: baseline?.revisionNumber,
           baselineSemanticVersion: baseline?.semanticVersion,
@@ -1444,7 +1460,7 @@ export class LifecycleService {
       });
       if (input.activate) {
         await tx.notification.createMany({
-          data: input.reviewerIds.map((recipientId) => ({
+          data: reviewerIds.map((recipientId) => ({
             organizationId: document.organizationId,
             recipientId,
             type: "review_requested" as const,
@@ -1460,7 +1476,7 @@ export class LifecycleService {
         entityType: "review",
         entityId: review.id,
         documentId,
-        nextData: { title: input.title, reviewers: input.reviewerIds, baselineRevisionNumber: baseline?.revisionNumber, baselineSemanticVersion: baseline?.semanticVersion, contentHash },
+        nextData: { title: input.title, reviewers: reviewerIds, baselineRevisionNumber: baseline?.revisionNumber, baselineSemanticVersion: baseline?.semanticVersion, contentHash },
       });
       return review;
     });

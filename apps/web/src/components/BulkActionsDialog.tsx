@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GridColumn } from "../lib/columns";
 import { OperationImpactSummary } from "./OperationImpactSummary";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export interface BulkActionInput {
   action: "edit" | "move" | "copy" | "link";
@@ -26,6 +27,7 @@ export function BulkActionsDialog({
   onSubmit: (input: BulkActionInput) => void;
 }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const [action, setAction] = useState<BulkActionInput["action"]>("edit");
   const [field, setField] = useState("description");
   const [value, setValue] = useState("");
