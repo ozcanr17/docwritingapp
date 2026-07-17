@@ -702,6 +702,9 @@
     "administrator": "Manages membership, access scope and workspace configuration. Administrator access is not implied by document ownership."
   },
   "roleGuideScopeHelp": "These names explain intent; the server always evaluates the concrete permission and scope for every operation.",
+  "notificationActionRequired": "Action required",
+  "notificationUpdates": "Relevant updates",
+  "notificationRoutine": "Routine activity",
   "shortcutCategory": {
     "navigation": "Navigation",
     "authoring": "Authoring",

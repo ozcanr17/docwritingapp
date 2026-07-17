@@ -701,6 +701,9 @@
     "administrator": "Üyeliği, erişim kapsamını ve çalışma alanı yapılandırmasını yönetir. Doküman sahibi olmak yönetici erişimi vermez."
   },
   "roleGuideScopeHelp": "Bu adlar rolün amacını açıklar; sunucu her işlemde somut izni ve kapsamı ayrıca değerlendirir.",
+  "notificationActionRequired": "İşlem gerekli",
+  "notificationUpdates": "İlgili güncellemeler",
+  "notificationRoutine": "Rutin etkinlik",
   "shortcutCategory": {
     "navigation": "Gezinme",
     "authoring": "Doküman yazımı",
