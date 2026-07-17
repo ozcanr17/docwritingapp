@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OutlineRow } from "./api";
-import { insertOptions } from "./outline";
+import { insertOptions, matchesQuickTypeFilter } from "./outline";
 
 function row(partial: Pick<OutlineRow, "id" | "parentId" | "depth" | "rowType" | "displayNumber">): OutlineRow {
   return {
@@ -54,5 +54,15 @@ describe("insertOptions", () => {
   it("suggests a test step child under a test case", () => {
     const tc = [row({ id: "t", parentId: null, depth: 0, rowType: "test_case", displayNumber: "1" })];
     expect(insertOptions(tc, tc[0]!, "test")[0]).toMatchObject({ number: "1.1", rowType: "test_step" });
+  });
+});
+
+describe("matchesQuickTypeFilter", () => {
+  it("treats any row with test-step content as a test step", () => {
+    const contentRow = { ...row({ id: "content", parentId: null, depth: 0, rowType: "heading", displayNumber: "1" }), action: "Verify the result" };
+    const emptyTechnicalStep = row({ id: "step", parentId: null, depth: 0, rowType: "test_step", displayNumber: "2" });
+    expect(matchesQuickTypeFilter(contentRow, "test_step")).toBe(true);
+    expect(matchesQuickTypeFilter(emptyTechnicalStep, "test_step")).toBe(true);
+    expect(matchesQuickTypeFilter(contentRow, "requirement")).toBe(false);
   });
 });

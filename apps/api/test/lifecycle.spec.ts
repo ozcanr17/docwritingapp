@@ -99,6 +99,10 @@ describe("lifecycle capabilities", () => {
     expect(JSON.parse(work.body)).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "assignment", rowId: testCase.id })]));
     const mentions = await app.inject({ method: "GET", url: "/my-work?kind=mention", headers: { cookie: teammate.cookie } });
     expect(JSON.parse(mentions.body)).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "mention", rowId: testCase.id })]));
+    const readAll = await app.inject({ method: "POST", url: "/notifications/read-all", headers: { cookie: teammate.cookie } });
+    expect(JSON.parse(readAll.body).updated).toBeGreaterThanOrEqual(2);
+    const readNotifications = await app.inject({ method: "GET", url: "/notifications", headers: { cookie: teammate.cookie } });
+    expect(JSON.parse(readNotifications.body).every((item: { readAt: string | null }) => item.readAt !== null)).toBe(true);
   });
 
   it("reuses section snapshots and turns anchored suggestions into proposals", async () => {

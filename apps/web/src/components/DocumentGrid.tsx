@@ -5,6 +5,7 @@ import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef,
 import { useTranslation } from "react-i18next";
 import { api, ApiError, CustomFieldType, DashboardSummary, DocumentTemplateSummary, DocumentType, FieldDefinition, OutlineRow, SavedView } from "../lib/api";
 import { AdvancedFilterConfig, applyAdvancedFilter, EMPTY_ADVANCED_FILTER, parseAdvancedFilter } from "../lib/advancedFilters";
+import { matchesQuickTypeFilter } from "../lib/outline";
 import { cellValue, columnsForDocument, GridColumn, isCellEditable, totalWidth } from "../lib/columns";
 import { TextReplacement } from "../lib/findReplace";
 import { useColumnStore } from "../stores/columns";
@@ -221,7 +222,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           return true;
         });
     const advancedRows = advancedFilter.conditions.length > 0 ? hierarchyRows.filter((row) => advancedFilterResult.visibleIds.has(row.id)) : hierarchyRows;
-    const byType = rowTypeFilter ? advancedRows.filter((row) => row.rowType === rowTypeFilter) : advancedRows;
+    const byType = advancedRows.filter((row) => matchesQuickTypeFilter(row, rowTypeFilter));
     const filtered = normalized
       ? byType.filter((row) =>
           [
@@ -878,6 +879,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         columns={columns}
         query={searchQuery}
         rowTypeFilter={rowTypeFilter}
+        rowTypeOptions={documentType === "test" ? ["heading", "test_case", "test_step", "note"] : ["heading", "requirement", "note"]}
         sortKey={sortKey}
         sortDirection={sortDirection}
         frozenCount={frozenCount}

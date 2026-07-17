@@ -71,7 +71,7 @@ describe("DocumentGrid", () => {
   it("scrolls the ID column normally while freezing only content columns", () => {
     renderGrid(rows);
     expect(screen.getByRole("columnheader", { name: "ID" })).not.toHaveClass("sticky");
-    expect(screen.getByRole("columnheader", { name: "Nitelik" })).toHaveClass("sticky");
+    expect(screen.getByRole("columnheader", { name: "Gereksinim No" })).toHaveClass("sticky");
   });
 
   it("applies the preferred document typeface and text size", () => {
@@ -124,6 +124,16 @@ describe("DocumentGrid", () => {
     fireEvent.change(screen.getByTestId("grid-type-filter"), { target: { value: "heading" } });
     expect(screen.getByText("1 Giris")).toBeInTheDocument();
     expect(screen.queryByText("Gereksinim A")).not.toBeInTheDocument();
+  });
+
+  it("quick-filters test steps by populated Test step content, regardless of technical row type", () => {
+    const contentStep = makeRow({ id: "content-step", objectNumber: 4, parentId: null, depth: 0, rowType: "heading", title: "Imported row", action: "Verify imported behavior", displayNumber: "2" });
+    renderGrid([rows[0]!, contentStep], "test");
+    fireEvent.change(screen.getByTestId("grid-type-filter"), { target: { value: "test_step" } });
+    expect(screen.getByText("Verify imported behavior")).toBeInTheDocument();
+    expect(screen.queryByText("1 Giris")).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Test ba\u015fl\u0131\u011f\u0131" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Gereksinim" })).not.toBeInTheDocument();
   });
 
   it("opens linked object previews from the compact link count", () => {

@@ -322,6 +322,11 @@ export class LifecycleController {
     return this.lifecycle.readNotification(user.userId, notificationId);
   }
 
+  @Post("notifications/read-all")
+  readAllNotifications(@CurrentUser() user: SessionUser) {
+    return this.lifecycle.readAllNotifications(user.userId);
+  }
+
   @Get("rows/:rowId/executions")
   executions(@CurrentUser() user: SessionUser, @Param("rowId", ParseUUIDPipe) rowId: string) {
     return this.lifecycle.listExecutions(user.userId, rowId);

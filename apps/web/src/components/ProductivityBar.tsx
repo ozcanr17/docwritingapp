@@ -11,6 +11,7 @@ interface ProductivityBarProps {
   columns: GridColumn[];
   query: string;
   rowTypeFilter: OutlineRow["rowType"] | "";
+  rowTypeOptions: OutlineRow["rowType"][];
   sortKey: string;
   sortDirection: "asc" | "desc";
   frozenCount: number;
@@ -130,10 +131,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
         onChange={(event) => props.onRowTypeFilterChange(event.target.value as OutlineRow["rowType"] | "")}
       >
         <option value="">{t("allObjectTypes")}</option>
-        <option value="heading">{t("typeHeading")}</option>
-        <option value="requirement">{t("typeRequirement")}</option>
-        <option value="test_step">{t("typeTestStep")}</option>
-        <option value="note">{t("typeNote")}</option>
+        {props.rowTypeOptions.map((rowType) => <option key={rowType} value={rowType}>{t(rowType === "heading" ? "typeHeading" : rowType === "requirement" ? "typeRequirement" : rowType === "test_case" ? "typeTestCase" : rowType === "test_step" ? "typeTestStep" : "typeNote")}</option>)}
       </select>
       <select
         data-testid="grid-sort"

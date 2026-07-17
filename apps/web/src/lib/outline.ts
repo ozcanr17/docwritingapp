@@ -7,6 +7,12 @@ export interface InsertOption {
   afterRowId?: string;
 }
 
+export function matchesQuickTypeFilter(row: OutlineRow, filter: RowType | ""): boolean {
+  if (!filter) return true;
+  if (filter === "test_step") return row.rowType === "test_step" || Boolean(row.action?.trim());
+  return row.rowType === filter;
+}
+
 function incrementLastSegment(displayNumber: string): string {
   const parts = displayNumber.split(".");
   const last = parseInt(parts[parts.length - 1] ?? "", 10);

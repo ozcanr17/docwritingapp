@@ -1102,6 +1102,14 @@ export class LifecycleService {
     return { ok: true };
   }
 
+  async readAllNotifications(actorId: string) {
+    const result = await this.prisma.notification.updateMany({
+      where: { recipientId: actorId, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return { updated: result.count };
+  }
+
   async listExecutions(actorId: string, testCaseRowId: string) {
     const context = await this.requireRowContext(testCaseRowId);
     await this.assertDocument(actorId, context.document, "row.read");

@@ -33,9 +33,9 @@ export function builtInColumns(documentType: Exclude<DocumentType, "general_docu
   if (documentType === "requirement") {
     return [
       NUMBER_COLUMN,
-      { key: "rowType", labelKey: "attribute", kind: "rowType", width: 132, editable: false },
       { key: "requirementNo", labelKey: "requirementNumber", kind: "requirementNo", width: 168, editable: true, appliesTo: ["requirement"] },
-      { key: "title", labelKey: "requirementDescription", kind: "title", width: 480, editable: true },
+      { key: "title", labelKey: "testTitle", kind: "title", width: 480, editable: true },
+      { key: "rowType", labelKey: "attribute", kind: "rowType", width: 132, editable: false },
       DESCRIPTION_COLUMN,
     ];
   }
