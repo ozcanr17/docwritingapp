@@ -567,7 +567,9 @@
     "incomplete_test_step": "Test adımı veya beklenen sonuç eksik",
     "unverified_test_step": "Test adımının başarılı güncel koşumu yok",
     "uncovered_requirement": "Gereksinimin bağlı bir doğrulama testi yok",
-    "unlinked_test_step": "Test adımı bir gereksinime bağlı değil"
+    "unlinked_test_step": "Test adımı bir gereksinime bağlı değil",
+    "ambiguous_wording": "Gereksinim belirsiz bir ifade içeriyor",
+    "weak_obligation": "Gereksinim zayıf bir yükümlülük kullanıyor"
   },
   "reviewStatus": {
     "draft": "Taslak",

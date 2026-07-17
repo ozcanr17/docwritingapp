@@ -8,6 +8,7 @@ import { AdvancedFilterConfig, applyAdvancedFilter, EMPTY_ADVANCED_FILTER, parse
 import { matchesQuickTypeFilter } from "../lib/outline";
 import { cellValue, columnsForDocument, GridColumn, isCellEditable, totalWidth } from "../lib/columns";
 import { TextReplacement } from "../lib/findReplace";
+import { resolveAppLanguage } from "../lib/i18n";
 import { useColumnStore } from "../stores/columns";
 import { useEditHistoryStore } from "../stores/editHistory";
 import { useSelectionStore } from "../stores/selection";
@@ -103,7 +104,7 @@ function coerceCustom(column: GridColumn, value: string): unknown {
 }
 
 export function DocumentGrid({ documentId, documentType, advancedTargetId, showAdvancedControls = true }: GridProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
   const pushHistory = useEditHistoryStore((s) => s.push);
@@ -381,8 +382,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         body: JSON.stringify({
           name: input.name,
           parentId: input.parentId,
-          sectionTitles: [t("preconditions"), t("testInputs"), t("assumptionsAndConstraints"), t("testStepsHeading")],
-          defaultContent: t("noneDefault"),
+          locale: resolveAppLanguage(i18n.resolvedLanguage ?? i18n.language),
         }),
       }),
     onSuccess: (created) => {

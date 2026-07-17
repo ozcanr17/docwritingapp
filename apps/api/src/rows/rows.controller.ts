@@ -29,8 +29,9 @@ const createRowSchema = z.object({
 const createTestTemplateSchema = z.object({
   name: z.string().min(1).max(1000),
   parentId: z.string().uuid().nullable().default(null),
-  sectionTitles: z.array(z.string().min(1).max(200)).length(4),
-  defaultContent: z.string().min(1).max(1000),
+  locale: z.enum(["tr", "en"]).optional(),
+  sectionTitles: z.array(z.string().min(1).max(200)).length(4).optional(),
+  defaultContent: z.string().min(1).max(1000).optional(),
 });
 
 const updateRowSchema = z.object({
@@ -145,7 +146,7 @@ export class RowsController {
     @Param("documentId", ParseUUIDPipe) documentId: string,
     @Body(new ZodBodyPipe(createTestTemplateSchema)) body: z.infer<typeof createTestTemplateSchema>,
   ) {
-    return this.rows.createTestTemplate(user.userId, documentId, body.name, body.parentId, body.sectionTitles, body.defaultContent);
+    return this.rows.createTestTemplate(user.userId, documentId, body.name, body.parentId, body.locale ?? "tr", body.sectionTitles, body.defaultContent);
   }
 
   @Get("documents/:documentId/rows")

@@ -7,10 +7,14 @@ const LANGUAGE_STORAGE_KEY = "docsys-language";
 
 export type AppLanguage = "tr" | "en";
 
+export function resolveAppLanguage(language: string | undefined): AppLanguage {
+  return language === "en" || language?.startsWith("en-") ? "en" : "tr";
+}
+
 export function storedLanguage(): AppLanguage {
   if (typeof window === "undefined" || typeof window.localStorage?.getItem !== "function") return "tr";
   const value = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
-  return value === "en" ? "en" : "tr";
+  return resolveAppLanguage(value ?? undefined);
 }
 
 export function setLanguage(language: AppLanguage): void {

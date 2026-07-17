@@ -145,14 +145,14 @@ describe("document rows", () => {
       method: "POST",
       url: `/documents/${testDocument.id}/test-templates`,
       headers: { cookie: actor.cookie },
-      payload: { name: "Authentication", parentId: null, sectionTitles: ["Preconditions", "Inputs", "Constraints", "Steps"], defaultContent: "None." },
+      payload: { name: "Authentication", parentId: null, locale: "en" },
     });
     expect(response.statusCode).toBe(201);
     const outline = await app.inject({ method: "GET", url: `/documents/${testDocument.id}/outline`, headers: { cookie: actor.cookie } });
     const rows = JSON.parse(outline.body) as Array<{ rowType: string; title: string; displayNumber: string }>;
     expect(rows).toEqual(expect.arrayContaining([
       expect.objectContaining({ rowType: "heading", title: "Authentication" }),
-      expect.objectContaining({ rowType: "heading", title: "Preconditions" }),
+      expect.objectContaining({ rowType: "heading", title: "Prerequisites" }),
       expect.objectContaining({ rowType: "test_step", title: "" }),
       expect.objectContaining({ rowType: "note", title: "None." }),
     ]));

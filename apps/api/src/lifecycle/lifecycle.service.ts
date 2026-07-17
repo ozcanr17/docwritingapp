@@ -12,6 +12,7 @@ import {
 import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { wordingQualityRules } from "./requirement-quality";
 import { resolveTestScenario } from "../common/test-scenarios";
 import { RowsService, TemplateRowSnapshot, UpdateRowInput } from "../rows/rows.service";
 import { StorageService } from "../storage/storage.service";
@@ -347,6 +348,9 @@ export class LifecycleService {
         rowIssues.push({ rule: "duplicate_number", severity: "error", rowId: row.id, title: row.title });
       }
       if (!row.title.trim()) rowIssues.push({ rule: "empty_description", severity: "error", rowId: row.id, title: row.title });
+      for (const rule of wordingQualityRules(row.title)) {
+        rowIssues.push({ rule, severity: "warning", rowId: row.id, title: row.title });
+      }
       const linkedTypes = [
         ...row.outgoingLinks.map((link) => link.targetRow.rowType),
         ...row.incomingLinks.map((link) => link.sourceRow.rowType),
@@ -356,15 +360,18 @@ export class LifecycleService {
       }
       return rowIssues;
     });
+    const weightedPenalty = issues.reduce((total, issue) => total + (issue.severity === "error" ? 25 : 10), 0);
     return {
       totalRequirements: requirements.length,
-      score: requirements.length === 0 ? 100 : Math.max(0, Math.round(100 - (issues.length / requirements.length) * 25)),
+      score: requirements.length === 0 ? 100 : Math.max(0, Math.round(100 - weightedPenalty / requirements.length)),
       issues,
       summary: {
         missingNumber: issues.filter((issue) => issue.rule === "missing_number").length,
         duplicateNumber: issues.filter((issue) => issue.rule === "duplicate_number").length,
         emptyDescription: issues.filter((issue) => issue.rule === "empty_description").length,
         untestedRequirement: issues.filter((issue) => issue.rule === "untested_requirement").length,
+        ambiguousWording: issues.filter((issue) => issue.rule === "ambiguous_wording").length,
+        weakObligation: issues.filter((issue) => issue.rule === "weak_obligation").length,
       },
     };
   }
@@ -813,6 +820,8 @@ export class LifecycleService {
       duplicate_number: "Rename one requirement number and repair incoming references.",
       empty_description: "Write a measurable statement with actor, behavior and acceptance condition.",
       untested_requirement: "Create or link a test case and define observable expected results.",
+      ambiguous_wording: "Replace vague qualifiers with a measurable threshold or an explicit condition.",
+      weak_obligation: "Use a binding obligation and state an observable acceptance criterion.",
     };
     return quality.issues.map((issue) => ({ ...issue, recommendation: guidance[issue.rule] ?? "Review this artifact." }));
   }

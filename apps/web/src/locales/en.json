@@ -337,7 +337,7 @@
   "addTestTemplateBelow": "Add test scenario template below",
   "testTemplateHelp": "Creates the standard sections and one empty test step under a named test heading.",
   "testName": "Test name",
-  "preconditions": "Preconditions",
+  "preconditions": "Prerequisites",
   "testInputs": "Test Inputs",
   "assumptionsAndConstraints": "Assumptions and Constraints",
   "testStepsHeading": "Test Steps",
@@ -568,7 +568,9 @@
     "incomplete_test_step": "Test action or expected result is missing",
     "unverified_test_step": "Test step has no current passing execution",
     "uncovered_requirement": "Requirement has no linked verification test",
-    "unlinked_test_step": "Test step is not linked to a requirement"
+    "unlinked_test_step": "Test step is not linked to a requirement",
+    "ambiguous_wording": "Requirement contains ambiguous wording",
+    "weak_obligation": "Requirement uses a weak obligation"
   },
   "reviewStatus": {
     "draft": "Draft",

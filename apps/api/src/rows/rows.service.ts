@@ -13,6 +13,7 @@ import { rankBetween } from "../common/rank";
 import { resolveTestScenario } from "../common/test-scenarios";
 import { PrismaService } from "../prisma/prisma.service";
 import { validateCustomFields } from "./custom-field.validator";
+import { testTemplateCopy, TestTemplateLocale } from "./test-template-copy";
 
 export interface CreateRowInput {
   documentId: string;
@@ -137,13 +138,24 @@ export class RowsService {
     return row;
   }
 
-  async createTestTemplate(actorId: string, documentId: string, name: string, parentId: string | null, sectionTitles: string[], defaultContent: string) {
+  async createTestTemplate(
+    actorId: string,
+    documentId: string,
+    name: string,
+    parentId: string | null,
+    locale: TestTemplateLocale,
+    legacySectionTitles?: string[],
+    legacyDefaultContent?: string,
+  ) {
     const document = await this.requireDocument(documentId);
     await this.access.assertPermission(actorId, "row.write", {
       organizationId: document.organizationId,
       workspaceId: document.workspaceId,
     });
     if (document.documentType !== "test") throw new UnprocessableEntityException("Test templates require a test document");
+    const localizedCopy = testTemplateCopy(locale);
+    const sectionTitles = legacySectionTitles ?? localizedCopy.sectionTitles;
+    const defaultContent = legacyDefaultContent ?? localizedCopy.defaultContent;
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
       let rootPath = "";
