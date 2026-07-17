@@ -61,4 +61,18 @@ describe("document tabs", () => {
     useDocumentTabsStore.getState().reorder("requirement", "test");
     expect(useDocumentTabsStore.getState().tabs.map((tab) => tab.id)).toEqual(["test", "requirement"]);
   });
+
+  it("keeps a unique most-recently-used document list", () => {
+    useDocumentTabsStore.getState().open(requirement);
+    useDocumentTabsStore.getState().open(test);
+    useDocumentTabsStore.getState().open(requirement);
+    expect(useDocumentTabsStore.getState().recentDocuments).toEqual([requirement, test]);
+  });
+
+  it("adds and removes personal document favorites", () => {
+    useDocumentTabsStore.getState().toggleFavorite(requirement);
+    expect(useDocumentTabsStore.getState().favoriteDocuments).toEqual([requirement]);
+    useDocumentTabsStore.getState().toggleFavorite(requirement);
+    expect(useDocumentTabsStore.getState().favoriteDocuments).toEqual([]);
+  });
 });

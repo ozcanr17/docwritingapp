@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, FileText, Folder as FolderIcon, GripVertical } from "lucide-react";
+import { ChevronDown, ChevronRight, Clock3, FilePlus2, FileText, Folder as FolderIcon, GripVertical, Star } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentSummary, FolderSummary } from "../lib/api";
 import { ContextMenu, MenuItem } from "./ContextMenu";
+import { DocumentTab, useDocumentTabsStore } from "../stores/documentTabs";
 import { useToastStore } from "../stores/toasts";
 
 interface TreePanelProps {
@@ -22,6 +23,7 @@ interface MenuState {
   y: number;
   folderId: string | null;
   documentId?: string;
+  document?: DocumentTab;
   version?: number;
 }
 
@@ -59,6 +61,9 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   const [draggedNode, setDraggedNode] = useState<DraggedNode | null>(null);
   const [dropTarget, setDropTarget] = useState<string | "root" | null>(null);
   const pushToast = useToastStore((state) => state.push);
+  const recentDocuments = useDocumentTabsStore((state) => state.recentDocuments);
+  const favoriteDocuments = useDocumentTabsStore((state) => state.favoriteDocuments);
+  const toggleFavorite = useDocumentTabsStore((state) => state.toggleFavorite);
   const { data: folders = [] } = useQuery({
     queryKey: ["folders", workspaceId],
     queryFn: () => api<Array<FolderSummary & { ancestorPath: string; depth: number }>>(`/workspaces/${workspaceId}/folders`),
@@ -79,7 +84,13 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
       },
       { key: "newTextDocument", label: t("newTextDocument"), onSelect: () => startCreate(state.folderId, "textDocument") },
     ];
-    if (state.documentId) {
+    if (state.documentId && state.document) {
+      const favorite = favoriteDocuments.some((document) => document.id === state.documentId);
+      items.push({
+        key: "favorite",
+        label: favorite ? t("removeFromFavorites") : t("addToFavorites"),
+        onSelect: () => toggleFavorite(state.document as DocumentTab),
+      });
       items.push({
         key: "move",
         label: t("moveAction"),
@@ -248,6 +259,12 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
         setMenu({ x: event.clientX, y: event.clientY, folderId: null });
       }}
     >
+      <QuickDocuments
+        favorites={favoriteDocuments}
+        recent={recentDocuments.filter((document) => !favoriteDocuments.some((favorite) => favorite.id === document.id)).slice(0, 5)}
+        selectedDocumentId={selectedDocumentId}
+        onSelectDocument={onSelectDocument}
+      />
       {draggedNode && (
         <div
           data-testid="tree-root-drop-target"
@@ -280,6 +297,8 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
         onDragEnd={() => { setDraggedNode(null); setDropTarget(null); }}
         onDropTargetChange={setDropTarget}
         onDropNode={moveByDrop}
+        favoriteIds={new Set(favoriteDocuments.map((document) => document.id))}
+        onCreateRoot={(kind) => startCreate(null, kind)}
       />
       {draggedNode && <div className="pointer-events-none sticky bottom-2 mx-2 rounded-lg border border-primary/30 bg-surfaceElevated/95 px-3 py-2 text-xs shadow-lg">{t("dragMoveHint", { name: draggedNode.label })}</div>}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu)} onClose={() => setMenu(null)} />}
@@ -362,6 +381,44 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   );
 }
 
+function QuickDocuments({ favorites, recent, selectedDocumentId, onSelectDocument }: {
+  favorites: DocumentTab[];
+  recent: DocumentTab[];
+  selectedDocumentId: string | null;
+  onSelectDocument: (document: DocumentSummary) => void;
+}) {
+  const { t } = useTranslation();
+  if (favorites.length === 0 && recent.length === 0) return null;
+  const renderList = (documents: DocumentTab[], icon: "favorite" | "recent") => (
+    <div className="space-y-0.5">
+      {documents.map((document) => (
+        <button
+          key={document.id}
+          type="button"
+          data-testid={`quick-document-${document.id}`}
+          className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted ${selectedDocumentId === document.id ? "bg-selection" : ""}`}
+          onClick={() => onSelectDocument(document as DocumentSummary)}
+        >
+          {icon === "favorite" ? <Star size={13} className="fill-warning text-warning" /> : <Clock3 size={13} className="text-mutedForeground" />}
+          <span className="min-w-0 flex-1 truncate">{document.title}</span>
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <div data-testid="tree-quick-access" className="mx-2 mb-2 space-y-2 border-b border-border pb-2">
+      {favorites.length > 0 && <section>
+        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-mutedForeground">{t("favorites")}</div>
+        {renderList(favorites, "favorite")}
+      </section>}
+      {recent.length > 0 && <section>
+        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-mutedForeground">{t("recentDocuments")}</div>
+        {renderList(recent, "recent")}
+      </section>}
+    </div>
+  );
+}
+
 function TreeBranch(props: {
   workspaceId: string;
   parentId: string | null;
@@ -375,8 +432,10 @@ function TreeBranch(props: {
   onDragEnd: () => void;
   onDropTargetChange: (target: string | "root" | null) => void;
   onDropNode: (targetFolderId: string | null) => Promise<boolean>;
+  favoriteIds: Set<string>;
+  onCreateRoot: (kind: CreateKind) => void;
 }) {
-  const { workspaceId, parentId, depth, selectedDocumentId, onSelectDocument, onContextMenu, draggedNode, dropTarget, onDragStart, onDragEnd, onDropTargetChange, onDropNode } = props;
+  const { workspaceId, parentId, depth, selectedDocumentId, onSelectDocument, onContextMenu, draggedNode, dropTarget, onDragStart, onDragEnd, onDropTargetChange, onDropNode, favoriteIds, onCreateRoot } = props;
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -388,7 +447,14 @@ function TreeBranch(props: {
 
   if (!data) return null;
   if (depth === 0 && data.folders.length === 0 && data.documents.length === 0) {
-    return <div data-testid="tree-empty" className="px-3 py-2 text-mutedForeground">{t("emptyTree")}</div>;
+    return <div data-testid="tree-empty" className="mx-2 rounded-xl border border-dashed border-border bg-editorBackground/50 p-3">
+      <div className="font-medium text-foreground">{t("emptyWorkspaceTitle")}</div>
+      <p className="mt-1 text-xs leading-5 text-mutedForeground">{t("emptyWorkspaceDescription")}</p>
+      <div className="mt-3 grid grid-cols-2 gap-1.5">
+        <button type="button" data-testid="empty-create-requirement" className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-2 py-1.5 text-xs hover:bg-muted" onClick={() => onCreateRoot("requirementDocument")}><FilePlus2 size={13} />{t("requirementDocumentShort")}</button>
+        <button type="button" data-testid="empty-create-test" className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-2 py-1.5 text-xs hover:bg-muted" onClick={() => onCreateRoot("testDocument")}><FilePlus2 size={13} />{t("testDocumentShort")}</button>
+      </div>
+    </div>;
   }
 
   const toggle = (id: string) => {
@@ -466,6 +532,8 @@ function TreeBranch(props: {
               onDragEnd={onDragEnd}
               onDropTargetChange={onDropTargetChange}
               onDropNode={onDropNode}
+              favoriteIds={favoriteIds}
+              onCreateRoot={onCreateRoot}
             />
           )}
         </li>
@@ -501,13 +569,15 @@ function TreeBranch(props: {
                 y: event.clientY,
                 folderId: document.folderId,
                 documentId: document.id,
+                document,
                 version: document.version,
               });
             }}
           >
             <FileText size={14} className="text-info" />
             <span className="truncate">{document.title}</span>
-            <GripVertical size={12} className="ml-auto opacity-0 transition-opacity group-hover:opacity-50" />
+            {favoriteIds.has(document.id) && <Star size={12} className="ml-auto fill-warning text-warning" aria-label={t("favoriteDocument")} />}
+            <GripVertical size={12} className={`${favoriteIds.has(document.id) ? "" : "ml-auto"} opacity-0 transition-opacity group-hover:opacity-50`} />
           </button>
         </li>
       ))}

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, LogOut, Settings, Trash2, Users } from "lucide-react";
+import { Clock3, FileText, LogOut, Settings, Star, Trash2, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -58,6 +58,8 @@ export function ShellPage() {
   const presenceTriggerRef = useRef<HTMLDivElement>(null);
   const closeReport = useCallback(() => setReport(null), []);
   const tabs = useDocumentTabsStore((s) => s.tabs);
+  const recentDocuments = useDocumentTabsStore((s) => s.recentDocuments);
+  const favoriteDocuments = useDocumentTabsStore((s) => s.favoriteDocuments);
   const activeDocumentId = useDocumentTabsStore((s) => s.activeId);
   const secondaryDocumentId = useDocumentTabsStore((s) => s.secondaryId);
   const focusedDocumentId = useDocumentTabsStore((s) => s.focusedId);
@@ -459,7 +461,18 @@ export function ShellPage() {
             )}
           </div>
         ) : view === "documents" ? (
-          <div className="p-8 text-sm text-mutedForeground">{t("selectDocument")}</div>
+          <div data-testid="workspace-empty-state" className="flex min-h-0 flex-1 items-center justify-center p-8">
+            <div className="w-full max-w-xl rounded-2xl border border-border bg-surfaceElevated p-6 shadow-sm">
+              <div className="text-base font-semibold text-foreground">{t("workspaceStartTitle")}</div>
+              <p className="mt-1 text-sm leading-6 text-mutedForeground">{t("workspaceStartDescription")}</p>
+              {(favoriteDocuments.length > 0 || recentDocuments.length > 0) && (
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  {favoriteDocuments.length > 0 && <WorkspaceDocumentList title={t("favorites")} icon="favorite" documents={favoriteDocuments.slice(0, 5)} onOpen={openDocument} />}
+                  {recentDocuments.length > 0 && <WorkspaceDocumentList title={t("recentDocuments")} icon="recent" documents={recentDocuments.filter((document) => !favoriteDocuments.some((favorite) => favorite.id === document.id)).slice(0, 5)} onOpen={openDocument} />}
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="p-8 text-sm text-mutedForeground">{t("trash")}</div>
         )}
@@ -481,6 +494,19 @@ export function ShellPage() {
       </div>
     </div>
   );
+}
+
+function WorkspaceDocumentList({ title, icon, documents, onOpen }: { title: string; icon: "favorite" | "recent"; documents: DocumentTab[]; onOpen: (document: DocumentTab) => void }) {
+  if (documents.length === 0) return null;
+  return <section>
+    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-mutedForeground">{title}</div>
+    <div className="space-y-1">
+      {documents.map((document) => <button key={document.id} type="button" data-testid={`workspace-document-${document.id}`} className="flex w-full items-center gap-2 rounded-lg border border-transparent px-2.5 py-2 text-left text-sm hover:border-border hover:bg-muted" onClick={() => onOpen(document)}>
+        {icon === "favorite" ? <Star size={14} className="fill-warning text-warning" /> : <Clock3 size={14} className="text-mutedForeground" />}
+        <span className="min-w-0 flex-1 truncate">{document.title}</span>
+      </button>)}
+    </div>
+  </section>;
 }
 
 function DocumentPane({ tab, displayName, focused, split, position, onFocus }: { tab: DocumentTab | null; displayName: string; focused: boolean; split: boolean; position: "primary" | "secondary"; onFocus: () => void }) {
