@@ -90,9 +90,10 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
               <ChoiceButton active={storedLanguage() === "tr"} label={t("langTurkish")} onClick={() => setLanguage("tr")} />
               <ChoiceButton active={storedLanguage() === "en"} label={t("langEnglish")} onClick={() => setLanguage("en")} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <ChoiceButton active={preferences.rowDensity === "comfortable"} label={t("comfortableDensity")} onClick={() => preferences.setRowDensity("comfortable")} />
+            <div className="grid grid-cols-3 gap-2" role="group" aria-label={t("rowDensity")}>
               <ChoiceButton active={preferences.rowDensity === "compact"} label={t("compactDensity")} onClick={() => preferences.setRowDensity("compact")} />
+              <ChoiceButton active={preferences.rowDensity === "standard"} label={t("standardDensity")} onClick={() => preferences.setRowDensity("standard")} />
+              <ChoiceButton active={preferences.rowDensity === "comfortable"} label={t("comfortableDensity")} onClick={() => preferences.setRowDensity("comfortable")} />
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="rounded-lg border border-border bg-editorBackground p-3 text-sm"><span className="block font-medium">{t("documentFontSize")}</span><span className="mt-0.5 block text-xs text-mutedForeground">{t("documentFontSizeHelp")}</span><select data-testid="document-font-size" className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-1.5" value={preferences.documentFontSize} onChange={(event) => preferences.setDocumentFontSize(Number(event.target.value))}>{[12, 13, 14, 15, 16, 18, 20].map((size) => <option key={size} value={size}>{size} px</option>)}</select></label>
@@ -101,6 +102,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
             <div data-testid="document-font-preview" className="rounded-lg border border-dashed border-border bg-surface px-4 py-3" style={{ fontFamily: documentFontFamilies[preferences.documentFontFamily], fontSize: preferences.documentFontSize }}>{t("documentFontPreview")}</div>
             <ToggleRow label={t("showHierarchyGuides")} description={t("showHierarchyGuidesHelp")} checked={preferences.showHierarchyGuides} onChange={preferences.setShowHierarchyGuides} />
             <ToggleRow label={t("showChangeIndicators")} description={t("showChangeIndicatorsHelp")} checked={preferences.showChangeIndicators} onChange={preferences.setShowChangeIndicators} />
+            <ToggleRow label={t("highContrast")} description={t("highContrastHelp")} checked={preferences.highContrast} onChange={preferences.setHighContrast} />
           </SettingsSection>
           <SettingsSection title={t("authoringBehaviorSettings")} description={t("authoringBehaviorSettingsHelp")}>
             <ToggleRow label={t("enableSpellCheck")} description={t("enableSpellCheckHelp")} checked={preferences.spellCheck} onChange={preferences.setSpellCheck} />

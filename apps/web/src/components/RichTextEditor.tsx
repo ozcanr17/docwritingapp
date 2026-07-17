@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import * as Y from "yjs";
 import { api, getCollabUrl } from "../lib/api";
 import { documentFontFamilies, useAuthoringPreferencesStore } from "../stores/authoringPreferences";
+import { useSaveStatusStore } from "../stores/saveStatus";
 
 interface RichTextEditorProps {
   documentId: string;
@@ -32,6 +33,7 @@ export function RichTextEditor({ documentId, displayName }: RichTextEditorProps)
   const { t } = useTranslation();
   const [bundle, setBundle] = useState<CollabBundle | null>(null);
   const [connected, setConnected] = useState(false);
+  const setSaveStatus = useSaveStatusStore((state) => state.setStatus);
 
   useEffect(() => {
     const ydoc = new Y.Doc();
@@ -41,20 +43,29 @@ export function RichTextEditor({ documentId, displayName }: RichTextEditorProps)
       document: ydoc,
       token: async () => (await api<{ token: string }>("/auth/collab-token")).token,
     });
-    const onSynced = () => setConnected(true);
-    const onDisconnect = () => setConnected(false);
+    let savedTimer: ReturnType<typeof setTimeout> | null = null;
+    const onSynced = () => { setConnected(true); setSaveStatus(documentId, "saved"); };
+    const onDisconnect = () => { setConnected(false); setSaveStatus(documentId, "offline"); };
+    const onUpdate = (_update: Uint8Array, origin: unknown) => {
+      if (origin !== provider) setSaveStatus(documentId, "saving");
+      if (savedTimer) clearTimeout(savedTimer);
+      savedTimer = setTimeout(() => setSaveStatus(documentId, navigator.onLine ? "saved" : "offline"), 600);
+    };
     provider.on("synced", onSynced);
     provider.on("disconnect", onDisconnect);
+    ydoc.on("update", onUpdate);
     setBundle({ ydoc, provider });
     return () => {
       provider.off("synced", onSynced);
       provider.off("disconnect", onDisconnect);
+      ydoc.off("update", onUpdate);
+      if (savedTimer) clearTimeout(savedTimer);
       provider.destroy();
       ydoc.destroy();
       setBundle(null);
       setConnected(false);
     };
-  }, [documentId]);
+  }, [documentId, setSaveStatus]);
 
   return (
     <div className="flex h-full flex-col bg-editorBackground">

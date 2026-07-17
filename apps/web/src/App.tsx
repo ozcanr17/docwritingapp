@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ChunkErrorBoundary } from "./components/ChunkErrorBoundary";
 import { Toasts } from "./components/Toasts";
 import { DesktopUpdate } from "./components/DesktopUpdate";
+import { useAuthoringPreferencesStore } from "./stores/authoringPreferences";
 
 const LoginPage = lazy(() => import("./pages/LoginPage").then((module) => ({ default: module.LoginPage })));
 const ShellPage = lazy(() => import("./pages/ShellPage").then((module) => ({ default: module.ShellPage })));
@@ -14,6 +15,10 @@ const queryClient = new QueryClient({
 });
 
 export function App() {
+  const highContrast = useAuthoringPreferencesStore((state) => state.highContrast);
+  useEffect(() => {
+    document.documentElement.classList.toggle("docsys-high-contrast", highContrast);
+  }, [highContrast]);
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>

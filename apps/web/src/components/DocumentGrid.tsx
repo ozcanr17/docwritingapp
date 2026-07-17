@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronRight, Link2, Settings2, Trash2, X } from "lucide-react";
 import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +24,7 @@ import { OperationImpactSummary } from "./OperationImpactSummary";
 import { ShortcutCommandId } from "../lib/keyboardShortcuts";
 import { EditImpactDialog } from "./EditImpactDialog";
 import { useEscapeClose } from "../hooks/useEscapeClose";
+import { useSaveStatusStore } from "../stores/saveStatus";
 
 interface GridProps {
   documentId: string;
@@ -152,7 +153,8 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const selectedRowId = useSelectionStore((s) => s.selectedRowId);
   const selectedRowIds = useSelectionStore((s) => s.selectedRowIds);
   const hiddenByDocument = useColumnStore((s) => s.hidden);
-  const storedHidden = hiddenByDocument[documentId] ?? [];
+  const hasStoredVisibility = Object.prototype.hasOwnProperty.call(hiddenByDocument, documentId);
+  const storedHidden = hasStoredVisibility ? hiddenByDocument[documentId] ?? [] : ["description"];
   const widthOf = useColumnStore((s) => s.widthOf);
   const setWidth = useColumnStore((s) => s.setWidth);
   const hideColumn = useColumnStore((s) => s.hide);
@@ -299,12 +301,24 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const deleteAffectedRows = useMemo(() => deleteTarget ? rowsInSubtrees(rows, [deleteTarget.id]) : [], [deleteTarget, rows]);
   const deleteLinkedReferenceCount = useMemo(() => deleteAffectedRows.reduce((sum, row) => sum + (row.linkCount ?? 0), 0), [deleteAffectedRows]);
   const selectedGridRow = rows.find((row) => row.id === selectedRowId);
+  const pendingWrites = useIsMutating({ mutationKey: ["document-write", documentId] });
+  const setSaveStatus = useSaveStatusStore((s) => s.setStatus);
+  const currentSaveState = useSaveStatusStore((s) => s.documents[documentId]?.state);
+
+  useEffect(() => {
+    if (!navigator.onLine) {
+      setSaveStatus(documentId, "offline");
+      return;
+    }
+    if (pendingWrites > 0) setSaveStatus(documentId, "saving");
+    else if (currentSaveState !== "conflict") setSaveStatus(documentId, "saved");
+  }, [currentSaveState, documentId, pendingWrites, setSaveStatus]);
 
   const virtualizer = useVirtualizer({
     count: displayedRows.length,
     getScrollElement: () => scrollRef.current,
     getItemKey: (index) => displayedRows[index]?.id ?? index,
-    estimateSize: () => rowDensity === "compact" ? 44 : 56,
+    estimateSize: () => rowDensity === "compact" ? 40 : rowDensity === "comfortable" ? 64 : 52,
     overscan: 20,
     initialRect: { width: 1000, height: 600 },
   });
@@ -312,11 +326,13 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const invalidate = () => queryClient.invalidateQueries({ queryKey: outlineKey });
 
   const handleMutationError = (error: unknown) => {
+    if (error instanceof ApiError && error.status === 409) setSaveStatus(documentId, "conflict");
     pushToast("error", error instanceof ApiError && error.status === 409 ? t("conflictError") : t("genericError"));
     void invalidate();
   };
 
   const saveView = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { name: string; scope: "personal" | "team"; isDefault: boolean }) =>
       api<SavedView>(`/documents/${documentId}/views`, {
         method: "POST",
@@ -339,6 +355,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const deleteView = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (viewId: string) => api(`/views/${viewId}`, { method: "DELETE" }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["saved-views", documentId] }),
     onError: handleMutationError,
@@ -375,6 +392,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   }, [applyView, documentId, savedViews]);
 
   const createRow = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { parentId: string | null; afterRowId?: string; rowType: OutlineRow["rowType"] }) =>
       api<OutlineRow>(`/documents/${documentId}/rows`, {
         method: "POST",
@@ -387,6 +405,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const saveCell = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { column: GridColumn; row: OutlineRow; value: string; numberingStart?: string | null }) =>
       api<OutlineRow>(`/rows/${input.row.id}`, {
         method: "PATCH",
@@ -410,6 +429,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const createTestTemplate = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { name: string; parentId: string | null }) =>
       api<{ root: { id: string } }>(`/documents/${documentId}/test-templates`, {
         method: "POST",
@@ -429,6 +449,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const saveAuthoringTemplate = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { name: string; sourceRowId: string | null }) => api(`/documents/${documentId}/templates`, {
       method: "POST",
       body: JSON.stringify(input),
@@ -441,6 +462,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const applyAuthoringTemplate = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { templateId: string; parentId: string | null }) => api<{ rowsCreated: number; rootIds: string[] }>(`/documents/${documentId}/templates/${input.templateId}/apply`, {
       method: "POST",
       body: JSON.stringify({ parentId: input.parentId }),
@@ -454,12 +476,14 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const deleteAuthoringTemplate = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (templateId: string) => api(`/documents/${documentId}/templates/${templateId}`, { method: "DELETE" }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["document-templates", documentId] }),
     onError: handleMutationError,
   });
 
   const addColumn = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { displayName: string; fieldType: CustomFieldType; allowedValues: string[] }) =>
       api<FieldDefinition>(`/documents/${documentId}/fields`, {
         method: "POST",
@@ -483,6 +507,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const updateStepStatus = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { rowId: string; status: string }) => api(`/test-steps/${input.rowId}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status: input.status }),
@@ -501,6 +526,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const moveRow = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { row: OutlineRow; newParentId: string | null; afterRowId?: string }) =>
       api<OutlineRow>(`/rows/${input.row.id}/move`, {
         method: "POST",
@@ -528,6 +554,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const deleteRow = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { row: OutlineRow; childStrategy: "delete_subtree" | "promote_children" }) =>
       api(`/rows/${input.row.id}`, { method: "DELETE", body: JSON.stringify({ childStrategy: input.childStrategy }) }),
     onSuccess: (_, input) => {
@@ -539,6 +566,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const updateNumbering = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: (input: { row: OutlineRow; numberingStart: number | null }) =>
       api(`/rows/${input.row.id}`, {
         method: "PATCH",
@@ -561,6 +589,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const deleteRows = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: async (rowIds: string[]) => {
       for (const rowId of rowIds) {
         await api(`/rows/${rowId}`, { method: "DELETE", body: JSON.stringify({}) });
@@ -575,6 +604,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const replaceText = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: async (replacements: TextReplacement[]) => {
       const currentRows = new Map((await api<OutlineRow[]>(`/documents/${documentId}/outline`)).map((row) => [row.id, row]));
       for (const replacement of replacements) {
@@ -595,6 +625,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   });
 
   const runBulkAction = useMutation({
+    mutationKey: ["document-write", documentId],
     mutationFn: async (input: BulkActionInput) => {
       if (input.action === "copy") {
         return api(`/documents/${documentId}/rows/copy`, {
@@ -1041,6 +1072,10 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
       <div
         ref={scrollRef}
         data-testid="document-grid-scroll"
+        role="grid"
+        aria-rowcount={displayedRows.length + 1}
+        aria-colcount={columns.length}
+        aria-label={t("documentGrid")}
         className="flex-1 overflow-auto"
         tabIndex={0}
         onKeyDown={(event) => {
@@ -1137,9 +1172,13 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                   data-index={virtualRow.index}
                   key={row.id}
                   data-testid={`grid-row-${row.displayNumber}`}
+                  role="row"
+                  aria-selected={selectedRowIds.includes(row.id)}
+                  aria-label={`${t("rowId")} ${row.objectNumber}: ${row.title || row.rowType}`}
                   draggable={editing?.rowId !== row.id}
-                  className={`absolute left-0 top-0 grid items-stretch gap-2 border-b border-border px-4 transition-colors hover:bg-muted/70 ${rowDensity === "compact" ? "min-h-11 py-0.5" : "min-h-14 py-1.5"} ${
-                    selectedRowIds.includes(row.id) ? "bg-selection" : ""
+                  className={`absolute left-0 top-0 grid items-stretch gap-2 border-b border-border px-4 transition-colors hover:bg-muted/70 ${rowDensity === "compact" ? "min-h-10 py-0.5" : rowDensity === "comfortable" ? "min-h-16 py-2.5" : "min-h-[52px] py-1.5"} ${
+                    selectedRowIds.includes(row.id) ? "z-[1] bg-selection shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.55)]" : ""
+                  } ${editing?.rowId === row.id ? "bg-primary/10 shadow-[inset_3px_0_0_hsl(var(--primary)),inset_0_0_0_1px_hsl(var(--primary)/0.7)]" : ""
                   } ${advancedFilter.highlightMatches && advancedFilterResult.matchedIds.has(row.id) ? "ring-1 ring-inset ring-primary/40" : ""}`}
                   style={{
                     transform: `translateY(${virtualRow.start}px)`,
@@ -1191,6 +1230,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                   {columns.map((column, columnIndex) => (
                     <div
                       key={column.key}
+                      role="gridcell"
                       className={`relative ${isFrozenColumn(columnIndex) ? "sticky z-10 bg-inherit" : ""}`}
                       style={isFrozenColumn(columnIndex) ? { left: frozenOffsets[columnIndex] } : undefined}
                     >

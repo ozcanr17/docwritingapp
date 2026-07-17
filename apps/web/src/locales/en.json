@@ -581,6 +581,54 @@
   "fontMono": "Monospace",
   "comfortableDensity": "Comfortable rows",
   "compactDensity": "Compact rows",
+  "standardDensity": "Standard rows",
+  "rowDensity": "Row density",
+  "documentGrid": "Document objects grid",
+  "highContrast": "High contrast",
+  "highContrastHelp": "Makes borders, focus rings and secondary text more distinct.",
+  "documentOverview": "Document overview",
+  "documentOverviewHelp": "This area changes to row details when a row is selected. With no selection, it shows document coverage and quality.",
+  "closeDetailsPanel": "Close details panel",
+  "totalObjects": "Total objects",
+  "headings": "Headings",
+  "linkedObjects": "Linked objects",
+  "coverageAndQuality": "Coverage and quality",
+  "coveredRequirements": "Covered requirements",
+  "qualityIssues": "Quality findings",
+  "incompleteTests": "Incomplete tests",
+  "saveState": {
+    "saving": "Saving",
+    "saved": "Saved",
+    "offline": "Offline",
+    "conflict": "Conflict"
+  },
+  "workspaceFocus": {
+    "label": "Workspace focus",
+    "author": {
+      "label": "Author",
+      "title": "Authoring and quality workspace",
+      "description": "Create requirement and test content, monitor quality rules and complete traceability.",
+      "primary": "Document authoring and hierarchy",
+      "secondary": "Quality findings",
+      "tertiary": "Traceability coverage"
+    },
+    "tester": {
+      "label": "Tester",
+      "title": "Execution workspace",
+      "description": "Run test steps, capture evidence and follow retest candidates.",
+      "primary": "Active test runs",
+      "secondary": "Incomplete test steps",
+      "tertiary": "Retest candidates"
+    },
+    "reviewer": {
+      "label": "Reviewer",
+      "title": "Review and approval workspace",
+      "description": "Evaluate proposed changes, suspect links and documents awaiting approval in one place.",
+      "primary": "Review queue",
+      "secondary": "Change proposals",
+      "tertiary": "Approval and baseline status"
+    }
+  },
   "showHierarchyGuides": "Show hierarchy guides",
   "showHierarchyGuidesHelp": "Draw subtle vertical guides for nested headings and objects.",
   "showChangeIndicators": "Show change-state indicators",

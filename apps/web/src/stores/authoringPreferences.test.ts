@@ -13,6 +13,8 @@ describe("authoring preferences", () => {
     state.setDefaultFrozenColumns(3);
     state.setDocumentFontSize(16);
     state.setDocumentFontFamily("serif");
+    state.setHighContrast(true);
+    state.setWorkspaceFocus("reviewer");
     expect(useAuthoringPreferencesStore.getState()).toEqual(expect.objectContaining({
       rowDensity: "compact",
       showHierarchyGuides: false,
@@ -21,6 +23,8 @@ describe("authoring preferences", () => {
       defaultFrozenColumns: 3,
       documentFontSize: 16,
       documentFontFamily: "serif",
+      highContrast: true,
+      workspaceFocus: "reviewer",
     }));
   });
 
@@ -30,6 +34,6 @@ describe("authoring preferences", () => {
     expect(useAuthoringPreferencesStore.getState().defaultFrozenColumns).toBe(5);
     expect(useAuthoringPreferencesStore.getState().documentFontSize).toBe(20);
     useAuthoringPreferencesStore.getState().reset();
-    expect(useAuthoringPreferencesStore.getState()).toEqual(expect.objectContaining({ rowDensity: "comfortable", defaultFrozenColumns: 1, documentFontSize: 14, documentFontFamily: "system" }));
+    expect(useAuthoringPreferencesStore.getState()).toEqual(expect.objectContaining({ rowDensity: "standard", defaultFrozenColumns: 1, documentFontSize: 14, documentFontFamily: "system", highContrast: false, workspaceFocus: "author" }));
   });
 });

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock3, FileText, LogOut, Settings, Star, Trash2, Users } from "lucide-react";
+import { ClipboardCheck, Clock3, FileText, FlaskConical, LogOut, PenLine, Settings, Star, Trash2, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -19,6 +19,8 @@ import { useEditHistoryStore } from "../stores/editHistory";
 import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
 import { useOnboardingStore } from "../stores/onboarding";
+import { SaveStatusIndicator } from "../components/SaveStatusIndicator";
+import { useAuthoringPreferencesStore, WorkspaceFocus } from "../stores/authoringPreferences";
 
 const DocumentGrid = lazy(() => import("../components/DocumentGrid").then((module) => ({ default: module.DocumentGrid })));
 const GlobalSearchDialog = lazy(() => import("../components/GlobalSearchDialog").then((module) => ({ default: module.GlobalSearchDialog })));
@@ -31,6 +33,7 @@ const HistoryDialog = lazy(() => import("../components/HistoryDialog").then((mod
 const CommandPalette = lazy(() => import("../components/CommandPalette").then((module) => ({ default: module.CommandPalette })));
 const OnboardingDialog = lazy(() => import("../components/OnboardingDialog").then((module) => ({ default: module.OnboardingDialog })));
 const RecentDocumentsDialog = lazy(() => import("../components/RecentDocumentsDialog").then((module) => ({ default: module.RecentDocumentsDialog })));
+const DocumentOverviewPanel = lazy(() => import("../components/DocumentOverviewPanel").then((module) => ({ default: module.DocumentOverviewPanel })));
 
 interface Organization {
   id: string;
@@ -63,6 +66,7 @@ export function ShellPage() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [presenceOpen, setPresenceOpen] = useState(false);
   const [presenceProfileUserId, setPresenceProfileUserId] = useState<string | null>(null);
+  const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const presenceCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceTriggerRef = useRef<HTMLDivElement>(null);
   const closeReport = useCallback(() => setReport(null), []);
@@ -98,6 +102,12 @@ export function ShellPage() {
   const splitRatio = useLayoutStore((s) => s.splitRatio);
   const setSplitDirection = useLayoutStore((s) => s.setSplitDirection);
   const setSplitRatio = useLayoutStore((s) => s.setSplitRatio);
+  const workspaceFocus = useAuthoringPreferencesStore((s) => s.workspaceFocus);
+  const setWorkspaceFocus = useAuthoringPreferencesStore((s) => s.setWorkspaceFocus);
+
+  useEffect(() => {
+    if (detailRowId || linkedRowId) setDetailPanelOpen(true);
+  }, [detailRowId, linkedRowId]);
 
   const activateDocument = useCallback((id: string) => {
     activateDocumentTab(id);
@@ -437,6 +447,7 @@ export function ShellPage() {
           </div>
           {selectedDocumentId && view === "documents" && (
             <div className="flex shrink-0 items-center gap-2 text-mutedForeground">
+              <SaveStatusIndicator documentId={selectedDocumentId} />
               <Users size={14} />
               <div
                 ref={presenceTriggerRef}
@@ -532,9 +543,8 @@ export function ShellPage() {
           </div>
         ) : view === "documents" ? (
           <div data-testid="workspace-empty-state" className="flex min-h-0 flex-1 items-center justify-center p-8">
-            <div className="w-full max-w-xl rounded-2xl border border-border bg-surfaceElevated p-6 shadow-sm">
-              <div className="text-base font-semibold text-foreground">{t("workspaceStartTitle")}</div>
-              <p className="mt-1 text-sm leading-6 text-mutedForeground">{t("workspaceStartDescription")}</p>
+              <div className="w-full max-w-3xl rounded-2xl border border-border bg-surfaceElevated p-6 shadow-sm">
+              <RoleWorkspaceHeader focus={workspaceFocus} onChange={setWorkspaceFocus} />
               {(favoriteDocuments.length > 0 || recentDocuments.length > 0) && (
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
                   {favoriteDocuments.length > 0 && <WorkspaceDocumentList title={t("favorites")} icon="favorite" documents={favoriteDocuments.slice(0, 5)} onOpen={openDocument} />}
@@ -547,7 +557,7 @@ export function ShellPage() {
           <div className="p-8 text-sm text-mutedForeground">{t("trash")}</div>
         )}
       </main>
-      {view === "documents" && selectedDocumentId && (detailRowId || linkedRowId) && (
+      {view === "documents" && selectedDocumentId && detailPanelOpen && (
         <>
           <ResizeHandle side="right" ariaLabel={t("resizeDetailPanel")} value={detailWidth} min={280} max={640} onResize={(dx) => setDetailWidth(detailWidth + dx)} />
           <aside className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm" style={{ width: detailWidth }}>
@@ -556,7 +566,7 @@ export function ShellPage() {
                 <RowDetailPanel rowId={linkedRowId} documentId={selectedDocumentId} variant="linked" />
               ) : detailRowId ? (
                 <RowDetailPanel rowId={detailRowId} documentId={selectedDocumentId} variant="primary" />
-              ) : null}
+              ) : <DocumentOverviewPanel documentId={selectedDocumentId} onClose={() => setDetailPanelOpen(false)} />}
             </Suspense>
           </aside>
         </>
@@ -579,12 +589,32 @@ function WorkspaceDocumentList({ title, icon, documents, onOpen }: { title: stri
   </section>;
 }
 
+function RoleWorkspaceHeader({ focus, onChange }: { focus: WorkspaceFocus; onChange: (focus: WorkspaceFocus) => void }) {
+  const { t } = useTranslation();
+  const options: Array<{ value: WorkspaceFocus; icon: React.ReactNode }> = [
+    { value: "author", icon: <PenLine size={15} /> },
+    { value: "tester", icon: <FlaskConical size={15} /> },
+    { value: "reviewer", icon: <ClipboardCheck size={15} /> },
+  ];
+  return <section aria-labelledby="workspace-focus-title">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><div id="workspace-focus-title" className="text-base font-semibold text-foreground">{t(`workspaceFocus.${focus}.title`)}</div><p className="mt-1 max-w-2xl text-sm leading-6 text-mutedForeground">{t(`workspaceFocus.${focus}.description`)}</p></div>
+      <div className="flex rounded-xl border border-border bg-editorBackground p-1" role="tablist" aria-label={t("workspaceFocus.label")}>
+        {options.map((option) => <button key={option.value} type="button" role="tab" aria-selected={focus === option.value} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium ${focus === option.value ? "bg-surface text-primary shadow-sm" : "text-mutedForeground hover:text-foreground"}`} onClick={() => onChange(option.value)}>{option.icon}{t(`workspaceFocus.${option.value}.label`)}</button>)}
+      </div>
+    </div>
+    <div className="mt-4 grid gap-2 sm:grid-cols-3">
+      {["primary", "secondary", "tertiary"].map((key) => <div key={key} className="rounded-xl border border-border bg-editorBackground p-3"><div className="text-sm font-medium">{t(`workspaceFocus.${focus}.${key}`)}</div></div>)}
+    </div>
+  </section>;
+}
+
 function DocumentPane({ tab, displayName, focused, split, position, onFocus }: { tab: DocumentTab | null; displayName: string; focused: boolean; split: boolean; position: "primary" | "secondary"; onFocus: () => void }) {
   const { t } = useTranslation();
   if (!tab) return <PanelLoading />;
   return (
-    <section data-testid={`document-pane-${position}`} data-document-id={tab.id} data-focused={focused ? "true" : "false"} aria-label={tab.title} className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-surface transition-shadow ${focused && split ? "ring-1 ring-primary/50" : split ? "ring-1 ring-border" : ""}`} onMouseDownCapture={onFocus}>
-      {split && <div className={`flex h-8 shrink-0 items-center justify-between border-b px-3 text-xs ${focused ? "border-primary/30 bg-primary/5" : "border-border bg-editorBackground"}`}><span className="truncate font-medium">{tab.title}</span><span className="text-[10px] uppercase tracking-wide text-mutedForeground">{focused ? t("focusedPane") : t("secondaryPane")}</span></div>}
+    <section data-testid={`document-pane-${position}`} data-document-id={tab.id} data-focused={focused ? "true" : "false"} aria-label={tab.title} className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-surface transition-shadow ${focused && split ? "ring-2 ring-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.18)]" : split ? "ring-1 ring-border opacity-[0.94]" : ""}`} onMouseDownCapture={onFocus}>
+      {split && <div className={`flex h-9 shrink-0 items-center justify-between border-b px-3 text-xs ${focused ? "border-primary bg-primary/10 text-foreground" : "border-border bg-editorBackground text-mutedForeground"}`}><span className="truncate font-semibold">{tab.title}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${focused ? "bg-primary text-primaryForeground" : "bg-muted"}`}>{focused ? t("focusedPane") : t("secondaryPane")}</span></div>}
       <Suspense fallback={<PanelLoading />}>
         {tab.documentType === "general_document" ? <RichTextEditor documentId={tab.id} displayName={displayName} /> : <DocumentGrid documentId={tab.id} documentType={tab.documentType === "test" ? "test" : "requirement"} advancedTargetId={`docsys-toolbar-${tab.id}`} showAdvancedControls />}
       </Suspense>

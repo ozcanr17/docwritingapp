@@ -580,6 +580,54 @@
   "fontMono": "Eş aralıklı",
   "comfortableDensity": "Rahat satırlar",
   "compactDensity": "Kompakt satırlar",
+  "standardDensity": "Standart satırlar",
+  "rowDensity": "Satır yoğunluğu",
+  "documentGrid": "Doküman nesneleri tablosu",
+  "highContrast": "Yüksek kontrast",
+  "highContrastHelp": "Kenarlıkları, odak halkalarını ve ikincil metinleri daha belirgin gösterir.",
+  "documentOverview": "Doküman özeti",
+  "documentOverviewHelp": "Bir satır seçildiğinde bu alan satır ayrıntılarına dönüşür. Seçim yokken dokümanın kapsam ve kalite durumunu gösterir.",
+  "closeDetailsPanel": "Ayrıntılar panelini kapat",
+  "totalObjects": "Toplam nesne",
+  "headings": "Başlıklar",
+  "linkedObjects": "Bağlantılı nesneler",
+  "coverageAndQuality": "Kapsam ve kalite",
+  "coveredRequirements": "Kapsanan gereksinimler",
+  "qualityIssues": "Kalite bulguları",
+  "incompleteTests": "Eksik testler",
+  "saveState": {
+    "saving": "Kaydediliyor",
+    "saved": "Kaydedildi",
+    "offline": "Çevrimdışı",
+    "conflict": "Çakışma var"
+  },
+  "workspaceFocus": {
+    "label": "Çalışma odağı",
+    "author": {
+      "label": "Yazar",
+      "title": "Yazım ve kalite çalışma alanı",
+      "description": "Gereksinim ve test içeriğini oluşturun, kalite kurallarını izleyin ve izlenebilirliği tamamlayın.",
+      "primary": "Doküman yazımı ve hiyerarşi",
+      "secondary": "Kalite bulguları",
+      "tertiary": "İzlenebilirlik kapsamı"
+    },
+    "tester": {
+      "label": "Testçi",
+      "title": "Koşum çalışma alanı",
+      "description": "Test adımlarını yürütün, kanıtları kaydedin ve yeniden test adaylarını takip edin.",
+      "primary": "Aktif test koşumları",
+      "secondary": "Eksik test adımları",
+      "tertiary": "Yeniden test adayları"
+    },
+    "reviewer": {
+      "label": "İnceleyici",
+      "title": "İnceleme ve onay çalışma alanı",
+      "description": "Önerilen değişiklikleri, şüpheli bağlantıları ve onay bekleyen dokümanları tek yerde değerlendirin.",
+      "primary": "İnceleme kuyruğu",
+      "secondary": "Değişiklik önerileri",
+      "tertiary": "Onay ve baseline durumu"
+    }
+  },
   "showHierarchyGuides": "Hiyerarşi çizgilerini göster",
   "showHierarchyGuidesHelp": "İç içe başlık ve nesneler için ince dikey kılavuzlar çizer.",
   "showChangeIndicators": "Değişiklik durumunu göster",

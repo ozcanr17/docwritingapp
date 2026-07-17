@@ -64,8 +64,27 @@ body {
 }
 
 *:focus-visible {
-  outline: 2px solid hsl(var(--focus-ring));
-  outline-offset: 1px;
+  outline: 3px solid hsl(var(--focus-ring));
+  outline-offset: 2px;
+}
+
+.docsys-high-contrast {
+  --border: 220 12% 48%;
+  --muted-foreground: 220 10% 32%;
+  --focus-ring: 215 100% 42%;
+}
+
+.dark.docsys-high-contrast {
+  --border: 220 12% 68%;
+  --muted-foreground: 220 12% 78%;
+  --focus-ring: 210 100% 72%;
+}
+
+.docsys-high-contrast button,
+.docsys-high-contrast input,
+.docsys-high-contrast select,
+.docsys-high-contrast textarea {
+  border-color: hsl(var(--border));
 }
 
 .skip-link {
