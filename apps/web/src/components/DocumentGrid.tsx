@@ -20,6 +20,7 @@ import { ProductivityBar } from "./ProductivityBar";
 import { AddColumnDialog } from "./AddColumnDialog";
 import { FindReplacePanel } from "./FindReplacePanel";
 import { TemplateLibraryPanel } from "./TemplateLibraryPanel";
+import { OperationImpactSummary } from "./OperationImpactSummary";
 
 interface GridProps {
   documentId: string;
@@ -59,6 +60,19 @@ function linkedObjectPreview(linked: OutlineRow["linkedObjects"][number]): strin
     .filter((part, index, all) => all.indexOf(part) === index)
     .join(" ");
   return value.length > 360 ? `${value.slice(0, 357).trimEnd()}...` : value;
+}
+
+function rowsInSubtrees(rows: OutlineRow[], rootIds: string[]): OutlineRow[] {
+  const roots = new Set(rootIds);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return rows.filter((row) => {
+    let current: OutlineRow | undefined = row;
+    while (current) {
+      if (roots.has(current.id)) return true;
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
+    return false;
+  });
 }
 
 const rowTypeLabelKeys: Record<OutlineRow["rowType"], string> = {
@@ -264,6 +278,10 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
       return true;
     });
   }, [rows, selectedRowIds]);
+  const selectedAffectedRows = useMemo(() => rowsInSubtrees(rows, selectedRootRowIds), [rows, selectedRootRowIds]);
+  const selectedLinkedReferenceCount = useMemo(() => selectedAffectedRows.reduce((sum, row) => sum + (row.linkCount ?? 0), 0), [selectedAffectedRows]);
+  const deleteAffectedRows = useMemo(() => deleteTarget ? rowsInSubtrees(rows, [deleteTarget.id]) : [], [deleteTarget, rows]);
+  const deleteLinkedReferenceCount = useMemo(() => deleteAffectedRows.reduce((sum, row) => sum + (row.linkCount ?? 0), 0), [deleteAffectedRows]);
   const selectedGridRow = rows.find((row) => row.id === selectedRowId);
 
   const virtualizer = useVirtualizer({
@@ -1271,6 +1289,17 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                 <X size={16} />
               </button>
             </div>
+            <div className="mt-4">
+              <OperationImpactSummary
+                description={t("bulkDeleteImpactDescription")}
+                metrics={[
+                  { key: "selected", label: t("selectedObjects"), value: selectedRowIds.length },
+                  { key: "affected", label: t("affectedObjects"), value: selectedAffectedRows.length },
+                  { key: "links", label: t("linkedReferences"), value: selectedLinkedReferenceCount },
+                ]}
+                warning={selectedLinkedReferenceCount > 0 ? t("deleteLinkedObjectsWarning") : undefined}
+              />
+            </div>
             <div className="mt-5 flex justify-end gap-2">
               <button className="rounded-md px-3 py-1.5 text-sm hover:bg-muted" onClick={() => setConfirmBulkDelete(false)}>
                 {t("cancel")}
@@ -1290,6 +1319,8 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         <DeleteRowDialog
           row={deleteTarget}
           hasChildren={rows.some((row) => row.parentId === deleteTarget.id)}
+          affectedCount={deleteAffectedRows.length}
+          linkedReferenceCount={deleteLinkedReferenceCount}
           pending={deleteRow.isPending}
           onClose={() => setDeleteTarget(null)}
           onDelete={(childStrategy) => deleteRow.mutate({ row: deleteTarget, childStrategy })}
@@ -1308,6 +1339,8 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
       {bulkActionsOpen && (
         <BulkActionsDialog
           count={selectedRowIds.length}
+          affectedCount={selectedAffectedRows.length}
+          linkedReferenceCount={selectedLinkedReferenceCount}
           columns={columns}
           onClose={() => setBulkActionsOpen(false)}
           onSubmit={(input) => runBulkAction.mutate(input)}
@@ -1331,12 +1364,16 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
 function DeleteRowDialog({
   row,
   hasChildren,
+  affectedCount,
+  linkedReferenceCount,
   pending,
   onClose,
   onDelete,
 }: {
   row: OutlineRow;
   hasChildren: boolean;
+  affectedCount: number;
+  linkedReferenceCount: number;
   pending: boolean;
   onClose: () => void;
   onDelete: (strategy: "delete_subtree" | "promote_children") => void;
@@ -1351,6 +1388,17 @@ function DeleteRowDialog({
             <p className="mt-1 text-sm text-mutedForeground">{t(hasChildren ? "deleteHeadingWithChildren" : "deleteRowConfirm", { title: row.title || row.displayNumber })}</p>
           </div>
           <button aria-label={t("close")} className="rounded-md p-1 hover:bg-muted" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="mt-4">
+          <OperationImpactSummary
+            description={t(hasChildren ? "deleteSubtreeImpactDescription" : "deleteRowImpactDescription")}
+            metrics={[
+              { key: "affected", label: t("affectedObjects"), value: affectedCount },
+              { key: "descendants", label: t("descendantObjects"), value: Math.max(0, affectedCount - 1) },
+              { key: "links", label: t("linkedReferences"), value: linkedReferenceCount },
+            ]}
+            warning={linkedReferenceCount > 0 ? t("deleteLinkedObjectsWarning") : undefined}
+          />
         </div>
         <div className="mt-5 flex flex-col gap-2">
           {hasChildren && (

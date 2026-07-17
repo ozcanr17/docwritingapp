@@ -213,6 +213,7 @@ describe("DocumentGrid", () => {
     fireEvent.click(screen.getByTestId("menu-delete"));
     expect(screen.getByTestId("delete-promote-children")).toBeInTheDocument();
     expect(screen.getByTestId("delete-subtree")).toBeInTheDocument();
+    expect(screen.getByTestId("operation-impact-summary")).toHaveTextContent("3");
   });
 
   it("edits heading numbering together with content", () => {

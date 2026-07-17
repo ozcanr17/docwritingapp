@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GridColumn } from "../lib/columns";
+import { OperationImpactSummary } from "./OperationImpactSummary";
 
 export interface BulkActionInput {
   action: "edit" | "move" | "copy" | "link";
@@ -11,11 +12,15 @@ export interface BulkActionInput {
 
 export function BulkActionsDialog({
   count,
+  affectedCount,
+  linkedReferenceCount,
   columns,
   onClose,
   onSubmit,
 }: {
   count: number;
+  affectedCount: number;
+  linkedReferenceCount: number;
   columns: GridColumn[];
   onClose: () => void;
   onSubmit: (input: BulkActionInput) => void;
@@ -65,6 +70,17 @@ export function BulkActionsDialog({
             <input data-testid="bulk-target" className="mt-1.5 w-full rounded-lg border border-border bg-editorBackground px-3 py-2" value={targetId} onChange={(event) => setTargetId(event.target.value)} />
           </label>
         )}
+        <div className="mt-4">
+          <OperationImpactSummary
+            description={t(`bulkImpactDescription.${action}`)}
+            metrics={[
+              { key: "selected", label: t("selectedObjects"), value: count },
+              { key: "affected", label: t("affectedObjects"), value: action === "edit" || action === "link" ? count : affectedCount },
+              { key: "links", label: t(action === "link" ? "linksCreated" : "linkedReferences"), value: action === "link" ? count : linkedReferenceCount },
+            ]}
+            warning={action === "edit" ? t("bulkEditImpactWarning") : undefined}
+          />
+        </div>
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" className="rounded-lg px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button>
           <button data-testid="bulk-action-submit" className="rounded-lg bg-primary px-3 py-2 text-sm text-primaryForeground">{t("apply")}</button>

@@ -8,6 +8,18 @@ vi.mock("../lib/api", async () => {
   return {
     ...actual,
     api: vi.fn(async (path: string) => {
+      if (path.endsWith("/release-readiness")) return {
+        status: "warning",
+        score: 80,
+        generatedAt: "2026-07-17T12:00:00.000Z",
+        gates: [],
+        counts: { rows: 12, requirements: 5, testSteps: 0, qualityErrors: 0, qualityWarnings: 0, uncoveredRequirements: 0, unlinkedTestSteps: 0, incompleteTestSteps: 0, unverifiedTestSteps: 0, suspectLinks: 0, retestCandidates: 0, failedLatestExecutions: 0 },
+        issues: [],
+        retestCandidates: [],
+        failedExecutions: [],
+        latestReview: null,
+        baseline: { revisionNumber: 1, semanticVersion: "1.0", createdAt: "2026-07-16T12:00:00.000Z", changedRows: 3, removedRows: 1, current: false },
+      };
       if (path.includes("direction=test_to_requirement")) return [{
         id: "test-heading",
         objectNumber: 4,
@@ -41,5 +53,16 @@ describe("ReportsDialog traceability", () => {
     expect(screen.getByText("Authentication verification")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "XLSX d\u0131\u015fa aktar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Word (DOCX) olarak d\u0131\u015fa aktar" })).toBeInTheDocument();
+  });
+
+  it("shows the document impact before creating a baseline", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><ReportsDialog documentId="document-1" tab="baselines" onClose={vi.fn()} /></QueryClientProvider>);
+    await waitFor(() => expect(screen.getByTestId("create-baseline")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("create-baseline"));
+    const summary = await screen.findByTestId("operation-impact-summary");
+    expect(summary).toHaveTextContent("12");
+    expect(summary).toHaveTextContent("3");
+    expect(summary).toHaveTextContent("1");
   });
 });

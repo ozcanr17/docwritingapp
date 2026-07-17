@@ -9,6 +9,7 @@ import { useSelectionStore } from "../stores/selection";
 import { TraceabilityGraph, TraceMatrixRow } from "./TraceabilityGraph";
 import { ReleaseReadinessPanel } from "./ReleaseReadinessPanel";
 import { BaselineDiffData, BaselineDiffView } from "./BaselineDiffView";
+import { OperationImpactSummary } from "./OperationImpactSummary";
 
 interface ReportsDialogProps {
   documentId: string;
@@ -298,30 +299,41 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
             </button>
             {baselineFormOpen && (
               <form
-                className="flex items-end gap-2 rounded-xl border border-border bg-editorBackground p-3"
+                className="space-y-3 rounded-xl border border-border bg-editorBackground p-3"
                 onSubmit={(event) => {
                   event.preventDefault();
                   createBaseline.mutate(baselineLabel.trim());
                 }}
               >
-                <label className="min-w-0 flex-1 text-xs text-mutedForeground">
-                  {t("baselineLabel")}
-                  <input
-                    autoFocus
-                    data-testid="baseline-label-input"
-                    className="mt-1 w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-foreground"
-                    value={baselineLabel}
-                    onChange={(event) => setBaselineLabel(event.target.value)}
-                  />
-                </label>
-                <button
-                  type="submit"
-                  data-testid="baseline-create-submit"
-                  className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primaryForeground disabled:opacity-50"
-                  disabled={createBaseline.isPending}
-                >
-                  {t("create")}
-                </button>
+                {readiness.data && <OperationImpactSummary
+                  description={t("baselineImpactDescription")}
+                  metrics={[
+                    { key: "rows", label: t("snapshotObjects"), value: readiness.data.counts.rows },
+                    { key: "changed", label: t("changedObjects"), value: readiness.data.baseline?.changedRows ?? readiness.data.counts.rows },
+                    { key: "removed", label: t("removedObjects"), value: readiness.data.baseline?.removedRows ?? 0 },
+                  ]}
+                  warning={t("baselineImpactWarning")}
+                />}
+                <div className="flex items-end gap-2">
+                  <label className="min-w-0 flex-1 text-xs text-mutedForeground">
+                    {t("baselineLabel")}
+                    <input
+                      autoFocus
+                      data-testid="baseline-label-input"
+                      className="mt-1 w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-foreground"
+                      value={baselineLabel}
+                      onChange={(event) => setBaselineLabel(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    data-testid="baseline-create-submit"
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primaryForeground disabled:opacity-50"
+                    disabled={createBaseline.isPending}
+                  >
+                    {t("create")}
+                  </button>
+                </div>
               </form>
             )}
             {baselines.data && baselines.data.length === 0 ? (
