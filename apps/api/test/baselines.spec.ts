@@ -89,14 +89,17 @@ describe("baselines and coverage", () => {
     expect(diff.statusCode).toBe(200);
     const body = JSON.parse(diff.body) as {
       summary: { added: number; removed: number; modified: number };
-      added: { id: string }[];
-      removed: { id: string }[];
-      modified: { id: string }[];
+      added: { id: string; objectNumber: number; before: null; after: { title: string }; changedFields: string[] }[];
+      removed: { id: string; objectNumber: number; before: { title: string }; after: null; changedFields: string[] }[];
+      modified: { id: string; before: { title: string }; after: { title: string }; changedFields: string[] }[];
     };
     expect(body.summary).toEqual({ added: 1, removed: 1, modified: 1 });
     expect(body.added[0]?.id).toBe(added.id);
+    expect(body.added[0]).toEqual(expect.objectContaining({ before: null, after: expect.objectContaining({ title: "New requirement" }), changedFields: ["row"] }));
     expect(body.removed[0]?.id).toBe(toDelete.id);
+    expect(body.removed[0]).toEqual(expect.objectContaining({ before: expect.objectContaining({ title: "Will be removed" }), after: null, changedFields: ["row"] }));
     expect(body.modified[0]?.id).toBe(toChange.id);
+    expect(body.modified[0]).toEqual(expect.objectContaining({ before: expect.objectContaining({ title: "Original title" }), after: expect.objectContaining({ title: "Updated title" }), changedFields: ["title"] }));
     expect(keep.id).toBeTruthy();
 
     const list = await app.inject({

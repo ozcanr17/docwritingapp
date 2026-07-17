@@ -34,6 +34,27 @@ function stableJson(value: unknown): string {
   return JSON.stringify(normalize(value));
 }
 
+const DIFF_FIELDS: Array<keyof SnapshotRow> = [
+  "objectNumber",
+  "numberingStart",
+  "parentId",
+  "rank",
+  "rowType",
+  "title",
+  "description",
+  "status",
+  "customFields",
+  "requirementDetail",
+  "testCaseDetail",
+  "testStepDetail",
+  "outgoingLinks",
+  "incomingLinks",
+];
+
+function changedFields(before: SnapshotRow, after: SnapshotRow): string[] {
+  return DIFF_FIELDS.filter((field) => stableJson(before[field]) !== stableJson(after[field]));
+}
+
 @Injectable()
 export class BaselinesService {
   constructor(
@@ -121,8 +142,12 @@ export class BaselinesService {
     const baselineById = new Map(baselineRows.map((r) => [r.id, r]));
     const currentById = new Map(currentRows.map((r) => [r.id, r]));
 
-    const added = currentRows.filter((r) => !baselineById.has(r.id)).map((r) => ({ id: r.id, title: r.title }));
-    const removed = baselineRows.filter((r) => !currentById.has(r.id)).map((r) => ({ id: r.id, title: r.title }));
+    const added = currentRows
+      .filter((r) => !baselineById.has(r.id))
+      .map((r) => ({ id: r.id, objectNumber: r.objectNumber, rowType: r.rowType, title: r.title, before: null, after: r, changedFields: ["row"] }));
+    const removed = baselineRows
+      .filter((r) => !currentById.has(r.id))
+      .map((r) => ({ id: r.id, objectNumber: r.objectNumber, rowType: r.rowType, title: r.title, before: r, after: null, changedFields: ["row"] }));
     const modified = currentRows
       .filter((r) => {
         const old = baselineById.get(r.id);
@@ -130,7 +155,15 @@ export class BaselinesService {
       })
       .map((r) => {
         const old = baselineById.get(r.id) as SnapshotRow;
-        return { id: r.id, before: old.title, after: r.title };
+        return {
+          id: r.id,
+          objectNumber: r.objectNumber,
+          rowType: r.rowType,
+          title: r.title || old.title,
+          before: old,
+          after: r,
+          changedFields: changedFields(old, r),
+        };
       });
 
     return {

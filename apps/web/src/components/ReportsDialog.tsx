@@ -8,6 +8,7 @@ import { useToastStore } from "../stores/toasts";
 import { useSelectionStore } from "../stores/selection";
 import { TraceabilityGraph, TraceMatrixRow } from "./TraceabilityGraph";
 import { ReleaseReadinessPanel } from "./ReleaseReadinessPanel";
+import { BaselineDiffData, BaselineDiffView } from "./BaselineDiffView";
 
 interface ReportsDialogProps {
   documentId: string;
@@ -33,13 +34,6 @@ interface TestExecution {
   testCaseRow: { id: string; title: string; objectNumber: number };
   executedBy: { id: string; displayName: string };
   steps: Array<{ id: string; status: string }>;
-}
-
-interface Diff {
-  added: { id: string; title: string }[];
-  removed: { id: string; title: string }[];
-  modified: { id: string; before: string; after: string }[];
-  summary: { added: number; removed: number; modified: number };
 }
 
 interface Coverage {
@@ -141,7 +135,7 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
 
   const diff = useQuery({
     queryKey: ["diff", documentId, diffRevision],
-    queryFn: () => api<Diff>(`/documents/${documentId}/baselines/${diffRevision}/diff`),
+    queryFn: () => api<BaselineDiffData>(`/documents/${documentId}/baselines/${diffRevision}/diff`),
     enabled: diffRevision !== null,
   });
 
@@ -351,20 +345,9 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
                 ))}
               </ul>
             )}
-            {diff.data && (
-              <div data-testid="diff-result" className="rounded border border-border p-3 text-xs">
-                <div className="mb-2 flex gap-4">
-                  <span className="text-success">+ {diff.data.summary.added} {t("added")}</span>
-                  <span className="text-destructive">− {diff.data.summary.removed} {t("removed")}</span>
-                  <span className="text-warning">~ {diff.data.summary.modified} {t("modified")}</span>
-                </div>
-                {diff.data.modified.map((m) => (
-                  <div key={m.id} className="text-mutedForeground">
-                    <span className="line-through">{m.before}</span> → <span className="text-foreground">{m.after}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {diff.isLoading && <div className="text-xs text-mutedForeground">{t("loading")}</div>}
+            {diff.isError && <div className="text-xs text-destructive">{t("genericError")}</div>}
+            {diff.data && <BaselineDiffView data={diff.data} onOpenRow={(rowId) => { onClose(); window.setTimeout(() => openDetail(rowId), 0); }} />}
           </div>
         )}
 
