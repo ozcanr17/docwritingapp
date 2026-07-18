@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createTreeNode, openTreeDocument } from "./helpers";
+import { createTreeNode, dismissOnboarding, openTreeDocument } from "./helpers";
 
 test("import CSV, verify hierarchy, then export and download", async ({ page }) => {
   const suffix = Date.now();
@@ -15,6 +15,7 @@ test("import CSV, verify hierarchy, then export and download", async ({ page }) 
   await page.getByTestId("bootstrap-workspace-name").fill("Main");
   await page.getByTestId("bootstrap-submit").click();
   await expect(page.getByTestId("tree-empty")).toBeVisible();
+  await dismissOnboarding(page);
 
   await createTreeNode(page, "menu-newDocument", "Imported Spec");
   await openTreeDocument(page, "Imported Spec");
@@ -33,6 +34,9 @@ test("import CSV, verify hierarchy, then export and download", async ({ page }) 
     mimeType: "text/csv",
     buffer: Buffer.from(csv, "utf8"),
   });
+
+  await expect(page.getByTestId("migration-preview-valid")).toBeVisible();
+  await page.getByTestId("confirm-migration-import").click();
 
   await expect(page.getByTestId("grid-row-1.1")).toBeVisible();
   await expect(page.getByText("User can log in")).toBeVisible();

@@ -21,6 +21,7 @@ import { useSelectionStore } from "../stores/selection";
 import { useOnboardingStore } from "../stores/onboarding";
 import { SaveStatusIndicator } from "../components/SaveStatusIndicator";
 import { useAuthoringPreferencesStore, WorkspaceFocus } from "../stores/authoringPreferences";
+import { recordPilotEvent } from "../lib/pilotTelemetry";
 
 const DocumentGrid = lazy(() => import("../components/DocumentGrid").then((module) => ({ default: module.DocumentGrid })));
 const GlobalSearchDialog = lazy(() => import("../components/GlobalSearchDialog").then((module) => ({ default: module.GlobalSearchDialog })));
@@ -36,6 +37,8 @@ const RecentDocumentsDialog = lazy(() => import("../components/RecentDocumentsDi
 const DocumentOverviewPanel = lazy(() => import("../components/DocumentOverviewPanel").then((module) => ({ default: module.DocumentOverviewPanel })));
 const AdminPanel = lazy(() => import("../components/AdminPanel").then((module) => ({ default: module.AdminPanel })));
 const DocumentAccessDialog = lazy(() => import("../components/DocumentAccessDialog").then((module) => ({ default: module.DocumentAccessDialog })));
+const PilotFeedbackDialog = lazy(() => import("../components/PilotFeedbackDialog").then((module) => ({ default: module.PilotFeedbackDialog })));
+const PilotChecklistDialog = lazy(() => import("../components/PilotChecklistDialog").then((module) => ({ default: module.PilotChecklistDialog })));
 
 interface Organization {
   id: string;
@@ -68,6 +71,8 @@ export function ShellPage() {
   const [historyMode, setHistoryMode] = useState<"row" | "document" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [pilotFeedbackOpen, setPilotFeedbackOpen] = useState(false);
+  const [pilotChecklistOpen, setPilotChecklistOpen] = useState(false);
   const [presenceOpen, setPresenceOpen] = useState(false);
   const [presenceProfileUserId, setPresenceProfileUserId] = useState<string | null>(null);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
@@ -234,6 +239,15 @@ export function ShellPage() {
 
   const organizationId = organizations.data?.[0]?.id ?? null;
 
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<{ eventName: "import_previewed" | "import_completed"; metadata: Record<string, string | number | boolean> }>).detail;
+      void recordPilotEvent(organizationId, detail.eventName, detail.metadata);
+    };
+    window.addEventListener("docsys:pilot-event", listener);
+    return () => window.removeEventListener("docsys:pilot-event", listener);
+  }, [organizationId]);
+
   const organizationAccess = useQuery({
     queryKey: ["organization-access", organizationId],
     queryFn: () => api<{ canManage: boolean }>(`/organizations/${organizationId}/me/access`),
@@ -265,6 +279,9 @@ export function ShellPage() {
   useEffect(() => {
     if (selectedDocument.data) useDocumentTabsStore.getState().update(selectedDocument.data);
   }, [selectedDocument.data]);
+  useEffect(() => {
+    if (selectedDocumentId) void recordPilotEvent(organizationId, "document_opened", { documentType: selectedDocument.data?.documentType ?? "unknown" });
+  }, [organizationId, selectedDocument.data?.documentType, selectedDocumentId]);
 
   const paletteCommands = useMemo(() => SHORTCUT_COMMANDS.map((definition) => ({
     id: definition.id,
@@ -337,9 +354,13 @@ export function ShellPage() {
         commandPaletteShortcut={formatShortcut(shortcutBindings.commandPalette)}
         searchShortcut={formatShortcut(shortcutBindings.globalSearch)}
         onOpenOnboarding={() => setOnboardingOpen(true)}
+        onOpenFeedback={() => setPilotFeedbackOpen(true)}
+        onOpenPilotChecklist={() => setPilotChecklistOpen(true)}
       />
       <Suspense fallback={null}>
         {onboardingOpen && <OnboardingDialog onComplete={() => { completeOnboarding(); setOnboardingOpen(false); }} />}
+        {pilotFeedbackOpen && organizationId && <PilotFeedbackDialog organizationId={organizationId} documentId={selectedDocumentId} onClose={() => setPilotFeedbackOpen(false)} />}
+        {pilotChecklistOpen && <PilotChecklistDialog onClose={() => setPilotChecklistOpen(false)} />}
         {commandPaletteOpen && workspaceId && <CommandPalette
           workspaceId={workspaceId}
           commands={paletteCommands}

@@ -1,7 +1,7 @@
 {
   "name": "docsys",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "overrides": {
@@ -15,6 +15,9 @@
     "dev": "bash infra/scripts/dev-up.sh",
     "dev:down": "bash infra/scripts/dev-down.sh",
     "seed": "node infra/scripts/seed-admin.mjs",
+    "backup": "node infra/scripts/backup-database.mjs",
+    "restore": "node infra/scripts/restore-database.mjs",
+    "backup:drill": "node infra/scripts/backup-restore-drill.mjs",
     "build": "turbo run build --filter=!@docsys/desktop",
     "lint": "eslint apps packages --ext .ts,.tsx",
     "test": "turbo run test",

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createTreeNode, openTreeDocument } from "./helpers";
+import { createTreeNode, dismissOnboarding, openTreeDocument } from "./helpers";
 
 test("suspect links and baseline diff", async ({ page }) => {
   const suffix = Date.now();
@@ -15,6 +15,7 @@ test("suspect links and baseline diff", async ({ page }) => {
   await page.getByTestId("bootstrap-workspace-name").fill("Main");
   await page.getByTestId("bootstrap-submit").click();
   await expect(page.getByTestId("tree-empty")).toBeVisible();
+  await dismissOnboarding(page);
 
   await createTreeNode(page, "menu-newDocument", "Spec");
   await openTreeDocument(page, "Spec");
@@ -27,6 +28,8 @@ test("suspect links and baseline diff", async ({ page }) => {
       "utf8",
     ),
   });
+  await expect(page.getByTestId("migration-preview-valid")).toBeVisible();
+  await page.getByTestId("confirm-migration-import").click();
   await expect(page.getByTestId("grid-row-1")).toBeVisible();
 
   await createTreeNode(page, "menu-newTestDocument", "Tests");
@@ -36,6 +39,8 @@ test("suspect links and baseline diff", async ({ page }) => {
     mimeType: "text/csv",
     buffer: Buffer.from(["level,type,title,description", "0,test_case,Test B,", "1,test_step,Apply input,"].join("\n"), "utf8"),
   });
+  await expect(page.getByTestId("migration-preview-valid")).toBeVisible();
+  await page.getByTestId("confirm-migration-import").click();
   await expect(page.getByTestId("grid-row-1")).toBeVisible();
 
   const requirementId = await page.evaluate(async () => {
@@ -55,10 +60,11 @@ test("suspect links and baseline diff", async ({ page }) => {
   await page.getByTestId("grid-row-1").click({ button: "right" });
   await page.getByTestId("menu-detail").click();
   await expect(page.getByTestId("row-detail-primary")).toBeVisible();
+  await page.getByTestId("detail-tab-links").click();
   await page.getByTestId("link-target").fill(requirementId);
   await page.getByTestId("link-add").click();
   await expect(page.getByTestId("open-linked")).toBeVisible();
-  await expect(page.getByTestId("grid-row-1").getByTestId("cell-value-linkedRequirements")).toContainText("REQ-001 : Requirement A");
+  await expect(page.getByTestId("grid-row-1").getByTestId("cell-value-linkedRequirements")).toHaveText("REQ-001");
 
   await page.getByTestId("menu-file").click();
   await page.getByTestId("menuitem-baselines").click();
@@ -77,7 +83,8 @@ test("suspect links and baseline diff", async ({ page }) => {
   await page.getByTestId("cell-input-title").fill("Requirement A (changed)");
   await page.keyboard.press("Enter");
 
-  await page.getByTestId("menu-analysis").click();
+  await page.getByTestId("menu-file").click();
+  await page.getByTestId("menuitem-analysis").click();
   await page.getByTestId("menuitem-readiness").click();
   await expect(page.getByTestId("retest-package-name")).toBeVisible();
   await page.getByTestId("retest-package-name").fill("Requirement A verification");
@@ -85,7 +92,8 @@ test("suspect links and baseline diff", async ({ page }) => {
   await page.getByTestId("create-retest-package").click();
   await expect(page.getByTestId("toast-success")).toHaveCount(successToastCount + 1);
   await page.getByTestId("close-reports").click();
-  await page.getByTestId("menu-analysis").click();
+  await page.getByTestId("menu-file").click();
+  await page.getByTestId("menuitem-analysis").click();
   await page.getByTestId("menuitem-runs").click();
   await expect(page.locator('[data-testid^="retest-package-"]')).toHaveCount(1);
   await page.getByTestId("close-reports").click();
@@ -93,6 +101,7 @@ test("suspect links and baseline diff", async ({ page }) => {
   await openTreeDocument(page, "Tests");
   await page.getByTestId("grid-row-1").click({ button: "right" });
   await page.getByTestId("menu-detail").click();
+  await page.getByTestId("detail-tab-links").click();
   await expect(page.getByTestId("suspect-badge")).toBeVisible();
   await page.getByTestId("acknowledge-link").click();
   await expect(page.getByTestId("suspect-badge")).toBeHidden();

@@ -57,6 +57,15 @@ export class ExportsController {
     return this.exports.importCsv(user.userId, documentId, body.csv);
   }
 
+  @Post("documents/:documentId/imports/preview")
+  previewCsv(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(importSchema)) body: z.infer<typeof importSchema>,
+  ) {
+    return this.exports.previewCsv(user.userId, documentId, body.csv);
+  }
+
   @Post("documents/:documentId/imports/reqif")
   importReqif(
     @CurrentUser() user: SessionUser,
@@ -66,6 +75,15 @@ export class ExportsController {
     return this.exports.importReqif(user.userId, documentId, body.reqif);
   }
 
+  @Post("documents/:documentId/imports/reqif/preview")
+  previewReqif(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(reqifImportSchema)) body: z.infer<typeof reqifImportSchema>,
+  ) {
+    return this.exports.previewReqif(user.userId, documentId, body.reqif);
+  }
+
   @Post("documents/:documentId/imports/xlsx")
   importXlsx(
     @CurrentUser() user: SessionUser,
@@ -73,6 +91,15 @@ export class ExportsController {
     @Body(new ZodBodyPipe(xlsxImportSchema)) body: z.infer<typeof xlsxImportSchema>,
   ) {
     return this.exports.importXlsx(user.userId, documentId, body.data);
+  }
+
+  @Post("documents/:documentId/imports/xlsx/preview")
+  previewXlsx(
+    @CurrentUser() user: SessionUser,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Body(new ZodBodyPipe(xlsxImportSchema)) body: z.infer<typeof xlsxImportSchema>,
+  ) {
+    return this.exports.previewXlsx(user.userId, documentId, body.data);
   }
 
   @Get("organizations/:orgId/export-templates")

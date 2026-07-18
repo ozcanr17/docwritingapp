@@ -2,6 +2,7 @@ import { PrismaClient } from "@docsys/database";
 import { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { StorageService } from "../src/storage/storage.service";
+import { AccessService } from "../src/access/access.service";
 import { buildApp, createDocument, createOrgWorkspaceDocument, registerActor, resetDatabase, TestActor } from "./helpers";
 
 describe("lifecycle capabilities", () => {
@@ -283,5 +284,28 @@ describe("lifecycle capabilities", () => {
     const completed = await app.inject({ method: "POST", url: `/attachments/${created.id}/complete`, headers: { cookie: actor.cookie } });
     expect(completed.statusCode).toBe(201);
     vi.restoreAllMocks();
+  });
+
+  it("stores consented pilot diagnostics and keeps feedback inbox administrator-only", async () => {
+    const organization = await prisma.organization.findFirstOrThrow({ where: { workspaces: { some: { id: workspaceId } } } });
+    await app.get(AccessService).grantRole(teammate.userId, "viewer", { organizationId: organization.id }, "organization");
+    const feedback = await app.inject({
+      method: "POST",
+      url: `/organizations/${organization.id}/pilot-feedback`,
+      headers: { cookie: teammate.cookie },
+      payload: { category: "usability", title: "Import preview is clear", description: "The source row references make correction straightforward.", context: { documentId: requirementDocumentId, clientVersion: "test" } },
+    });
+    expect(feedback.statusCode).toBe(201);
+    const deniedInbox = await app.inject({ method: "GET", url: `/organizations/${organization.id}/pilot-feedback`, headers: { cookie: teammate.cookie } });
+    expect(deniedInbox.statusCode).toBe(403);
+    const inbox = await app.inject({ method: "GET", url: `/organizations/${organization.id}/pilot-feedback`, headers: { cookie: actor.cookie } });
+    expect(inbox.statusCode).toBe(200);
+    expect(JSON.parse(inbox.body)).toEqual(expect.arrayContaining([expect.objectContaining({ actor: expect.objectContaining({ id: teammate.userId }), nextData: expect.objectContaining({ category: "usability" }) })]));
+    const noConsent = await app.inject({ method: "POST", url: `/organizations/${organization.id}/usage-events`, headers: { cookie: teammate.cookie }, payload: { consent: false, eventName: "document_opened", metadata: {} } });
+    expect(noConsent.statusCode).toBe(400);
+    const consented = await app.inject({ method: "POST", url: `/organizations/${organization.id}/usage-events`, headers: { cookie: teammate.cookie }, payload: { consent: true, eventName: "document_opened", metadata: { documentType: "requirement" } } });
+    expect(consented.statusCode).toBe(201);
+    const stored = await prisma.auditEvent.findFirst({ where: { organizationId: organization.id, actorId: teammate.userId, action: "pilot.usage_event" } });
+    expect(stored?.metadata).toEqual(expect.objectContaining({ eventName: "document_opened", documentType: "requirement" }));
   });
 });

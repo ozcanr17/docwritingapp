@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { dismissOnboarding } from "./helpers";
 
 const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
@@ -19,6 +20,7 @@ test("login and primary workspace have no automated WCAG A or AA violations", as
   await page.getByTestId("bootstrap-workspace-name").fill("Main Workspace");
   await page.getByTestId("bootstrap-submit").click();
   await expect(page.getByTestId("tree-empty")).toBeVisible();
+  await dismissOnboarding(page);
 
   const workspaceAudit = await new AxeBuilder({ page }).withTags(tags).analyze();
   expect(workspaceAudit.violations).toEqual([]);

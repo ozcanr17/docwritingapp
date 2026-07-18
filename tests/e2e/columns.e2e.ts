@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createTreeNode, openTreeDocument } from "./helpers";
+import { createTreeNode, dismissOnboarding, openTreeDocument } from "./helpers";
 
 test("test document: add rows, edit test step fields, add a custom column", async ({ page }) => {
   const suffix = Date.now();
@@ -15,6 +15,7 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
   await page.getByTestId("bootstrap-workspace-name").fill("Main");
   await page.getByTestId("bootstrap-submit").click();
   await expect(page.getByTestId("tree-empty")).toBeVisible();
+  await dismissOnboarding(page);
 
   await createTreeNode(page, "menu-newTestDocument", "Test Plan");
   await openTreeDocument(page, "Test Plan");
@@ -32,6 +33,8 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
       "utf8",
     ),
   });
+  await expect(page.getByTestId("migration-preview-valid")).toBeVisible();
+  await page.getByTestId("confirm-migration-import").click();
 
   await expect(page.getByTestId("grid-row-1")).toBeVisible();
   await expect(page.getByTestId("grid-row-1.1")).toBeVisible();
@@ -50,14 +53,16 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
   await page.keyboard.press("Enter");
   await expect(page.getByText("Passed")).toBeVisible();
 
-  await page.getByTestId("menu-insert").click();
+  await page.getByTestId("menu-edit").click();
+  await page.getByTestId("menuitem-insert").click();
   await page.getByTestId("menuitem-add-column").click();
   await page.getByTestId("column-name-input").fill("Coverage");
   await page.getByTestId("column-type-select").selectOption("text");
   await page.getByTestId("column-create-submit").click();
   await expect(page.getByRole("columnheader", { name: "Coverage" })).toBeVisible();
 
-  await page.getByTestId("menu-insert").click();
+  await page.getByTestId("menu-edit").click();
+  await page.getByTestId("menuitem-insert").click();
   await page.getByTestId("menuitem-add-column").click();
   await page.getByTestId("column-name-input").fill("Platforms");
   await page.getByTestId("column-type-select").selectOption("multi_select");

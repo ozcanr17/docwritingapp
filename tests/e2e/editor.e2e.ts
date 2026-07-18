@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createTreeNode, openTreeDocument } from "./helpers";
+import { createTreeNode, dismissOnboarding, openTreeDocument } from "./helpers";
 
 test("collaborative rich-text document persists across reloads", async ({ page }) => {
   const suffix = Date.now();
@@ -15,6 +15,7 @@ test("collaborative rich-text document persists across reloads", async ({ page }
   await page.getByTestId("bootstrap-workspace-name").fill("Main");
   await page.getByTestId("bootstrap-submit").click();
   await expect(page.getByTestId("tree-empty")).toBeVisible();
+  await dismissOnboarding(page);
 
   await createTreeNode(page, "menu-newTextDocument", "Design Notes");
 

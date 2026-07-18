@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, FileCog, Keyboard, Plug, RotateCcw, ShieldCheck, SlidersHorizontal, Users, X } from "lucide-react";
+import { Activity, Boxes, FileCog, Keyboard, Plug, RotateCcw, ShieldCheck, SlidersHorizontal, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentSummary } from "../lib/api";
@@ -10,6 +10,7 @@ import { DocumentFontFamily, documentFontFamilies, useAuthoringPreferencesStore 
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
 import { RoleGuide } from "./RoleGuide";
 import { useEscapeClose } from "../hooks/useEscapeClose";
+import { pilotTelemetryEnabled, setPilotTelemetryEnabled } from "../lib/pilotTelemetry";
 
 export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentId, onClose }: { organizationId: string; workspaceId: string; documentId: string | null; onClose: () => void }) {
   const { t } = useTranslation();
@@ -18,7 +19,8 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
   const toast = useToastStore((state) => state.push);
   const themeMode = useThemeStore((state) => state.mode);
   const setThemeMode = useThemeStore((state) => state.setMode);
-  const [tab, setTab] = useState<"document" | "authoring" | "keyboard" | "roles" | "configurations" | "integrations" | "sso">("authoring");
+  const [tab, setTab] = useState<"document" | "authoring" | "keyboard" | "roles" | "privacy" | "configurations" | "integrations" | "sso">("authoring");
+  const [pilotTelemetry, setPilotTelemetry] = useState(pilotTelemetryEnabled());
   const [name, setName] = useState("");
   const [kind, setKind] = useState("variant");
   const [integrationUrl, setIntegrationUrl] = useState("");
@@ -68,6 +70,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
           <Tab active={tab === "authoring"} onClick={() => setTab("authoring")} icon={<SlidersHorizontal size={14} />} label={t("authoringSettings")} />
           <Tab active={tab === "keyboard"} onClick={() => setTab("keyboard")} icon={<Keyboard size={14} />} label={t("keyboardShortcuts")} />
           <Tab active={tab === "roles"} onClick={() => setTab("roles")} icon={<Users size={14} />} label={t("rolesAndAccess")} />
+          <Tab active={tab === "privacy"} onClick={() => setTab("privacy")} icon={<Activity size={14} />} label={t("privacyAndDiagnostics")} />
           <Tab active={tab === "configurations"} onClick={() => setTab("configurations")} icon={<Boxes size={14} />} label={t("configurations")} />
           <Tab active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<Plug size={14} />} label={t("integrations")} />
           <Tab active={tab === "sso"} onClick={() => setTab("sso")} icon={<ShieldCheck size={14} />} label={t("sso")} />
@@ -87,8 +90,8 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
               <ChoiceButton active={themeMode === "system"} label={t("themeSystem")} onClick={() => setThemeMode("system")} />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <ChoiceButton active={storedLanguage() === "tr"} label={t("langTurkish")} onClick={() => setLanguage("tr")} />
-              <ChoiceButton active={storedLanguage() === "en"} label={t("langEnglish")} onClick={() => setLanguage("en")} />
+              <ChoiceButton testId="language-tr" active={storedLanguage() === "tr"} label={t("langTurkish")} onClick={() => setLanguage("tr")} />
+              <ChoiceButton testId="language-en" active={storedLanguage() === "en"} label={t("langEnglish")} onClick={() => setLanguage("en")} />
             </div>
             <div className="grid grid-cols-3 gap-2" role="group" aria-label={t("rowDensity")}>
               <ChoiceButton active={preferences.rowDensity === "compact"} label={t("compactDensity")} onClick={() => preferences.setRowDensity("compact")} />
@@ -112,6 +115,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
         </div>}
         {tab === "keyboard" && <SettingsSection title={t("keyboardShortcuts")} description={t("keyboardShortcutsHelp")}><KeyboardShortcutsSettings /></SettingsSection>}
         {tab === "roles" && <SettingsSection title={t("rolesAndAccess")} description={t("rolesAndAccessHelp")}><RoleGuide /></SettingsSection>}
+        {tab === "privacy" && <SettingsSection title={t("privacyAndDiagnostics")} description={t("privacyAndDiagnosticsHelp")}><ToggleRow label={t("pilotTelemetry")} description={t("pilotTelemetryHelp")} checked={pilotTelemetry} onChange={(checked) => { setPilotTelemetry(checked); setPilotTelemetryEnabled(checked); }} /><p className="rounded-lg border border-border bg-editorBackground p-3 text-xs text-mutedForeground">{t("pilotTelemetryDataNotice")}</p></SettingsSection>}
         {tab === "configurations" && <div className="space-y-3">
           <div className="grid max-h-56 grid-cols-2 gap-2 overflow-auto">{configurations.data?.map((item) => <div key={item.id} className="rounded-xl border border-border bg-editorBackground p-3"><div className="font-medium">{item.name}</div><div className="text-xs text-mutedForeground">{item.kind}</div></div>)}</div>
           <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (name.trim()) createConfiguration.mutate(); }}><input className="min-w-0 flex-1 rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder={t("configurationName")} value={name} onChange={(event) => setName(event.target.value)} /><select className="rounded-lg border border-border bg-editorBackground px-2" value={kind} onChange={(event) => setKind(event.target.value)}><option value="stream">Stream</option><option value="baseline">Baseline</option><option value="variant">Variant</option></select><button className="rounded-lg bg-primary px-3 text-primaryForeground">{t("create")}</button></form>
@@ -135,8 +139,8 @@ function ToggleRow({ label, description, checked, onChange }: { label: string; d
   return <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-border bg-editorBackground p-3 text-sm"><span><span className="block font-medium">{label}</span><span className="mt-0.5 block text-xs text-mutedForeground">{description}</span></span><input type="checkbox" className="h-4 w-4 accent-primary" checked={checked} onChange={(event) => onChange(event.target.checked)} /></label>;
 }
 
-function ChoiceButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return <button className={`rounded-lg border px-3 py-2 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border bg-editorBackground hover:bg-muted"}`} onClick={onClick}>{label}</button>;
+function ChoiceButton({ active, label, onClick, testId }: { active: boolean; label: string; onClick: () => void; testId?: string }) {
+  return <button data-testid={testId} className={`rounded-lg border px-3 py-2 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border bg-editorBackground hover:bg-muted"}`} onClick={onClick}>{label}</button>;
 }
 
 function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {

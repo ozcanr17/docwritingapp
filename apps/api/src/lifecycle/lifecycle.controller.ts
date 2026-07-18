@@ -119,6 +119,19 @@ const integrationSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
+const pilotFeedbackSchema = z.object({
+  category: z.enum(["bug", "usability", "data_migration", "performance", "feature_request"]),
+  title: z.string().trim().min(3).max(200),
+  description: z.string().trim().min(10).max(10000),
+  context: z.object({ route: z.string().max(500).optional(), documentId: z.string().uuid().optional(), clientVersion: z.string().max(50).optional() }).default({}),
+});
+
+const usageEventSchema = z.object({
+  consent: z.literal(true),
+  eventName: z.enum(["document_opened", "import_previewed", "import_completed", "baseline_created", "test_execution_completed", "feedback_opened"]),
+  metadata: z.record(z.union([z.string().max(100), z.number().finite(), z.boolean()])).default({}),
+});
+
 const ssoSchema = z.object({
   issuer: z.string().url(),
   clientId: z.string().min(1).max(500),
@@ -482,6 +495,29 @@ export class LifecycleController {
   @Get("organizations/:orgId/integrations")
   integrations(@CurrentUser() user: SessionUser, @Param("orgId", ParseUUIDPipe) orgId: string) {
     return this.lifecycle.listIntegrations(user.userId, orgId);
+  }
+
+  @Post("organizations/:orgId/pilot-feedback")
+  createPilotFeedback(
+    @CurrentUser() user: SessionUser,
+    @Param("orgId", ParseUUIDPipe) orgId: string,
+    @Body(new ZodBodyPipe(pilotFeedbackSchema)) body: z.infer<typeof pilotFeedbackSchema>,
+  ) {
+    return this.lifecycle.createPilotFeedback(user.userId, orgId, body);
+  }
+
+  @Get("organizations/:orgId/pilot-feedback")
+  listPilotFeedback(@CurrentUser() user: SessionUser, @Param("orgId", ParseUUIDPipe) orgId: string) {
+    return this.lifecycle.listPilotFeedback(user.userId, orgId);
+  }
+
+  @Post("organizations/:orgId/usage-events")
+  recordUsageEvent(
+    @CurrentUser() user: SessionUser,
+    @Param("orgId", ParseUUIDPipe) orgId: string,
+    @Body(new ZodBodyPipe(usageEventSchema)) body: z.infer<typeof usageEventSchema>,
+  ) {
+    return this.lifecycle.recordUsageEvent(user.userId, orgId, body.eventName, body.metadata);
   }
 
   @Post("organizations/:orgId/integrations")

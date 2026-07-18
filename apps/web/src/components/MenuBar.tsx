@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, CustomFieldType, DocumentType, FieldDefinition, OutlineRow } from "../lib/api";
 import { columnsForDocument } from "../lib/columns";
@@ -11,6 +11,8 @@ import { useToastStore } from "../stores/toasts";
 import { Menu, MenuEntry } from "./Menu";
 import { AddColumnDialog } from "./AddColumnDialog";
 import { NotificationCenter } from "./NotificationCenter";
+
+const MigrationWizard = lazy(() => import("./MigrationWizard").then((module) => ({ default: module.MigrationWizard })));
 
 interface MenuBarProps {
   documentId: string | null;
@@ -28,6 +30,8 @@ interface MenuBarProps {
   commandPaletteShortcut?: string;
   searchShortcut?: string;
   onOpenOnboarding?: () => void;
+  onOpenFeedback?: () => void;
+  onOpenPilotChecklist?: () => void;
 }
 
 function slugifyKey(name: string): string {
@@ -53,7 +57,7 @@ export function resolveEditMenuTrailing(current: boolean, leadingRight: number, 
   return current;
 }
 
-export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen, onOpenCommandPalette = () => undefined, commandPaletteShortcut = "", searchShortcut = "", onOpenOnboarding = () => undefined }: MenuBarProps) {
+export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen, onOpenCommandPalette = () => undefined, commandPaletteShortcut = "", searchShortcut = "", onOpenOnboarding = () => undefined, onOpenFeedback = () => undefined, onOpenPilotChecklist = () => undefined }: MenuBarProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
@@ -65,6 +69,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
   const reqifInput = useRef<HTMLInputElement>(null);
   const xlsxInput = useRef<HTMLInputElement>(null);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
+  const [migrationFile, setMigrationFile] = useState<{ format: "csv" | "xlsx" | "reqif"; fileName: string; content: string } | null>(null);
   const [editMenuTrailing, setEditMenuTrailing] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -123,28 +128,6 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
       window.open(url, "_blank", "noopener,noreferrer");
       pushToast("success", t("exportReady"));
     },
-    onError: () => pushToast("error", t("genericError")),
-  });
-
-  const importCsv = useMutation({
-    mutationFn: (csv: string) => api(`/documents/${documentId}/imports`, { method: "POST", body: JSON.stringify({ csv }) }),
-    onSuccess: async () => {
-      await invalidateOutline();
-      pushToast("success", t("importCsv"));
-    },
-    onError: () => pushToast("error", t("genericError")),
-  });
-  const importReqif = useMutation({
-    mutationFn: (reqif: string) => api(`/documents/${documentId}/imports/reqif`, { method: "POST", body: JSON.stringify({ reqif }) }),
-    onSuccess: async () => {
-      await invalidateOutline();
-      pushToast("success", t("importReqif"));
-    },
-    onError: () => pushToast("error", t("genericError")),
-  });
-  const importXlsx = useMutation({
-    mutationFn: (data: string) => api(`/documents/${documentId}/imports/xlsx`, { method: "POST", body: JSON.stringify({ data }) }),
-    onSuccess: async () => { await invalidateOutline(); pushToast("success", t("importXlsx")); },
     onError: () => pushToast("error", t("genericError")),
   });
 
@@ -295,6 +278,8 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
 
   const helpEntries: MenuEntry[] = [
     { key: "onboarding", label: t("openGettingStarted"), onSelect: onOpenOnboarding },
+    { key: "pilot-checklist", label: t("pilotChecklist"), onSelect: onOpenPilotChecklist },
+    { key: "pilot-feedback", label: t("pilotFeedback"), onSelect: onOpenFeedback },
     { key: "help-sep", label: "", separator: true },
     { key: "about", label: t("about"), onSelect: () => pushToast("info", `${t("appName")} — ${t("aboutText")}`) },
   ];
@@ -363,7 +348,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
         onChange={async (event) => {
           const file = event.target.files?.[0];
           if (!file) return;
-          importCsv.mutate(await file.text());
+          setMigrationFile({ format: "csv", fileName: file.name, content: await file.text() });
           event.target.value = "";
         }}
       />
@@ -378,7 +363,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
           const bytes = new Uint8Array(await file.arrayBuffer());
           let binary = "";
           for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-          importXlsx.mutate(btoa(binary));
+          setMigrationFile({ format: "xlsx", fileName: file.name, content: btoa(binary) });
           event.target.value = "";
         }}
       />
@@ -391,7 +376,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
         onChange={async (event) => {
           const file = event.target.files?.[0];
           if (!file) return;
-          importReqif.mutate(await file.text());
+          setMigrationFile({ format: "reqif", fileName: file.name, content: await file.text() });
           event.target.value = "";
         }}
       />
@@ -402,6 +387,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
         onSubmit={(input) => addColumn.mutate(input)}
       />
     )}
+    {migrationFile && documentId && <Suspense fallback={null}><MigrationWizard documentId={documentId} {...migrationFile} onClose={() => setMigrationFile(null)} onImported={async () => { await invalidateOutline(); pushToast("success", t("importCompleted")); }} /></Suspense>}
     </>
   );
 }

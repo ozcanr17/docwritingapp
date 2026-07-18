@@ -61,6 +61,44 @@ describe("exports and imports", () => {
     expect(byTitle.get("Scope")?.displayNumber).toBe("2");
   });
 
+  it("previews migration findings without changing the document", async () => {
+    const before = await prisma.documentRow.count({ where: { documentId } });
+    const csv = [
+      "level,type,requirement_no,title,description",
+      "0,heading,,Imported chapter,",
+      "1,requirement,GER-100,Unique requirement,Must remain unique",
+    ].join("\n");
+    const response = await app.inject({ method: "POST", url: `/documents/${documentId}/imports/preview`, headers: { cookie: actor.cookie }, payload: { csv } });
+    expect(response.statusCode).toBe(201);
+    expect(JSON.parse(response.body)).toMatchObject({ valid: true, rowCount: 2, counts: { heading: 1, requirement: 1 }, findings: [] });
+    expect(await prisma.documentRow.count({ where: { documentId } })).toBe(before);
+  });
+
+  it("blocks duplicate identifiers and invalid hierarchy before mutation", async () => {
+    const before = await prisma.documentRow.count({ where: { documentId } });
+    const csv = [
+      "level,type,requirement_no,title,description",
+      "1,requirement,REQ-001,Duplicate existing,",
+      "0,requirement,NEW-001,First,",
+      "0,requirement,NEW-001,Duplicate incoming,",
+      "0,test_step,,Wrong document type,",
+    ].join("\n");
+    const preview = await app.inject({ method: "POST", url: `/documents/${documentId}/imports/preview`, headers: { cookie: actor.cookie }, payload: { csv } });
+    expect(preview.statusCode).toBe(201);
+    const body = JSON.parse(preview.body) as { valid: boolean; findings: Array<{ code: string }> };
+    expect(body.valid).toBe(false);
+    expect(body.findings.map((finding) => finding.code)).toEqual(expect.arrayContaining(["hierarchy_level_gap", "duplicate_number_in_document", "duplicate_number_in_file", "row_type_not_allowed"]));
+    const attempted = await app.inject({ method: "POST", url: `/documents/${documentId}/imports`, headers: { cookie: actor.cookie }, payload: { csv } });
+    expect(attempted.statusCode).toBe(422);
+    expect(await prisma.documentRow.count({ where: { documentId } })).toBe(before);
+  });
+
+  it("requires document write access for migration preview", async () => {
+    const outsider = await registerActor(app, "preview-outsider");
+    const response = await app.inject({ method: "POST", url: `/documents/${documentId}/imports/preview`, headers: { cookie: outsider.cookie }, payload: { csv: "type,title\nheading,Hidden" } });
+    expect(response.statusCode).toBe(403);
+  });
+
   it("creates a pending export job and enqueues it", async () => {
     const response = await app.inject({
       method: "POST",

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createTreeNode } from "./helpers";
+import { createTreeNode, dismissOnboarding } from "./helpers";
 
 test("split panes keep their positions and align editor bars while focus changes", async ({ page }) => {
   const suffix = Date.now();
@@ -12,6 +12,7 @@ test("split panes keep their positions and align editor bars while focus changes
   await page.getByTestId("bootstrap-org-name").fill("Split Org");
   await page.getByTestId("bootstrap-workspace-name").fill("Main");
   await page.getByTestId("bootstrap-submit").click();
+  await dismissOnboarding(page);
 
   await createTreeNode(page, "menu-newDocument", "Left Spec");
   await createTreeNode(page, "menu-newTestDocument", "Right Tests");

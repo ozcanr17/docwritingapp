@@ -1,0 +1,20 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+
+const dumpPath = resolve(process.argv[2] ?? "");
+const targetUrl = process.env.TARGET_DATABASE_URL;
+if (!process.argv[2] || !targetUrl) throw new Error("Usage: TARGET_DATABASE_URL=... RESTORE_CONFIRM=<database> node restore-database.mjs <dump>");
+const target = new URL(targetUrl);
+const databaseName = target.pathname.slice(1);
+if (!databaseName || process.env.RESTORE_CONFIRM !== databaseName) throw new Error("RESTORE_CONFIRM must exactly match the target database name");
+if (databaseName === "docsys" || databaseName === "docsys_test") throw new Error("Direct restore into protected development databases is not allowed");
+const manifest = JSON.parse(await readFile(`${dumpPath}.json`, "utf8"));
+const checksum = createHash("sha256").update(await readFile(dumpPath)).digest("hex");
+if (manifest.format !== "docsys-postgresql-backup" || manifest.version !== 1 || manifest.sha256 !== checksum) throw new Error("Backup manifest or checksum validation failed");
+const list = spawnSync("pg_restore", ["--list", dumpPath], { stdio: "ignore", env: { ...process.env, LC_ALL: "C" } });
+if (list.status !== 0) throw new Error("Backup archive validation failed");
+const restore = spawnSync("pg_restore", ["--clean", "--if-exists", "--no-owner", "--no-acl", `--dbname=${targetUrl}`, dumpPath], { stdio: "inherit", env: { ...process.env, LC_ALL: "C" } });
+if (restore.status !== 0) throw new Error(`pg_restore failed with status ${restore.status ?? "unknown"}`);
+process.stdout.write(`${JSON.stringify({ restored: true, databaseName, checksum })}\n`);

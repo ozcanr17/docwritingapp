@@ -1625,6 +1625,58 @@ export class LifecycleService {
     });
   }
 
+  async createPilotFeedback(
+    actorId: string,
+    organizationId: string,
+    input: { category: string; title: string; description: string; context: Record<string, unknown> },
+  ) {
+    await this.access.assertPermission(actorId, "org.read", { organizationId });
+    const entry = await this.prisma.auditEvent.create({
+      data: {
+        organizationId,
+        actorId,
+        action: "pilot.feedback_created",
+        entityType: "user",
+        entityId: actorId,
+        nextData: { category: input.category, title: input.title, description: input.description, context: input.context } as Prisma.InputJsonValue,
+      },
+      select: { id: true, createdAt: true },
+    });
+    return { id: entry.id, createdAt: entry.createdAt };
+  }
+
+  async listPilotFeedback(actorId: string, organizationId: string) {
+    await this.access.assertPermission(actorId, "org.manage", { organizationId });
+    const events = await this.prisma.auditEvent.findMany({
+      where: { organizationId, action: "pilot.feedback_created" },
+      orderBy: { createdAt: "desc" },
+      take: 250,
+      select: { id: true, actorId: true, nextData: true, createdAt: true },
+    });
+    const actors = await this.prisma.user.findMany({
+      where: { id: { in: events.flatMap((event) => event.actorId ? [event.actorId] : []) } },
+      select: { id: true, displayName: true, email: true },
+    });
+    const byId = new Map(actors.map((actor) => [actor.id, actor]));
+    return events.map((event) => ({ ...event, actor: event.actorId ? byId.get(event.actorId) ?? null : null }));
+  }
+
+  async recordUsageEvent(actorId: string, organizationId: string, eventName: string, metadata: Record<string, string | number | boolean>) {
+    await this.access.assertPermission(actorId, "org.read", { organizationId });
+    const event = await this.prisma.auditEvent.create({
+      data: {
+        organizationId,
+        actorId,
+        action: "pilot.usage_event",
+        entityType: "user",
+        entityId: actorId,
+        metadata: { eventName, ...metadata } as Prisma.InputJsonValue,
+      },
+      select: { id: true, createdAt: true },
+    });
+    return { accepted: true, id: event.id, createdAt: event.createdAt };
+  }
+
   async listIntegrations(actorId: string, organizationId: string) {
     await this.access.assertPermission(actorId, "org.manage", { organizationId });
     return this.prisma.integrationEndpoint.findMany({ where: { organizationId, deletedAt: null }, orderBy: { name: "asc" } });

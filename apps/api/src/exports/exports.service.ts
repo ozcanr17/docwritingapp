@@ -12,7 +12,7 @@ import ExcelJS from "exceljs";
 
 export type ExportFormat = "csv" | "docx" | "xlsx" | "pdf" | "reqif";
 
-interface ParsedImportRow {
+export interface ParsedImportRow {
   level: number;
   rowType: RowType;
   title: string;
@@ -21,6 +21,21 @@ interface ParsedImportRow {
   action: string;
   expectedResult: string;
   testResult: string;
+}
+
+export interface ImportPreviewFinding {
+  severity: "error" | "warning";
+  code: string;
+  row: number | null;
+  value?: string;
+}
+
+export interface ImportPreview {
+  valid: boolean;
+  rowCount: number;
+  counts: Record<RowType, number>;
+  findings: ImportPreviewFinding[];
+  sample: Array<ParsedImportRow & { sourceRow: number }>;
 }
 
 const VALID_ROW_TYPES: RowType[] = ["heading", "requirement", "test_case", "test_step", "note"];
@@ -104,10 +119,8 @@ export class ExportsService {
       documentId,
     });
     const rows = parseImportCsv(csvText);
-    if (rows.length === 0) throw new UnprocessableEntityException("No importable rows found");
-    if (rows.some((row) => !ALLOWED_ROW_TYPES[document.documentType].includes(row.rowType))) {
-      throw new UnprocessableEntityException("CSV contains row types that are not allowed in this document type");
-    }
+    const preview = await this.previewRows(actorId, documentId, rows);
+    if (!preview.valid) throw new UnprocessableEntityException({ message: "Import validation failed", findings: preview.findings });
 
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${document.id}::text, 0))`;
@@ -184,7 +197,19 @@ export class ExportsService {
     return { importedRows: created };
   }
 
+  async previewCsv(actorId: string, documentId: string, csvText: string) {
+    return this.previewRows(actorId, documentId, parseImportCsv(csvText));
+  }
+
   async importReqif(actorId: string, documentId: string, reqifText: string) {
+    return this.importCsv(actorId, documentId, await this.reqifToCsv(documentId, reqifText));
+  }
+
+  async previewReqif(actorId: string, documentId: string, reqifText: string) {
+    return this.previewRows(actorId, documentId, parseImportCsv(await this.reqifToCsv(documentId, reqifText)));
+  }
+
+  private async reqifToCsv(documentId: string, reqifText: string) {
     const document = await this.requireDocument(documentId);
     const parsed = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", removeNSPrefix: true }).parse(reqifText) as unknown;
     const objects = collectNodes(parsed, "SPEC-OBJECT");
@@ -201,10 +226,18 @@ export class ExportsService {
       "level,type,requirement_no,title,description",
       ...rows.map((row) => `0,requirement,${csvCell(row.identifier)},${csvCell(row.title)},`),
     ].join("\n");
-    return this.importCsv(actorId, documentId, csv);
+    return csv;
   }
 
   async importXlsx(actorId: string, documentId: string, base64: string) {
+    return this.importCsv(actorId, documentId, await this.xlsxToCsv(base64));
+  }
+
+  async previewXlsx(actorId: string, documentId: string, base64: string) {
+    return this.previewRows(actorId, documentId, parseImportCsv(await this.xlsxToCsv(base64)));
+  }
+
+  private async xlsxToCsv(base64: string) {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(Buffer.from(base64, "base64") as never);
     const sheet = workbook.worksheets[0];
@@ -225,7 +258,7 @@ export class ExportsService {
       const values = [String(level), type, cell(row, "requirement_no", "gereksinim_no"), cell(row, "title", "ba\u015fl\u0131k"), cell(row, "description", "a\u00e7\u0131klama"), cell(row, "test_step", "test_ad\u0131m\u0131"), cell(row, "expected_result", "beklenen_sonu\u00e7"), cell(row, "test_result", "test_sonucu")];
       lines.push(values.map(csvCell).join(","));
     }
-    return this.importCsv(actorId, documentId, lines.join("\n"));
+    return lines.join("\n");
   }
 
   async listTemplates(actorId: string, organizationId: string) {
@@ -260,6 +293,63 @@ export class ExportsService {
     const document = await this.prisma.document.findFirst({ where: { id: documentId, deletedAt: null } });
     if (!document) throw new NotFoundException("Document not found");
     return document;
+  }
+
+  private async previewRows(actorId: string, documentId: string, rows: ParsedImportRow[]): Promise<ImportPreview> {
+    const document = await this.requireDocument(documentId);
+    await this.access.assertPermission(actorId, "row.write", {
+      organizationId: document.organizationId,
+      workspaceId: document.workspaceId,
+      documentId,
+    });
+    const findings: ImportPreviewFinding[] = [];
+    const counts = Object.fromEntries(VALID_ROW_TYPES.map((type) => [type, 0])) as Record<RowType, number>;
+    const existingNumbers = new Set((await this.prisma.requirementDetail.findMany({
+      where: { row: { documentId, deletedAt: null }, requirementNo: { not: null } },
+      select: { requirementNo: true },
+    })).flatMap((item) => item.requirementNo ? [item.requirementNo.toUpperCase()] : []));
+    const incomingNumbers = new Set<string>();
+    const hierarchy: RowType[] = [];
+    rows.forEach((row, index) => {
+      const sourceRow = index + 2;
+      counts[row.rowType] += 1;
+      if (!ALLOWED_ROW_TYPES[document.documentType].includes(row.rowType)) {
+        findings.push({ severity: "error", code: "row_type_not_allowed", row: sourceRow, value: row.rowType });
+      }
+      if (row.level > hierarchy.length) {
+        findings.push({ severity: "error", code: "hierarchy_level_gap", row: sourceRow, value: String(row.level) });
+      }
+      while (hierarchy.length > row.level) hierarchy.pop();
+      const parent = hierarchy[row.level - 1];
+      if (row.level > 0 && parent && !isAllowedParent(row.rowType, parent)) {
+        findings.push({ severity: "error", code: "invalid_parent", row: sourceRow, value: `${parent}:${row.rowType}` });
+      }
+      if ((row.rowType === "heading" || row.rowType === "test_case") && !row.title) {
+        findings.push({ severity: "error", code: "missing_title", row: sourceRow });
+      }
+      if (row.rowType === "requirement" && !row.title && !row.description) {
+        findings.push({ severity: "warning", code: "empty_requirement", row: sourceRow });
+      }
+      if (row.rowType === "test_step" && !row.action) {
+        findings.push({ severity: "warning", code: "empty_test_step", row: sourceRow });
+      }
+      if (row.rowType === "requirement" && row.requirementNo) {
+        const normalized = row.requirementNo.toUpperCase();
+        if (incomingNumbers.has(normalized)) findings.push({ severity: "error", code: "duplicate_number_in_file", row: sourceRow, value: row.requirementNo });
+        if (existingNumbers.has(normalized)) findings.push({ severity: "error", code: "duplicate_number_in_document", row: sourceRow, value: row.requirementNo });
+        incomingNumbers.add(normalized);
+      }
+      hierarchy[row.level] = row.rowType;
+      hierarchy.length = row.level + 1;
+    });
+    if (rows.length === 0) findings.push({ severity: "error", code: "no_importable_rows", row: null });
+    return {
+      valid: !findings.some((finding) => finding.severity === "error"),
+      rowCount: rows.length,
+      counts,
+      findings,
+      sample: rows.slice(0, 20).map((row, index) => ({ ...row, sourceRow: index + 2 })),
+    };
   }
 }
 

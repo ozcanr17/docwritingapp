@@ -1,0 +1,22 @@
+import { createHash } from "node:crypto";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL is required");
+const parsed = new URL(databaseUrl);
+const databaseName = parsed.pathname.slice(1);
+if (!databaseName) throw new Error("DATABASE_URL must include a database name");
+const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+const outputDirectory = resolve(process.env.BACKUP_DIR ?? "output/backups");
+await mkdir(outputDirectory, { recursive: true });
+const dumpPath = resolve(outputDirectory, `docsys-${databaseName}-${stamp}.dump`);
+const result = spawnSync("pg_dump", ["--format=custom", "--compress=9", "--no-owner", "--no-acl", `--file=${dumpPath}`, databaseUrl], { stdio: "inherit", env: { ...process.env, LC_ALL: "C" } });
+if (result.status !== 0) throw new Error(`pg_dump failed with status ${result.status ?? "unknown"}`);
+await chmod(dumpPath, 0o600);
+const bytes = await readFile(dumpPath);
+const checksum = createHash("sha256").update(bytes).digest("hex");
+const manifestPath = `${dumpPath}.json`;
+await writeFile(manifestPath, JSON.stringify({ format: "docsys-postgresql-backup", version: 1, databaseName, createdAt: new Date().toISOString(), fileName: basename(dumpPath), sizeBytes: bytes.length, sha256: checksum }, null, 2), { mode: 0o600 });
+process.stdout.write(`${JSON.stringify({ dumpPath, manifestPath, checksum })}\n`);
