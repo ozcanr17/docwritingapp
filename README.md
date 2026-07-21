@@ -24,3 +24,11 @@ pnpm scan:chars
 Without Docker, point `DATABASE_URL` at any PostgreSQL 16 instance.
 
 Architecture entry points: `docs/architecture/phase1-analysis.md`, `docs/adr/`.
+
+## Portable Windows release
+
+The Windows release contains two administrator-free executables. Keep `DocSys.exe` and `DocSys Server.exe` in the same directory and launch `DocSys.exe`; it starts the portable server automatically when needed. No Docker, Node.js, PostgreSQL, Redis, MinIO, runtime installer, Windows service, registry change, or PATH change is required on the target computer.
+
+The embedded infrastructure is extracted silently to the current user's `%LOCALAPPDATA%\DocSys` runtime cache. Application data remains in `%LOCALAPPDATA%\DocSys\data`; database backups created from the server panel are written to `%LOCALAPPDATA%\DocSys\backups`.
+
+See `docs/WINDOWS-PORTABLE.md` for usage, storage and incremental development details.

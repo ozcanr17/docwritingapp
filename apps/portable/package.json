@@ -1,0 +1,12 @@
+{
+  "name": "@docsys/portable",
+  "version": "0.1.5",
+  "private": true,
+  "dependencies": {
+    "@docsys/api": "workspace:*",
+    "@docsys/collaboration": "workspace:*",
+    "@docsys/database": "workspace:*",
+    "@docsys/worker": "workspace:*",
+    "prisma": "^6.8.0"
+  }
+}

@@ -14,3 +14,9 @@ docs/guide/.generated-assets/
 .dev-logs/
 .dev-pids
 tmp/
+.build-cache/
+.portable-test/
+dist-portable/
+release-windows*/
+release-final/
+release/

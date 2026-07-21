@@ -57,7 +57,10 @@ export function LoginPage() {
   return (
     <main id="main-content" className="flex min-h-screen items-center justify-center bg-background px-4">
       <form onSubmit={submit} aria-labelledby="login-title" className="w-full max-w-md rounded-xl border border-border bg-surface p-8 shadow-lg">
-        <h1 id="login-title" className="mb-2 text-xl font-semibold">{t("appName")}</h1>
+        <div className="mb-3 flex items-center gap-3">
+          <img src="/docsys-icon.png" alt="" className="h-12 w-12 rounded-xl" />
+          <h1 id="login-title" className="text-xl font-semibold">{t("appName")}</h1>
+        </div>
         <p className="mb-6 text-sm text-mutedForeground">{t("loginDescription")}</p>
         {desktop && (
           <label className="mb-3 block text-sm">

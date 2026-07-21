@@ -46,7 +46,7 @@ export async function createApp(): Promise<NestFastifyApplication> {
 
 async function bootstrap(): Promise<void> {
   const app = await createApp();
-  await app.listen({ port: apiEnv().API_PORT, host: "0.0.0.0" });
+  await app.listen({ port: apiEnv().API_PORT, host: apiEnv().API_HOST });
 }
 
 if (require.main === module) {

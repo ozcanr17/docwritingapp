@@ -422,6 +422,7 @@
   "orUseSso": "or continue with",
   "organizationSlug": "Organization slug",
   "updateAvailable": "Application update available",
+  "clientError": "The application interface could not be loaded",
   "chunkLoadError": "A newer application version may have been deployed. Reload to continue safely.",
   "reload": "Reload",
   "moveAction": "Move",

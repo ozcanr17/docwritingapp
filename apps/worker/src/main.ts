@@ -11,6 +11,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
   LOG_LEVEL: z.string().default("info"),
+  WORKER_HOST: z.string().default("127.0.0.1"),
   WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(3003),
   TRASH_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   SNAPSHOT_KEEP_LATEST: z.coerce.number().int().positive().default(5),
@@ -98,7 +99,7 @@ async function main(): Promise<void> {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: "ok" }));
   });
-  health.listen(env.WORKER_HEALTH_PORT, () => logger.info({ port: env.WORKER_HEALTH_PORT }, "worker health endpoint"));
+  health.listen(env.WORKER_HEALTH_PORT, env.WORKER_HOST, () => logger.info({ host: env.WORKER_HOST, port: env.WORKER_HEALTH_PORT }, "worker health endpoint"));
 
   logger.info("worker started");
 }

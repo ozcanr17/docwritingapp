@@ -1,7 +1,7 @@
 {
   "name": "docsys",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "overrides": {
@@ -25,6 +25,11 @@
     "desktop:typecheck": "pnpm --filter @docsys/desktop typecheck",
     "desktop:check": "pnpm --filter @docsys/desktop check",
     "desktop:build": "pnpm --filter @docsys/desktop build",
+    "windows:server": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/build-server-windows.ps1",
+    "windows:server:fast": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/update-server-runtime.ps1",
+    "windows:server:deps": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/update-server-runtime.ps1 -Dependencies",
+    "windows:client": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/build-client-windows.ps1",
+    "windows:release": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/build-windows.ps1",
     "verify": "pnpm db:validate && pnpm typecheck && pnpm lint && pnpm scan:chars && pnpm --filter @docsys/web test && pnpm --filter @docsys/api test && pnpm --filter @docsys/worker test && pnpm build",
     "db:format": "pnpm --filter @docsys/database format",
     "db:validate": "pnpm --filter @docsys/database validate",

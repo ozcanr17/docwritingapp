@@ -421,6 +421,7 @@
   "orUseSso": "veya şununla devam et",
   "organizationSlug": "Organizasyon kısa adı",
   "updateAvailable": "Uygulama güncellemesi hazır",
+  "clientError": "Uygulama arayüzü yüklenemedi",
   "chunkLoadError": "Daha yeni bir uygulama sürümü yayınlanmış olabilir. Güvenle devam etmek için yeniden yükleyin.",
   "reload": "Yeniden yükle",
   "moveAction": "Taşı",

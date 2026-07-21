@@ -9,6 +9,7 @@ import { documentPermissions } from "./permissions";
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   JWT_SECRET: z.string().min(16),
+  COLLAB_HOST: z.string().default("0.0.0.0"),
   COLLAB_PORT: z.coerce.number().int().positive().default(3002),
   LOG_LEVEL: z.string().default("info"),
 });
@@ -48,6 +49,7 @@ async function storeSnapshot(documentName: string, state: Buffer): Promise<void>
 
 export function buildServer() {
   return Server.configure({
+    address: env.COLLAB_HOST,
     port: env.COLLAB_PORT,
     debounce: 2000,
     maxDebounce: 10000,

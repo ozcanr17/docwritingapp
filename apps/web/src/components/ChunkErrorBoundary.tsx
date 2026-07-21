@@ -21,7 +21,7 @@ class ChunkErrorBoundaryComponent extends Component<WithTranslation & { children
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <div className="max-w-md rounded-2xl border border-border bg-surface p-6 text-center shadow-xl">
-          <h1 className="text-lg font-semibold">{this.props.t("updateAvailable")}</h1>
+          <h1 className="text-lg font-semibold">{this.props.t("clientError")}</h1>
           <p className="mt-2 text-sm text-mutedForeground">{this.props.t("chunkLoadError")}</p>
           <button className="mt-5 rounded-lg bg-primary px-4 py-2 text-sm text-primaryForeground" onClick={() => globalThis.location.reload()}>
             {this.props.t("reload")}
