@@ -2,6 +2,60 @@
 
 Written for a brand-new session with zero prior context. Read this top to bottom before touching anything.
 
+## 0. Session handover snapshot (2026-07-21)
+
+### Current task
+
+The most recent product task was **Phase A: make DocSys safe and practical for a small controlled pilot, then expand and execute the automated test coverage**. Phase A is complete. The repository is currently at commit `d70080f` (`feat: prepare controlled pilot workflow`) on `main`; local `main` and `origin/main` were confirmed identical on 2026-07-21 before this handover-only update. The next product task should be Phase B, centered on real pilot evidence and repeatable adoption rather than another broad capability expansion.
+
+### What was completed in the latest task
+
+1. CSV, XLSX and ReqIF import now use a non-mutating migration preview. It checks write permission, allowed row types, hierarchy gaps, invalid parents, missing titles/actions and duplicate requirement identifiers in both the source file and target document. Findings retain source-row numbers; errors block confirmation and no document mutation occurs before explicit confirmation.
+2. A first-project pilot checklist covers roles, requirements, tests, migration, traceability, baseline and backup. Progress is personal and device-local.
+3. Structured pilot feedback is available from Help and appears in an administrator-only inbox. Limited pilot diagnostics are default-off, require explicit consent and accept only allowlisted event names and bounded primitive metadata. Document text, credentials, tokens and attachments are excluded.
+4. PostgreSQL backup, restore and restore-drill scripts were added. Backups use custom format, restrictive permissions, SHA-256 manifests and verification. Restore requires an exact confirmation token and refuses protected development/test database names. A live drill restored 45 schema objects and all 16 migrations into a temporary database, verified them and cleaned up.
+5. The editable Turkish pilot guide is `docs/PILOT-YONETICI-KILAVUZU.md`. It covers roles, migration, traceability, baseline, backup/restore, feedback, weekly review and pilot exit criteria.
+6. Automated coverage increased to API 67, web 93 and worker 13: **173/173** unit/integration tests pass. Playwright is **9/9**, including the new pilot guide/feedback/admin-inbox path, desktop login, migration confirmation, exports, split view, traceability and WCAG A/AA automation. The complete `pnpm verify` production gate passes.
+7. Desktop version is `0.1.5`. Readiness checks, Rust `cargo check`, the native Apple Silicon application and `DocSys_0.1.5_aarch64.dmg` production build pass. `pnpm audit --prod --audit-level high` reports no known production dependency vulnerability.
+8. This latest state was pushed to `origin/main`. Two personal untracked files, `docs_sample.pages` and `screenrecord.mov`, are intentionally not part of the repository and must remain untouched unless the user explicitly asks otherwise.
+
+### Where work is currently stuck
+
+There is **no active code blocker and no unfinished Phase A implementation**. The remaining constraint is external validation: no real design-partner pilot has yet produced usage evidence, migration samples, workflow timings or qualitative feedback. Production distribution also still depends on external infrastructure and credentials: Apple/Windows signing, updater signing secrets, an off-host backup destination, deployment monitoring, and any future enterprise identity/integration provider. Do not represent local compilation or synthetic tests as proof of market fit, production recovery readiness or third-party interoperability.
+
+### Next plan
+
+1. Run Phase B with two or three bounded pilot projects. Use the pilot checklist, assign an owner, record starting data size and migration source, and review administrator feedback weekly.
+2. Define and measure pilot exit criteria: first useful document, successful import rate, requirement-test coverage, baseline creation, completed execution, critical defect count, recovery drill age and unresolved feedback age.
+3. Add a privacy-preserving pilot-health summary derived only from consented allowlisted events. Do not add free-form document content to telemetry.
+4. Extend migration depth only from real samples: explicit field mapping, reusable mapping profiles, dry-run result export, conflict policy and improved ReqIF datatype/specification fidelity.
+5. Operationalize backups outside the developer machine: encrypted off-host storage, retention, scheduled restore drills, alerting and named RPO/RTO owners.
+6. After pilot evidence is reviewed, choose one focused product lane: workflow depth, interoperability or governance. Avoid starting all three simultaneously.
+
+### Pitfalls encountered in the latest task
+
+- Playwright initially reused stale API/web processes because `reuseExistingServer` was enabled. That made new endpoints appear broken and left an old onboarding overlay intercepting clicks. Before interpreting an e2e failure, verify the processes listening on ports 3001, 3002, 3003 and 5173 actually run the current checkout.
+- First-use onboarding opens after workspace bootstrap on an effect, not necessarily in the same event tick. E2e tests must wait briefly for the dialog before dismissing it; an immediate `isVisible()` check races the effect.
+- Import is now two-stage. Tests and UI callers must wait for `migration-preview-valid` and explicitly activate `confirm-migration-import`; expecting rows immediately after file selection is incorrect.
+- The top menu was intentionally consolidated to File and Edit. Analysis/Help are File submenus; Insert/Columns are Edit submenus; language/theme are in Settings. Tests using removed `menu-analysis`, `menu-insert` or `menu-view` selectors will time out.
+- Detail-panel links are progressively disclosed under `detail-tab-links`. Opening the panel does not make link controls visible until that tab is selected.
+- No grid column is sticky. Horizontal-scroll tests must expect ID and content/requirement columns to move together.
+- Traceability cells intentionally show compact Requirement No values such as `REQ-001`; full explanatory text is available in detail/preview. Do not restore verbose cell assertions.
+- The onboarding progress indicator originally used `aria-label` on a role-less `div`, causing a serious axe violation. It now has `role=progressbar` and value attributes. Preserve valid ARIA role/attribute combinations.
+- Backup scripts require `DATABASE_URL` in the process environment. Prisma and standalone scripts can otherwise load the package `.env` before runtime assignments because ESM imports are hoisted.
+
+### Absolute avoid list for the next session
+
+- Never stage, delete, rename or rewrite `docs_sample.pages` or `screenrecord.mov` without an explicit user request.
+- Never claim tests, security scans, restore drills, desktop builds, pushes or external integrations succeeded unless the exact verification was run and its result observed.
+- Never bypass the import preview or turn warnings/errors into silent coercion. Migration must remain non-mutating until confirmation.
+- Never collect document text, requirement content, comments, credentials, tokens, attachment data or unbounded metadata as telemetry. Consent must remain default-off.
+- Never restore over `docsys`, `docsys_test` or another protected/live database during a drill. Use a disposable database and verify the manifest checksum first.
+- Never weaken server-side tenancy, ACL, optimistic-concurrency, audit, soft-delete, collaboration authorization or PostgreSQL-as-source-of-truth rules for UI convenience.
+- Never put Turkish characters in TS/TSX source or add code comments. UI text belongs in both locale JSON files; run the forbidden-character scan before every commit.
+- Never blindly update a stale e2e selector to make a test green. First confirm whether the product behavior or the test expectation is authoritative.
+- Never confuse the unrelated `~/Desktop/workspace/reqtrack` prototype or its `reqtrack` database with DocSys.
+
 ## 1. What this project is
 
 **DocSys** (in-code id `docsys`, package scope `@docsys/*`) is an enterprise-grade web and Tauri desktop Requirements / Test / Document Management System modeled on IBM DOORS, built for Rıdvan (ridvanozcan7@gmail.com, GitHub `ozcanr17`). It manages a folder/document tree of hierarchical rows (headings, requirements, test cases, test steps, notes) with configurable columns, real-time collaboration, traceability links, exports/imports, baselines, and coverage analysis.
