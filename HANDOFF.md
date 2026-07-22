@@ -6,11 +6,20 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The most recent task was **make releases consistent across Windows, Linux and macOS after the first portable Windows publication**. Phase A remains complete. The repository now uses one checked release manifest for the browser surface, Tauri desktop packages and Windows portable runtimes. The next product task should still be Phase B, centered on real pilot evidence and repeatable adoption rather than another broad capability expansion.
+The most recent task was **start expanding DocSys with Jira-inspired defect, work, document and test-plan tracking without separating it from controlled requirements and test execution**. The first vertical slice is implemented. DocSys now has a project-scoped work model, a Work and tests hub, first-class test plans and traceable links to documents, rows and real executions. The next task is Phase 2 of `docs/WORK_AND_TEST_MANAGEMENT.md`: deepen planning/execution and add configurable workflow behavior without weakening the existing document governance model.
 
 ### What was completed in the latest task
 
-1. CSV, XLSX and ReqIF import now use a non-mutating migration preview. It checks write permission, allowed row types, hierarchy gaps, invalid parents, missing titles/actions and duplicate requirement identifiers in both the source file and target document. Findings retain source-row numbers; errors block confirmation and no document mutation occurs before explicit confirmation.
+1. A new `work-management` API module and PostgreSQL model introduce first-class Epic, Story, Task, Defect and Risk records with project keys, priorities, assignee/reporter, labels, due dates, hierarchy, optimistic versioning, soft deletion and audit events.
+2. Work items can link to other work items and to exactly one controlled document, document row or real test execution per artifact link. The API rechecks tenant, workspace, document and row permissions; cross-organization work-item links are rejected. Database constraints enforce the one-target artifact invariant and prevent duplicate artifact links.
+3. Comments, mentions and assignment notifications are native to work items. New `work_item.*` and `test_plan.*` permissions are included in system roles: viewers/reviewers read, editors write, project managers/admins manage.
+4. Test plans are first-class project objects with stable keys, lifecycle state, owner, environment/build and ordered test headings. Starting a planned item creates the existing real `TestExecution` and step records rather than duplicating execution history.
+5. The lazy-loaded Work and tests hub is available from primary navigation. It includes overview metrics, searchable/filterable list, Kanban view, status transitions, defect/task creation, context links to the current document or selected row and test-plan cards/creation.
+6. The Jira-derived capability boundaries and four-phase roadmap are documented in `docs/WORK_AND_TEST_MANAGEMENT.md`. Official Jira concepts are used as a reference, while requirements, test definitions and evidence remain native DocSys capabilities.
+7. Three new API integration tests cover linked defects, optimistic conflicts, audit/comment persistence, viewer read-only enforcement and a test-plan-started real execution. The current verified totals are web **93**, API **70** and worker **13**: **176/176** tests pass. `pnpm verify` passes. The browser-control surface was unavailable in this session, so no new visual/browser walkthrough or Playwright claim was made.
+8. The implementation is not yet a complete Jira replacement. Workflow configuration, drag ranking, releases/iterations, full plan editing, saved work queries, bulk operations, automation, dashboards and Jira synchronization remain Phase 2/3 work.
+
+9. CSV, XLSX and ReqIF import now use a non-mutating migration preview. It checks write permission, allowed row types, hierarchy gaps, invalid parents, missing titles/actions and duplicate requirement identifiers in both the source file and target document. Findings retain source-row numbers; errors block confirmation and no document mutation occurs before explicit confirmation.
 2. A first-project pilot checklist covers roles, requirements, tests, migration, traceability, baseline and backup. Progress is personal and device-local.
 3. Structured pilot feedback is available from Help and appears in an administrator-only inbox. Limited pilot diagnostics are default-off, require explicit consent and accept only allowlisted event names and bounded primitive metadata. Document text, credentials, tokens and attachments are excluded.
 4. PostgreSQL backup, restore and restore-drill scripts were added. Backups use custom format, restrictive permissions, SHA-256 manifests and verification. Restore requires an exact confirmation token and refuses protected development/test database names. A live drill restored 45 schema objects and all 16 migrations into a temporary database, verified them and cleaned up.
@@ -25,16 +34,16 @@ The most recent task was **make releases consistent across Windows, Linux and ma
 
 ### Where work is currently stuck
 
-There is **no active code blocker and no unfinished Phase A implementation**. The remaining constraint is external validation: no real design-partner pilot has yet produced usage evidence, migration samples, workflow timings or qualitative feedback. Production distribution also still depends on external infrastructure and credentials: Apple/Windows signing, updater signing secrets, an off-host backup destination, deployment monitoring, and any future enterprise identity/integration provider. Do not represent local compilation or synthetic tests as proof of market fit, production recovery readiness or third-party interoperability.
+There is **no active code blocker**. Work management is intentionally at the end of Phase 1, not feature-complete Jira parity. The largest functional gaps are a work-item detail/editor surface, user assignment picker for non-admins, test-plan item selection/editing UI, direct internal-defect creation from a failed execution step, drag ranking, configurable workflows, releases and saved queries. The in-app browser was unavailable, so run a real visual walkthrough before treating the new hub layout as UX-approved. External pilot evidence and production signing/operations dependencies also remain unchanged.
 
 ### Next plan
 
-1. Run Phase B with two or three bounded pilot projects. Use the pilot checklist, assign an owner, record starting data size and migration source, and review administrator feedback weekly.
-2. Define and measure pilot exit criteria: first useful document, successful import rate, requirement-test coverage, baseline creation, completed execution, critical defect count, recovery drill age and unresolved feedback age.
-3. Add a privacy-preserving pilot-health summary derived only from consented allowlisted events. Do not add free-form document content to telemetry.
-4. Extend migration depth only from real samples: explicit field mapping, reusable mapping profiles, dry-run result export, conflict policy and improved ReqIF datatype/specification fidelity.
-5. Operationalize backups outside the developer machine: encrypted off-host storage, retention, scheduled restore drills, alerting and named RPO/RTO owners.
-6. After pilot evidence is reviewed, choose one focused product lane: workflow depth, interoperability or governance. Avoid starting all three simultaneously.
+1. Visually test the Work and tests hub at desktop and narrow widths, add stable `data-testid` selectors and a Playwright flow for creation, filtering, status transition and test-plan creation.
+2. Add the work-item detail/editor surface with assignment picker, comments/mentions, artifact links, relations and activity history; expose work assignments in the existing My Work surface.
+3. Add test-plan editing: searchable test selection, assignee/environment/data-set configuration, execution progress and direct navigation to existing run history.
+4. Create an internal Defect work item directly from a failed step, retaining evidence by reference and showing the requirement-test-plan-execution-defect chain bidirectionally.
+5. Then implement configurable transition rules, drag ranking/backlog, releases/iterations, saved work queries and bulk operations in that order. Automation and external Jira sync remain later phases.
+6. Run the real pilot plan in parallel and measure adoption; do not let broad work-tracking scope postpone migration, recovery and user-evidence validation.
 
 ### Pitfalls encountered in the latest task
 
@@ -47,6 +56,8 @@ There is **no active code blocker and no unfinished Phase A implementation**. Th
 - Traceability cells intentionally show compact Requirement No values such as `REQ-001`; full explanatory text is available in detail/preview. Do not restore verbose cell assertions.
 - The onboarding progress indicator originally used `aria-label` on a role-less `div`, causing a serious axe violation. It now has `role=progressbar` and value attributes. Preserve valid ARIA role/attribute combinations.
 - Backup scripts require `DATABASE_URL` in the process environment. Prisma and standalone scripts can otherwise load the package `.env` before runtime assignments because ESM imports are hoisted.
+- The first schema patch accidentally placed work/test sequence counters on `Role` because the patch matched a generic `description` field. A corrective migration moves them to `Project`. Future schema edits must anchor patches to the exact model and run `prisma format`, `prisma validate`, migration tests and a fresh-database test before proceeding.
+- Prisma generated-client types consumed by API typecheck can remain stale until `pnpm --filter @docsys/database build` runs after `prisma generate`.
 
 ### Absolute avoid list for the next session
 
@@ -76,7 +87,7 @@ There is **no active code blocker and no unfinished Phase A implementation**. Th
 
 TypeScript modular monolith in a pnpm + Turborepo monorepo.
 
-- `apps/api` — NestJS 11 + Fastify. In addition to auth, RBAC, tenancy, tree, rows, events, audit, baselines, storage and health, it now has a `lifecycle` module for saved views, workspace search, quality/dashboard, comments/mentions/notifications, attachments, test executions, reviews, change proposals, configurations, row ACLs, integrations and OIDC SSO. Exports support CSV, XLSX, PDF, DOCX templates and ReqIF.
+- `apps/api` — NestJS 11 + Fastify. In addition to auth, RBAC, tenancy, tree, rows, events, audit, baselines, storage and health, it has a `lifecycle` module for controlled document/test capabilities and a `work-management` module for work items, defects, artifact relations, comments, test plans and planned executions. Exports support CSV, XLSX, PDF, DOCX templates and ReqIF.
 - `apps/collaboration` — Hocuspocus server (port 3002). `onAuthenticate` verifies the JWT + document.read permission; snapshots persist to `collaboration_snapshots`. Logs auth rejections. Also serves HTTP 200 on `/` (Playwright health-checks it).
 - `apps/worker` — BullMQ. Scheduled lifecycle jobs (30-day purge: batch, legal-hold-aware, idempotent, child-first hard deletes + snapshot compaction keep-last-5) AND the `docsys-exports` queue consumer (generates CSV/DOCX/XLSX/PDF/ReqIF from the outline, uploads to MinIO, updates job progress). Liveness HTTP endpoint on port 3003.
 - `apps/web` — React 18 + Vite + TS strict. The virtual grid has multi-selection, bulk edit/move/copy/link/delete, drag reorder, dynamic row heights, saved personal/team views, sorting, natural whole-table horizontal scrolling and configurable link projection. Workspace search, dashboard widgets, execution history, reviews, proposals, comments, mentions, attachments, notifications, configuration/integration/SSO settings and expanded import/export are exposed in the UI. Routes and heavy editor/dialog surfaces are lazy-loaded with explicit vendor chunks and a stale-deployment recovery boundary.
@@ -240,7 +251,7 @@ Desktop checks: `pnpm desktop:check && pnpm desktop:typecheck`; for a full local
 ## 8. Repo map
 
 ```
-apps/api            NestJS API (src/{auth,access,tenancy,tree,rows,events,audit,exports,baselines,storage,health,prisma,common})
+apps/api            NestJS API (src/{auth,access,tenancy,tree,rows,events,audit,exports,baselines,lifecycle,work-management,storage,health,prisma,common})
 apps/collaboration  Hocuspocus server (Yjs)
 apps/worker         BullMQ purge/compaction + export processor (+ liveness :3003)
 apps/web            React/Vite SPA (src/{pages,components,hooks,stores,lib,locales,test})

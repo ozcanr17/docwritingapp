@@ -106,6 +106,40 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 export type RowType = "heading" | "requirement" | "test_case" | "test_step" | "note";
 export type DocumentType = "requirement" | "test" | "general_document";
 
+export type WorkItemType = "epic" | "story" | "task" | "bug" | "risk";
+export type WorkItemStatus = "backlog" | "ready" | "in_progress" | "in_review" | "done" | "canceled";
+export type WorkItemPriority = "lowest" | "low" | "medium" | "high" | "highest" | "critical";
+
+export interface WorkItemSummary {
+  id: string;
+  key: string;
+  type: WorkItemType;
+  status: WorkItemStatus;
+  priority: WorkItemPriority;
+  title: string;
+  description: string | null;
+  labels: string[];
+  version: number;
+  dueAt: string | null;
+  project: { id: string; name: string; code: string };
+  reporter: { id: string; displayName: string };
+  assignee: { id: string; displayName: string } | null;
+  _count: { artifactLinks: number; comments: number };
+}
+
+export interface TestPlanSummary {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  status: "draft" | "active" | "completed" | "canceled";
+  environment: string | null;
+  buildReference: string | null;
+  version: number;
+  owner: { id: string; displayName: string };
+  _count: { items: number };
+}
+
 export interface UserProfile {
   id: string;
   email: string;

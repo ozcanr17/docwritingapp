@@ -1097,7 +1097,7 @@ export class LifecycleService {
     const includeAssignments = kind === "all" || kind === "assignment";
     const includeMentions = kind === "all" || kind === "mention";
     const includeReviews = kind === "all" || kind === "review";
-    const [assignments, mentions, reviews] = await Promise.all([
+    const [assignments, mentions, reviews, assignedWorkItems, workMentions] = await Promise.all([
       includeAssignments ? this.prisma.testCaseDetail.findMany({
         where: { assigneeId: actorId, row: { deletedAt: null, document: { deletedAt: null, organization: { members: { some: { userId: actorId, deletedAt: null, user: { deletedAt: null, isActive: true } } } } } } },
         include: { row: { include: { document: { select: { id: true, title: true, documentType: true } } } } },
@@ -1116,14 +1116,28 @@ export class LifecycleService {
         orderBy: { createdAt: "desc" },
         take: 100,
       }) : [],
+      includeAssignments ? this.prisma.workItem.findMany({
+        where: { assigneeId: actorId, deletedAt: null, status: { notIn: ["done", "canceled"] }, organization: { members: { some: { userId: actorId, deletedAt: null, user: { deletedAt: null, isActive: true } } } } },
+        include: { project: { select: { id: true, name: true } } },
+        orderBy: { updatedAt: "desc" },
+        take: 100,
+      }) : [],
+      includeMentions ? this.prisma.workItemComment.findMany({
+        where: { mentions: { has: actorId }, deletedAt: null, workItem: { deletedAt: null, organization: { members: { some: { userId: actorId, deletedAt: null, user: { deletedAt: null, isActive: true } } } } } },
+        include: { author: { select: { displayName: true } }, workItem: { include: { project: { select: { id: true, name: true } } } } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }) : [],
     ]);
     const items = [
       ...assignments.map((item) => ({ id: `assignment:${item.rowId}`, kind: "assignment", title: item.row.title || `ID ${item.row.objectNumber}`, detail: item.status, rowId: item.rowId, document: item.row.document, createdAt: item.updatedAt })),
       ...mentions.map((item) => ({ id: `mention:${item.id}`, kind: "mention", title: item.row.title || `ID ${item.row.objectNumber}`, detail: `${item.author.displayName}: ${item.body}`, rowId: item.rowId, document: item.row.document, createdAt: item.createdAt })),
       ...reviews.map((item) => ({ id: `review:${item.id}`, kind: "review", title: item.title, detail: item.document.title, rowId: null, document: item.document, createdAt: item.createdAt })),
+      ...assignedWorkItems.map((item) => ({ id: `work-assignment:${item.id}`, kind: "assignment", title: `${item.key} · ${item.title}`, detail: item.status, rowId: null, workItemId: item.id, document: null, project: item.project, createdAt: item.updatedAt })),
+      ...workMentions.map((item) => ({ id: `work-mention:${item.id}`, kind: "mention", title: `${item.workItem.key} · ${item.workItem.title}`, detail: `${item.author.displayName}: ${item.body}`, rowId: null, workItemId: item.workItemId, document: null, project: item.workItem.project, createdAt: item.createdAt })),
     ];
     return items
-      .filter((item) => !normalized || `${item.title} ${item.detail} ${item.document.title}`.toLocaleLowerCase().includes(normalized))
+      .filter((item) => !normalized || `${item.title} ${item.detail} ${item.document?.title ?? ""} ${"project" in item ? item.project.name : ""}`.toLocaleLowerCase().includes(normalized))
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .slice(0, 100);
   }

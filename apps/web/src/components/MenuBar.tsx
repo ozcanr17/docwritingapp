@@ -17,8 +17,8 @@ const MigrationWizard = lazy(() => import("./MigrationWizard").then((module) => 
 interface MenuBarProps {
   documentId: string | null;
   documentType: DocumentType | null;
-  view: "documents" | "trash";
-  setView: (view: "documents" | "trash") => void;
+  view: "documents" | "work" | "trash";
+  setView: (view: "documents" | "work" | "trash") => void;
   onOpenReport: (tab: "readiness" | "baselines" | "coverage" | "matrix" | "reviews" | "runs") => void;
   onOpenHistory: (mode: "row" | "document") => void;
   onOpenSearch: () => void;

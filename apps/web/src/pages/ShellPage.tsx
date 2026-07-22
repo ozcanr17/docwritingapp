@@ -39,6 +39,7 @@ const AdminPanel = lazy(() => import("../components/AdminPanel").then((module) =
 const DocumentAccessDialog = lazy(() => import("../components/DocumentAccessDialog").then((module) => ({ default: module.DocumentAccessDialog })));
 const PilotFeedbackDialog = lazy(() => import("../components/PilotFeedbackDialog").then((module) => ({ default: module.PilotFeedbackDialog })));
 const PilotChecklistDialog = lazy(() => import("../components/PilotChecklistDialog").then((module) => ({ default: module.PilotChecklistDialog })));
+const WorkManagementPage = lazy(() => import("../components/WorkManagementPage").then((module) => ({ default: module.WorkManagementPage })));
 
 interface Organization {
   id: string;
@@ -59,7 +60,7 @@ export function ShellPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<"documents" | "trash">("documents");
+  const [view, setView] = useState<"documents" | "work" | "trash">("documents");
   const [report, setReport] = useState<"readiness" | "baselines" | "coverage" | "matrix" | "reviews" | "runs" | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -225,6 +226,12 @@ export function ShellPage() {
     return () => window.removeEventListener("docsys:open-document-row", openDocumentRow);
   }, [openDocument]);
 
+  useEffect(() => {
+    const openWorkHub = () => setView("work");
+    window.addEventListener("docsys:open-work-hub", openWorkHub);
+    return () => window.removeEventListener("docsys:open-work-hub", openWorkHub);
+  }, []);
+
   const profile = useQuery({
     queryKey: ["me"],
     queryFn: () => api<UserProfile>("/auth/me"),
@@ -339,8 +346,8 @@ export function ShellPage() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <MenuBar
-        documentId={selectedDocumentId}
-        documentType={selectedDocument.data?.documentType ?? null}
+        documentId={view === "documents" ? selectedDocumentId : null}
+        documentType={view === "documents" ? selectedDocument.data?.documentType ?? null : null}
         view={view}
         setView={setView}
         onOpenReport={setReport}
@@ -408,11 +415,20 @@ export function ShellPage() {
             onClick={() => setView("documents")}
             testId="nav-documents"
           />
+          <SidebarItem
+            icon={<ClipboardCheck size={15} />}
+            label={t("workHub.navigation")}
+            active={view === "work"}
+            onClick={() => setView("work")}
+            testId="nav-work"
+          />
         </nav>
         <section data-testid="tree-section" aria-label={t("documentTree")} className="min-h-0 flex-1 overflow-hidden border-t border-white/10 bg-surface text-foreground">
           {workspaceId &&
             (view === "trash" ? (
               <TrashPanel workspaceId={workspaceId} />
+            ) : view === "work" ? (
+              <div className="p-4 text-xs leading-5 text-mutedForeground">{t("workHub.sidebarHelp")}</div>
             ) : (
               <TreePanel
                 workspaceId={workspaceId}
@@ -539,7 +555,9 @@ export function ShellPage() {
           </div>,
           document.body,
         )}
-        {view === "documents" && selectedDocumentId ? (
+        {view === "work" && workspaceId ? (
+          <Suspense fallback={<PanelLoading />}><WorkManagementPage workspaceId={workspaceId} contextDocumentId={selectedDocumentId} contextRowId={selectedRowId} /></Suspense>
+        ) : view === "documents" && selectedDocumentId ? (
           <div
             data-testid="document-split-container"
             className={`min-h-0 flex-1 overflow-hidden ${secondaryDocumentId ? `flex bg-background p-1.5 ${splitDirection === "horizontal" ? "flex-row" : "flex-col"}` : "flex"}`}

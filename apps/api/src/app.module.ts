@@ -16,6 +16,7 @@ import { RowsModule } from "./rows/rows.module";
 import { StorageModule } from "./storage/storage.module";
 import { TenancyModule } from "./tenancy/tenancy.module";
 import { TreeModule } from "./tree/tree.module";
+import { WorkManagementModule } from "./work-management/work-management.module";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { TreeModule } from "./tree/tree.module";
     LifecycleModule,
     PerformanceModule,
     HealthModule,
+    WorkManagementModule,
   ],
 })
 export class AppModule {}

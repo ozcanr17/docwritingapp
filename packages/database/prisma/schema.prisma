@@ -155,6 +155,53 @@ enum IntegrationType {
   assistant
 }
 
+enum WorkItemType {
+  epic
+  story
+  task
+  bug
+  risk
+}
+
+enum WorkItemStatus {
+  backlog
+  ready
+  in_progress
+  in_review
+  done
+  canceled
+}
+
+enum WorkItemPriority {
+  lowest
+  low
+  medium
+  high
+  highest
+  critical
+}
+
+enum WorkItemRelationType {
+  blocks
+  duplicates
+  relates_to
+  causes
+}
+
+enum WorkItemArtifactRole {
+  relates_to
+  affects
+  found_in
+  verifies
+}
+
+enum TestPlanStatus {
+  draft
+  active
+  completed
+  canceled
+}
+
 model User {
   id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email           String          @unique
@@ -193,6 +240,11 @@ model User {
   configurationCreators   ProductConfiguration[] @relation("ConfigurationCreator")
   rowAccessGrants         RowAccessGrant[]       @relation("RowAccessUser")
   documentAccessGrants    DocumentAccessGrant[]  @relation("DocumentAccessUser")
+  reportedWorkItems       WorkItem[]             @relation("WorkItemReporter")
+  assignedWorkItems       WorkItem[]             @relation("WorkItemAssignee")
+  workItemComments        WorkItemComment[]      @relation("WorkItemCommentAuthor")
+  ownedTestPlans          TestPlan[]             @relation("TestPlanOwner")
+  assignedTestPlanItems   TestPlanItem[]         @relation("TestPlanItemAssignee")
 
   @@index([deletedAt])
   @@map("users")
@@ -207,37 +259,40 @@ model Organization {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
 
-  members           OrganizationMember[]
-  workspaces        Workspace[]
-  roles             Role[]
-  memberRoles       MemberRole[]
-  projects          Project[]
-  folders           Folder[]
-  documents         Document[]
-  documentTemplates DocumentTemplate[]
-  documentRows      DocumentRow[]
-  requirementLinks  RequirementLink[]
-  rowProjects       RowProject[]
-  customFieldDefs   CustomFieldDefinition[]
-  attachments       Attachment[]
-  exportTemplates   ExportTemplate[]
-  exportJobs        ExportJob[]
-  auditEvents       AuditEvent[]
-  documentRevisions DocumentRevision[]
-  collabSnapshots   CollaborationSnapshot[]
-  collabUpdates     CollaborationUpdate[]
-  notifications     Notification[]
-  legalHolds        LegalHold[]
-  savedViews        SavedView[]
-  rowComments       RowComment[]
-  testExecutions    TestExecution[]
-  retestPackages    RetestPackage[]
-  reviews           Review[]
-  changeProposals   ChangeProposal[]
-  configurations    ProductConfiguration[]
-  rowAccessGrants   RowAccessGrant[]
+  members              OrganizationMember[]
+  workspaces           Workspace[]
+  roles                Role[]
+  memberRoles          MemberRole[]
+  projects             Project[]
+  folders              Folder[]
+  documents            Document[]
+  documentTemplates    DocumentTemplate[]
+  documentRows         DocumentRow[]
+  requirementLinks     RequirementLink[]
+  rowProjects          RowProject[]
+  customFieldDefs      CustomFieldDefinition[]
+  attachments          Attachment[]
+  exportTemplates      ExportTemplate[]
+  exportJobs           ExportJob[]
+  auditEvents          AuditEvent[]
+  documentRevisions    DocumentRevision[]
+  collabSnapshots      CollaborationSnapshot[]
+  collabUpdates        CollaborationUpdate[]
+  notifications        Notification[]
+  legalHolds           LegalHold[]
+  savedViews           SavedView[]
+  rowComments          RowComment[]
+  testExecutions       TestExecution[]
+  retestPackages       RetestPackage[]
+  reviews              Review[]
+  changeProposals      ChangeProposal[]
+  configurations       ProductConfiguration[]
+  rowAccessGrants      RowAccessGrant[]
   documentAccessGrants DocumentAccessGrant[]
-  integrations      IntegrationEndpoint[]
+  integrations         IntegrationEndpoint[]
+  workItems            WorkItem[]
+  workItemComments     WorkItemComment[]
+  testPlans            TestPlan[]
 
   @@map("organizations")
 }
@@ -278,6 +333,8 @@ model Workspace {
   memberRoles    MemberRole[]
   configurations ProductConfiguration[]
   retestPackages RetestPackage[]
+  workItems      WorkItem[]
+  testPlans      TestPlan[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, deletedAt])
@@ -369,17 +426,19 @@ model MemberRole {
 }
 
 model Project {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String    @db.Uuid
-  workspaceId    String    @db.Uuid
-  name           String
-  code           String
-  description    String?
-  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
-  createdById    String?   @db.Uuid
-  deletedAt      DateTime? @db.Timestamptz(6)
-  deletedById    String?   @db.Uuid
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String    @db.Uuid
+  workspaceId        String    @db.Uuid
+  name               String
+  code               String
+  description        String?
+  nextWorkItemNumber Int       @default(1)
+  nextTestPlanNumber Int       @default(1)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(6)
+  createdById        String?   @db.Uuid
+  deletedAt          DateTime? @db.Timestamptz(6)
+  deletedById        String?   @db.Uuid
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
@@ -387,6 +446,8 @@ model Project {
   members     ProjectMember[]
   rowProjects RowProject[]
   memberRoles MemberRole[]
+  workItems   WorkItem[]
+  testPlans   TestPlan[]
 
   @@unique([workspaceId, code])
   @@index([organizationId, deletedAt])
@@ -439,27 +500,27 @@ model Folder {
 }
 
 model Document {
-  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId   String       @db.Uuid
-  workspaceId      String       @db.Uuid
-  folderId         String?      @db.Uuid
-  templateId       String?      @db.Uuid
-  documentType     DocumentType
-  title            String
-  description      String?
-  rank             String
-  columnConfig     Json         @default("[]")
-  numberingStyle   Json         @default("{}")
-  requirementPrefix String      @default("REQ")
-  nextObjectNumber Int          @default(1)
-  version          Int          @default(1)
-  createdAt        DateTime     @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
-  createdById      String?      @db.Uuid
-  updatedById      String?      @db.Uuid
-  deletedAt        DateTime?    @db.Timestamptz(6)
-  deletedById      String?      @db.Uuid
-  deletionReason   String?
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String       @db.Uuid
+  workspaceId       String       @db.Uuid
+  folderId          String?      @db.Uuid
+  templateId        String?      @db.Uuid
+  documentType      DocumentType
+  title             String
+  description       String?
+  rank              String
+  columnConfig      Json         @default("[]")
+  numberingStyle    Json         @default("{}")
+  requirementPrefix String       @default("REQ")
+  nextObjectNumber  Int          @default(1)
+  version           Int          @default(1)
+  createdAt         DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @db.Timestamptz(6)
+  createdById       String?      @db.Uuid
+  updatedById       String?      @db.Uuid
+  deletedAt         DateTime?    @db.Timestamptz(6)
+  deletedById       String?      @db.Uuid
+  deletionReason    String?
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
@@ -478,6 +539,7 @@ model Document {
   configurations       ProductConfiguration[]
   sourceRetestPackages RetestPackage[]
   accessGrants         DocumentAccessGrant[]
+  workItemLinks        WorkItemArtifactLink[]
 
   @@index([workspaceId, folderId, deletedAt, rank])
   @@index([organizationId, deletedAt])
@@ -546,8 +608,8 @@ model DocumentRow {
   requirementDetail  RequirementDetail?
   testCaseDetail     TestCaseDetail?
   testStepDetail     TestStepDetail?
-  outgoingLinks      RequirementLink[]   @relation("LinkSource")
-  incomingLinks      RequirementLink[]   @relation("LinkTarget")
+  outgoingLinks      RequirementLink[]      @relation("LinkSource")
+  incomingLinks      RequirementLink[]      @relation("LinkTarget")
   rowProjects        RowProject[]
   attachments        Attachment[]
   comments           RowComment[]
@@ -557,6 +619,8 @@ model DocumentRow {
   configurationItems ConfigurationItem[]
   accessGrants       RowAccessGrant[]
   retestPackageItems RetestPackageItem[]
+  workItemLinks      WorkItemArtifactLink[]
+  testPlanItems      TestPlanItem[]
 
   @@unique([documentId, objectNumber])
   @@index([documentId, parentId, deletedAt, rank])
@@ -926,6 +990,7 @@ model TestExecution {
   testCaseRowId       String          @db.Uuid
   executedById        String          @db.Uuid
   retestPackageItemId String?         @db.Uuid
+  testPlanItemId      String?         @db.Uuid
   status              ExecutionStatus @default(not_run)
   environment         String?
   buildReference      String?
@@ -936,16 +1001,177 @@ model TestExecution {
   createdAt           DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime        @updatedAt @db.Timestamptz(6)
 
-  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  testCaseRow       DocumentRow         @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
-  executedBy        User                @relation("ExecutionUser", fields: [executedById], references: [id], onDelete: Restrict)
-  retestPackageItem RetestPackageItem?  @relation(fields: [retestPackageItemId], references: [id], onDelete: Restrict)
+  organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  testCaseRow       DocumentRow            @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
+  executedBy        User                   @relation("ExecutionUser", fields: [executedById], references: [id], onDelete: Restrict)
+  retestPackageItem RetestPackageItem?     @relation(fields: [retestPackageItemId], references: [id], onDelete: Restrict)
+  testPlanItem      TestPlanItem?          @relation(fields: [testPlanItemId], references: [id], onDelete: Restrict)
   steps             TestStepExecution[]
+  workItemLinks     WorkItemArtifactLink[]
 
   @@index([testCaseRowId, createdAt])
   @@index([organizationId, status])
   @@index([retestPackageItemId, createdAt])
+  @@index([testPlanItemId, createdAt])
   @@map("test_executions")
+}
+
+model WorkItem {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @db.Uuid
+  workspaceId    String           @db.Uuid
+  projectId      String           @db.Uuid
+  sequence       Int
+  key            String
+  type           WorkItemType
+  status         WorkItemStatus   @default(backlog)
+  priority       WorkItemPriority @default(medium)
+  title          String
+  description    String?
+  reporterId     String           @db.Uuid
+  assigneeId     String?          @db.Uuid
+  parentId       String?          @db.Uuid
+  labels         String[]         @default([])
+  dueAt          DateTime?        @db.Timestamptz(6)
+  resolvedAt     DateTime?        @db.Timestamptz(6)
+  rank           Int
+  version        Int              @default(1)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime?        @db.Timestamptz(6)
+  deletedById    String?          @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  reporter     User         @relation("WorkItemReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  assignee     User?        @relation("WorkItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  parent       WorkItem?    @relation("WorkItemChildren", fields: [parentId], references: [id], onDelete: Restrict)
+  children     WorkItem[]   @relation("WorkItemChildren")
+
+  outgoingRelations WorkItemRelation[]     @relation("WorkItemRelationSource")
+  incomingRelations WorkItemRelation[]     @relation("WorkItemRelationTarget")
+  artifactLinks     WorkItemArtifactLink[]
+  comments          WorkItemComment[]
+
+  @@unique([projectId, sequence])
+  @@unique([organizationId, key])
+  @@index([projectId, status, rank])
+  @@index([workspaceId, assigneeId, deletedAt])
+  @@index([organizationId, type, deletedAt])
+  @@map("work_items")
+}
+
+model WorkItemRelation {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceId     String               @db.Uuid
+  targetId     String               @db.Uuid
+  relationType WorkItemRelationType
+  createdById  String               @db.Uuid
+  createdAt    DateTime             @default(now()) @db.Timestamptz(6)
+
+  source WorkItem @relation("WorkItemRelationSource", fields: [sourceId], references: [id], onDelete: Restrict)
+  target WorkItem @relation("WorkItemRelationTarget", fields: [targetId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceId, targetId, relationType])
+  @@index([targetId, relationType])
+  @@map("work_item_relations")
+}
+
+model WorkItemArtifactLink {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workItemId      String               @db.Uuid
+  documentId      String?              @db.Uuid
+  rowId           String?              @db.Uuid
+  testExecutionId String?              @db.Uuid
+  role            WorkItemArtifactRole @default(relates_to)
+  createdById     String               @db.Uuid
+  createdAt       DateTime             @default(now()) @db.Timestamptz(6)
+
+  workItem      WorkItem       @relation(fields: [workItemId], references: [id], onDelete: Restrict)
+  document      Document?      @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  row           DocumentRow?   @relation(fields: [rowId], references: [id], onDelete: Restrict)
+  testExecution TestExecution? @relation(fields: [testExecutionId], references: [id], onDelete: Restrict)
+
+  @@index([workItemId, createdAt])
+  @@index([documentId])
+  @@index([rowId])
+  @@index([testExecutionId])
+  @@map("work_item_artifact_links")
+}
+
+model WorkItemComment {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  workItemId     String    @db.Uuid
+  authorId       String    @db.Uuid
+  body           String
+  mentions       String[]  @default([])
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workItem     WorkItem     @relation(fields: [workItemId], references: [id], onDelete: Restrict)
+  author       User         @relation("WorkItemCommentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([workItemId, deletedAt, createdAt])
+  @@map("work_item_comments")
+}
+
+model TestPlan {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @db.Uuid
+  workspaceId    String         @db.Uuid
+  projectId      String         @db.Uuid
+  sequence       Int
+  key            String
+  name           String
+  description    String?
+  status         TestPlanStatus @default(draft)
+  ownerId        String         @db.Uuid
+  environment    String?
+  buildReference String?
+  startsAt       DateTime?      @db.Timestamptz(6)
+  endsAt         DateTime?      @db.Timestamptz(6)
+  version        Int            @default(1)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime?      @db.Timestamptz(6)
+  deletedById    String?        @db.Uuid
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  project      Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  owner        User           @relation("TestPlanOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  items        TestPlanItem[]
+
+  @@unique([projectId, sequence])
+  @@unique([organizationId, key])
+  @@index([projectId, status, deletedAt])
+  @@map("test_plans")
+}
+
+model TestPlanItem {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  testPlanId    String   @db.Uuid
+  testCaseRowId String   @db.Uuid
+  assigneeId    String?  @db.Uuid
+  environment   String?
+  iteration     String?
+  rank          Int
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  testPlan    TestPlan        @relation(fields: [testPlanId], references: [id], onDelete: Restrict)
+  testCaseRow DocumentRow     @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
+  assignee    User?           @relation("TestPlanItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  executions  TestExecution[]
+
+  @@unique([testPlanId, testCaseRowId, iteration])
+  @@index([testPlanId, rank])
+  @@index([testCaseRowId])
+  @@map("test_plan_items")
 }
 
 model TestStepExecution {
@@ -1012,20 +1238,20 @@ model RetestPackageItem {
 }
 
 model Review {
-  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String       @db.Uuid
-  documentId     String       @db.Uuid
-  createdById    String       @db.Uuid
-  title          String
-  description    String?
-  status         ReviewStatus @default(draft)
-  reviewerIds    String[]     @default([])
-  dueAt          DateTime?    @db.Timestamptz(6)
-  baselineRevisionNumber Int?
+  id                      String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId          String       @db.Uuid
+  documentId              String       @db.Uuid
+  createdById             String       @db.Uuid
+  title                   String
+  description             String?
+  status                  ReviewStatus @default(draft)
+  reviewerIds             String[]     @default([])
+  dueAt                   DateTime?    @db.Timestamptz(6)
+  baselineRevisionNumber  Int?
   baselineSemanticVersion String?
-  contentHash    String?
-  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+  contentHash             String?
+  createdAt               DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime     @updatedAt @db.Timestamptz(6)
 
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   document     Document         @relation(fields: [documentId], references: [id], onDelete: Restrict)

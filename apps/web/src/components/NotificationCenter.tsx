@@ -19,7 +19,9 @@ interface WorkItem {
   title: string;
   detail: string;
   rowId: string | null;
-  document: { id: string; title: string; documentType: DocumentType };
+  workItemId?: string;
+  document: { id: string; title: string; documentType: DocumentType } | null;
+  project?: { id: string; name: string };
   createdAt: string;
 }
 
@@ -77,6 +79,10 @@ export function NotificationCenter() {
     window.dispatchEvent(new CustomEvent("docsys:open-document-row", { detail: { document: row.document, rowId } }));
     setOpen(false);
   };
+  const openWorkItem = () => {
+    window.dispatchEvent(new CustomEvent("docsys:open-work-hub"));
+    setOpen(false);
+  };
   return (
     <div className="relative ml-auto">
       <button data-testid="notifications-toggle" className="relative rounded-lg p-1.5 hover:bg-muted" title={t("notifications")} onClick={() => setOpen((current) => !current)}>
@@ -91,7 +97,7 @@ export function NotificationCenter() {
             <NotificationGroup title={t("notificationUpdates")} items={groupedNotifications.update} onOpen={(item) => { if (!item.readAt) read.mutate(item.id); const rowId = typeof item.payload.rowId === "string" ? item.payload.rowId : null; if (rowId) void openRow(rowId); }} />
             {groupedNotifications.routine.length > 0 && <section><button type="button" data-testid="routine-notifications-toggle" className="flex w-full items-center gap-1 px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-mutedForeground hover:text-foreground" onClick={() => setShowRoutine((current) => !current)}>{showRoutine ? <ChevronDown size={12} /> : <ChevronRight size={12} />}{t("notificationRoutine")}<span className="ml-auto rounded-full bg-muted px-1.5 py-0.5">{groupedNotifications.routine.length}</span></button>{showRoutine && <NotificationGroup items={groupedNotifications.routine} onOpen={(item) => { if (!item.readAt) read.mutate(item.id); const rowId = typeof item.payload.rowId === "string" ? item.payload.rowId : null; if (rowId) void openRow(rowId); }} />}</section>}
           </>}</div></div>}
-          {tab === "work" && <div><div className="mb-2 flex gap-1.5"><label className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border bg-editorBackground px-2"><Search size={12} /><input data-testid="my-work-search" className="min-w-0 flex-1 bg-transparent py-1.5 text-xs outline-none" value={query} placeholder={t("searchMyWork")} onChange={(event) => setQuery(event.target.value)} /></label><select className="rounded-lg border border-border bg-editorBackground px-1.5 text-xs" value={kind} onChange={(event) => setKind(event.target.value)}><option value="all">{t("all")}</option><option value="assignment">{t("assignments")}</option><option value="mention">{t("mentions")}</option><option value="review">{t("reviews")}</option></select></div><div className="max-h-96 overflow-auto">{workItems.length === 0 ? <div className="px-2 py-4 text-center text-xs text-mutedForeground">{t("noMyWork")}</div> : workItems.map((item) => <button key={item.id} className="mb-1 block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-muted" onClick={() => item.rowId ? void openRow(item.rowId) : undefined}><span className="flex items-center justify-between gap-2"><span className="font-medium">{item.title}</span><span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase text-primary">{t(`work_${item.kind}`)}</span></span><span className="mt-0.5 block line-clamp-2 text-[10px] text-mutedForeground">{item.detail}</span><span className="mt-1 block truncate text-[9px] text-mutedForeground">{item.document.title}</span></button>)}</div></div>}
+          {tab === "work" && <div><div className="mb-2 flex gap-1.5"><label className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border bg-editorBackground px-2"><Search size={12} /><input data-testid="my-work-search" className="min-w-0 flex-1 bg-transparent py-1.5 text-xs outline-none" value={query} placeholder={t("searchMyWork")} onChange={(event) => setQuery(event.target.value)} /></label><select className="rounded-lg border border-border bg-editorBackground px-1.5 text-xs" value={kind} onChange={(event) => setKind(event.target.value)}><option value="all">{t("all")}</option><option value="assignment">{t("assignments")}</option><option value="mention">{t("mentions")}</option><option value="review">{t("reviews")}</option></select></div><div className="max-h-96 overflow-auto">{workItems.length === 0 ? <div className="px-2 py-4 text-center text-xs text-mutedForeground">{t("noMyWork")}</div> : workItems.map((item) => <button key={item.id} className="mb-1 block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-muted" onClick={() => item.rowId ? void openRow(item.rowId) : item.workItemId ? openWorkItem() : undefined}><span className="flex items-center justify-between gap-2"><span className="font-medium">{item.title}</span><span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase text-primary">{t(`work_${item.kind}`)}</span></span><span className="mt-0.5 block line-clamp-2 text-[10px] text-mutedForeground">{item.detail}</span><span className="mt-1 block truncate text-[9px] text-mutedForeground">{item.document?.title ?? item.project?.name ?? ""}</span></button>)}</div></div>}
         </div>
       )}
     </div>
