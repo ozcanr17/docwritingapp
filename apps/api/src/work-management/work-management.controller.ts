@@ -12,8 +12,9 @@ const artifact = z.object({
   documentId: z.string().uuid().optional(),
   rowId: z.string().uuid().optional(),
   testExecutionId: z.string().uuid().optional(),
+  testStepExecutionId: z.string().uuid().optional(),
   role: z.enum(["relates_to", "affects", "found_in", "verifies"]).default("relates_to"),
-}).refine((value) => [value.documentId, value.rowId, value.testExecutionId].filter(Boolean).length === 1, "Exactly one artifact target is required");
+}).refine((value) => [value.documentId, value.rowId, value.testExecutionId, value.testStepExecutionId].filter(Boolean).length === 1, "Exactly one artifact target is required");
 const createWorkItem = z.object({
   type: workItemType.default("task"),
   title: z.string().trim().min(1).max(300),
@@ -56,6 +57,13 @@ const updateTestPlan = z.object({
   buildReference: z.string().max(300).nullable().optional(),
 });
 const planItem = z.object({ testCaseRowId: z.string().uuid(), assigneeId: z.string().uuid().nullable().optional(), environment: z.string().max(200).optional(), iteration: z.string().max(100).optional() });
+const internalDefect = z.object({
+  projectId: z.string().uuid(),
+  title: z.string().trim().min(1).max(300),
+  description: z.string().max(30000).optional(),
+  priority: workItemPriority.default("high"),
+  assigneeId: z.string().uuid().nullable().optional(),
+});
 
 @Controller()
 export class WorkManagementController {
@@ -64,6 +72,11 @@ export class WorkManagementController {
   @Get("workspaces/:workspaceId/work-items")
   listWorkItems(@CurrentUser() user: SessionUser, @Param("workspaceId", ParseUUIDPipe) workspaceId: string, @Query() query: Record<string, string | undefined>) {
     return this.service.listWorkItems(user.userId, workspaceId, query);
+  }
+
+  @Get("workspaces/:workspaceId/work-users")
+  listWorkUsers(@CurrentUser() user: SessionUser, @Param("workspaceId", ParseUUIDPipe) workspaceId: string) {
+    return this.service.listWorkUsers(user.userId, workspaceId);
   }
 
   @Post("projects/:projectId/work-items")
@@ -126,8 +139,28 @@ export class WorkManagementController {
     return this.service.addTestPlanItem(user.userId, testPlanId, body);
   }
 
+  @Get("test-plans/:testPlanId/candidates")
+  listTestPlanCandidates(@CurrentUser() user: SessionUser, @Param("testPlanId", ParseUUIDPipe) testPlanId: string, @Query("q") query = "") {
+    return this.service.listTestPlanCandidates(user.userId, testPlanId, query);
+  }
+
+  @Delete("test-plan-items/:itemId")
+  removeTestPlanItem(@CurrentUser() user: SessionUser, @Param("itemId", ParseUUIDPipe) itemId: string) {
+    return this.service.removeTestPlanItem(user.userId, itemId);
+  }
+
   @Post("test-plan-items/:itemId/executions")
   startPlannedExecution(@CurrentUser() user: SessionUser, @Param("itemId", ParseUUIDPipe) itemId: string) {
     return this.service.startPlannedExecution(user.userId, itemId);
+  }
+
+  @Post("executions/:executionId/steps/:stepRowId/internal-defect")
+  createInternalDefect(@CurrentUser() user: SessionUser, @Param("executionId", ParseUUIDPipe) executionId: string, @Param("stepRowId", ParseUUIDPipe) stepRowId: string, @Body(new ZodBodyPipe(internalDefect)) body: z.infer<typeof internalDefect>) {
+    return this.service.createInternalDefect(user.userId, executionId, stepRowId, body);
+  }
+
+  @Get("executions/:executionId/defect-projects")
+  listExecutionDefectProjects(@CurrentUser() user: SessionUser, @Param("executionId", ParseUUIDPipe) executionId: string) {
+    return this.service.listExecutionDefectProjects(user.userId, executionId);
   }
 }

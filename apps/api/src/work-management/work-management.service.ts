@@ -1,10 +1,12 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { Prisma } from "@docsys/database";
+import { randomUUID } from "crypto";
 import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { resolveTestScenario } from "../common/test-scenarios";
 
-type ArtifactInput = { documentId?: string; rowId?: string; testExecutionId?: string; role: "relates_to" | "affects" | "found_in" | "verifies" };
+type ArtifactInput = { documentId?: string; rowId?: string; testExecutionId?: string; testStepExecutionId?: string; role: "relates_to" | "affects" | "found_in" | "verifies" };
 type WorkItemCreate = {
   type: "epic" | "story" | "task" | "bug" | "risk";
   title: string;
@@ -28,6 +30,7 @@ type WorkItemUpdate = {
   labels?: string[];
   dueAt?: string | null;
 };
+type InternalDefectInput = { projectId: string; title: string; description?: string; priority: WorkItemCreate["priority"]; assigneeId?: string | null };
 
 const detailInclude = {
   reporter: { select: { id: true, displayName: true, email: true } },
@@ -38,6 +41,7 @@ const detailInclude = {
       document: { select: { id: true, title: true, documentType: true } },
       row: { select: { id: true, objectNumber: true, title: true, document: { select: { id: true, title: true, documentType: true } } } },
       testExecution: { select: { id: true, status: true, testCaseRow: { select: { id: true, title: true, document: { select: { id: true, title: true } } } } } },
+      testStepExecution: { select: { id: true, status: true, testStepRow: { select: { id: true, title: true, document: { select: { id: true, title: true } } } }, execution: { select: { id: true } } } },
     },
     orderBy: { createdAt: "asc" as const },
   },
@@ -76,6 +80,17 @@ export class WorkManagementService {
       orderBy: [{ rank: "asc" }, { createdAt: "asc" }],
       take: 500,
     });
+  }
+
+  async listWorkUsers(actorId: string, workspaceId: string) {
+    const workspace = await this.requireWorkspace(workspaceId);
+    await this.access.assertPermission(actorId, "work_item.read", { organizationId: workspace.organizationId, workspaceId });
+    const members = await this.prisma.organizationMember.findMany({
+      where: { organizationId: workspace.organizationId, deletedAt: null, user: { isActive: true, deletedAt: null } },
+      select: { user: { select: { id: true, displayName: true } } },
+      orderBy: { user: { displayName: "asc" } },
+    });
+    return members.map((member) => member.user);
   }
 
   async createWorkItem(actorId: string, projectId: string, input: WorkItemCreate) {
@@ -118,7 +133,7 @@ export class WorkManagementService {
     const item = await this.requireWorkItem(workItemId);
     await this.access.assertPermission(actorId, "work_item.read", this.itemScope(item));
     const detail = await this.prisma.workItem.findUniqueOrThrow({ where: { id: workItemId }, include: detailInclude });
-    const linkedRowIds = detail.artifactLinks.flatMap((link) => [link.rowId, link.testExecution?.testCaseRow.id].filter((id): id is string => Boolean(id)));
+    const linkedRowIds = detail.artifactLinks.flatMap((link) => [link.rowId, link.testExecution?.testCaseRow.id, link.testStepExecution?.testStepRow.id].filter((id): id is string => Boolean(id)));
     const directDocumentIds = detail.artifactLinks.flatMap((link) => link.documentId ? [link.documentId] : []);
     const [readableRows, readableDocuments, outgoingVisibility, incomingVisibility] = await Promise.all([
       this.access.readableRowIds(actorId, linkedRowIds),
@@ -128,7 +143,7 @@ export class WorkManagementService {
     ]);
     return {
       ...detail,
-      artifactLinks: detail.artifactLinks.filter((link) => link.rowId ? readableRows.has(link.rowId) : link.testExecution ? readableRows.has(link.testExecution.testCaseRow.id) : link.documentId ? readableDocuments.has(link.documentId) : false),
+      artifactLinks: detail.artifactLinks.filter((link) => link.rowId ? readableRows.has(link.rowId) : link.testExecution ? readableRows.has(link.testExecution.testCaseRow.id) : link.testStepExecution ? readableRows.has(link.testStepExecution.testStepRow.id) : link.documentId ? readableDocuments.has(link.documentId) : false),
       outgoingRelations: detail.outgoingRelations.filter((_, index) => outgoingVisibility[index]),
       incomingRelations: detail.incomingRelations.filter((_, index) => incomingVisibility[index]),
     };
@@ -211,7 +226,7 @@ export class WorkManagementService {
   async listTestPlans(actorId: string, projectId: string) {
     const project = await this.requireProject(projectId);
     await this.access.assertPermission(actorId, "test_plan.read", this.projectScope(project));
-    return this.prisma.testPlan.findMany({ where: { projectId, deletedAt: null }, include: { owner: { select: { id: true, displayName: true } }, _count: { select: { items: true } } }, orderBy: { createdAt: "desc" } });
+    return this.prisma.testPlan.findMany({ where: { projectId, deletedAt: null }, include: { owner: { select: { id: true, displayName: true } }, _count: { select: { items: { where: { deletedAt: null } } } } }, orderBy: { createdAt: "desc" } });
   }
 
   async createTestPlan(actorId: string, projectId: string, input: { name: string; description?: string; environment?: string; buildReference?: string; startsAt?: string | null; endsAt?: string | null }) {
@@ -230,7 +245,7 @@ export class WorkManagementService {
   async getTestPlan(actorId: string, testPlanId: string) {
     const plan = await this.requireTestPlan(testPlanId);
     await this.access.assertPermission(actorId, "test_plan.read", this.itemScope(plan));
-    const detail = await this.prisma.testPlan.findUniqueOrThrow({ where: { id: testPlanId }, include: { project: { select: { id: true, name: true, code: true } }, owner: { select: { id: true, displayName: true } }, items: { include: { assignee: { select: { id: true, displayName: true } }, testCaseRow: { select: { id: true, title: true, objectNumber: true, document: { select: { id: true, title: true } } } }, executions: { orderBy: { createdAt: "desc" }, take: 1 } }, orderBy: { rank: "asc" } } } });
+    const detail = await this.prisma.testPlan.findUniqueOrThrow({ where: { id: testPlanId }, include: { project: { select: { id: true, name: true, code: true } }, owner: { select: { id: true, displayName: true } }, items: { where: { deletedAt: null }, include: { assignee: { select: { id: true, displayName: true } }, testCaseRow: { select: { id: true, title: true, objectNumber: true, document: { select: { id: true, title: true } } } }, executions: { orderBy: { createdAt: "desc" }, take: 1 } }, orderBy: { rank: "asc" } } } });
     const readableRows = await this.access.readableRowIds(actorId, detail.items.map((entry) => entry.testCaseRowId));
     return { ...detail, items: detail.items.filter((entry) => readableRows.has(entry.testCaseRowId)) };
   }
@@ -255,7 +270,7 @@ export class WorkManagementService {
     const row = await this.prisma.documentRow.findFirst({ where: { id: input.testCaseRowId, deletedAt: null }, include: { document: true } });
     if (!row || row.document.workspaceId !== plan.workspaceId || row.document.documentType !== "test" || !["heading", "test_case"].includes(row.rowType)) throw new BadRequestException("Test plan items must reference a test heading in the same workspace");
     await this.access.assertRowAccess(actorId, row.id, "read");
-    const rank = await this.prisma.testPlanItem.count({ where: { testPlanId } }) + 1;
+    const rank = await this.prisma.testPlanItem.count({ where: { testPlanId, deletedAt: null } }) + 1;
     return this.prisma.$transaction(async (tx) => {
       const item = await tx.testPlanItem.create({ data: { testPlanId, testCaseRowId: row.id, assigneeId: input.assigneeId ?? null, environment: input.environment, iteration: input.iteration, rank } });
       await this.audit.record(tx, { organizationId: plan.organizationId, workspaceId: plan.workspaceId, actorId, action: "test_plan.item_added", entityType: "test_plan", entityId: testPlanId, metadata: { itemId: item.id, testCaseRowId: row.id } });
@@ -263,9 +278,48 @@ export class WorkManagementService {
     });
   }
 
+  async listTestPlanCandidates(actorId: string, testPlanId: string, query: string) {
+    const plan = await this.requireTestPlan(testPlanId);
+    await this.access.assertPermission(actorId, "test_plan.write", this.itemScope(plan));
+    const rows = await this.prisma.documentRow.findMany({
+      where: { deletedAt: null, document: { workspaceId: plan.workspaceId, documentType: "test", deletedAt: null } },
+      select: { id: true, parentId: true, rowType: true, title: true, objectNumber: true, customFields: true, document: { select: { id: true, title: true } } },
+      orderBy: [{ documentId: "asc" }, { rank: "asc" }],
+      take: 10000,
+    });
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+    const scenarios = new Map<string, typeof rows[number] & { stepCount: number }>();
+    for (const row of rows) {
+      if (row.rowType !== "test_step") continue;
+      const scenario = resolveTestScenario(row.id, rowsById);
+      if (!scenario || !["heading", "test_case"].includes(scenario.rowType)) continue;
+      const full = rowsById.get(scenario.id);
+      if (!full) continue;
+      const current = scenarios.get(full.id);
+      scenarios.set(full.id, { ...full, stepCount: (current?.stepCount ?? 0) + 1 });
+    }
+    const existing = new Set((await this.prisma.testPlanItem.findMany({ where: { testPlanId, deletedAt: null }, select: { testCaseRowId: true } })).map((item) => item.testCaseRowId));
+    const normalized = query.trim().toLocaleLowerCase();
+    const candidates = [...scenarios.values()].filter((row) => !existing.has(row.id) && (!normalized || `${row.title} ${row.objectNumber} ${row.document.title}`.toLocaleLowerCase().includes(normalized)));
+    const readable = await this.access.readableRowIds(actorId, candidates.map((candidate) => candidate.id));
+    return candidates.filter((candidate) => readable.has(candidate.id)).slice(0, 100).map((candidate) => ({ id: candidate.id, title: candidate.title, objectNumber: candidate.objectNumber, stepCount: candidate.stepCount, document: candidate.document }));
+  }
+
+  async removeTestPlanItem(actorId: string, itemId: string) {
+    const item = await this.prisma.testPlanItem.findUnique({ where: { id: itemId }, include: { testPlan: true, _count: { select: { executions: true } } } });
+    if (!item || item.deletedAt || item.testPlan.deletedAt) throw new NotFoundException("Test plan item not found");
+    await this.access.assertPermission(actorId, "test_plan.write", this.itemScope(item.testPlan));
+    if (item._count.executions > 0) throw new ConflictException("A test with execution history cannot be removed from its plan");
+    await this.prisma.$transaction(async (tx) => {
+      await tx.testPlanItem.update({ where: { id: itemId }, data: { deletedAt: new Date(), deletedById: actorId } });
+      await this.audit.record(tx, { organizationId: item.testPlan.organizationId, workspaceId: item.testPlan.workspaceId, actorId, action: "test_plan.item_removed", entityType: "test_plan", entityId: item.testPlanId, metadata: { itemId, testCaseRowId: item.testCaseRowId } });
+    });
+    return { ok: true };
+  }
+
   async startPlannedExecution(actorId: string, itemId: string) {
     const item = await this.prisma.testPlanItem.findUnique({ where: { id: itemId }, include: { testPlan: true, testCaseRow: { include: { document: true } } } });
-    if (!item || item.testPlan.deletedAt) throw new NotFoundException("Test plan item not found");
+    if (!item || item.deletedAt || item.testPlan.deletedAt) throw new NotFoundException("Test plan item not found");
     await this.access.assertPermission(actorId, "test_plan.write", this.itemScope(item.testPlan));
     await this.access.assertRowAccess(actorId, item.testCaseRowId, "write");
     const steps = await this.prisma.documentRow.findMany({ where: { documentId: item.testCaseRow.documentId, rowType: "test_step", deletedAt: null, OR: [{ parentId: item.testCaseRowId }, { ancestorPath: { startsWith: `${item.testCaseRow.ancestorPath}${item.testCaseRowId}/` } }] }, orderBy: { rank: "asc" } });
@@ -276,6 +330,60 @@ export class WorkManagementService {
       await this.audit.record(tx, { organizationId: item.testPlan.organizationId, workspaceId: item.testPlan.workspaceId, actorId, action: "test_plan.execution_started", entityType: "test_execution", entityId: execution.id, metadata: { testPlanId: item.testPlanId, testPlanItemId: item.id } });
       return execution;
     });
+  }
+
+  async listExecutionDefectProjects(actorId: string, executionId: string) {
+    const execution = await this.prisma.testExecution.findUnique({ where: { id: executionId }, include: { testCaseRow: { include: { document: true } } } });
+    if (!execution) throw new NotFoundException("Test execution not found");
+    await this.access.assertRowAccess(actorId, execution.testCaseRowId, "read");
+    const projects = await this.prisma.project.findMany({ where: { workspaceId: execution.testCaseRow.document.workspaceId, deletedAt: null }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } });
+    const allowed = await Promise.all(projects.map((project) => this.access.hasPermission(actorId, "work_item.write", { organizationId: execution.organizationId, workspaceId: execution.testCaseRow.document.workspaceId, projectId: project.id })));
+    return projects.filter((_, index) => allowed[index]);
+  }
+
+  async createInternalDefect(actorId: string, executionId: string, stepRowId: string, input: InternalDefectInput) {
+    const step = await this.prisma.testStepExecution.findUnique({
+      where: { executionId_testStepRowId: { executionId, testStepRowId: stepRowId } },
+      include: { execution: { include: { testCaseRow: { include: { document: true } } } } },
+    });
+    if (!step) throw new NotFoundException("Execution step not found");
+    if (step.status !== "failed") throw new UnprocessableEntityException("An internal defect can only be created from a failed test step");
+    const project = await this.requireProject(input.projectId);
+    const document = step.execution.testCaseRow.document;
+    if (project.workspaceId !== document.workspaceId || project.organizationId !== step.execution.organizationId) throw new BadRequestException("Defect project is outside the execution workspace");
+    await this.access.assertPermission(actorId, "work_item.write", this.projectScope(project));
+    await this.access.assertRowAccess(actorId, stepRowId, "read");
+    await this.assertUserInOrganization(input.assigneeId, project.organizationId);
+    const created = await this.prisma.$transaction(async (tx) => {
+      const numberedProject = await tx.project.update({ where: { id: project.id }, data: { nextWorkItemNumber: { increment: 1 } }, select: { nextWorkItemNumber: true } });
+      const sequence = numberedProject.nextWorkItemNumber - 1;
+      const item = await tx.workItem.create({
+        data: {
+          organizationId: project.organizationId,
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+          sequence,
+          key: `${project.code.toLocaleUpperCase()}-${sequence}`,
+          type: "bug",
+          title: input.title,
+          description: input.description ?? null,
+          priority: input.priority,
+          reporterId: actorId,
+          assigneeId: input.assigneeId ?? null,
+          rank: sequence,
+          artifactLinks: { create: { testStepExecutionId: step.id, role: "found_in", createdById: actorId } },
+        },
+      });
+      if (item.assigneeId && item.assigneeId !== actorId) await tx.notification.create({ data: { organizationId: project.organizationId, recipientId: item.assigneeId, type: "assignment", payload: { entityType: "work_item", workItemId: item.id, key: item.key, title: item.title } } });
+      if (step.execution.status === "running") {
+        const currentEvidence = Array.isArray(step.evidence) ? step.evidence : [];
+        const evidence = [...currentEvidence, { id: randomUUID(), kind: "defect", addedAt: new Date().toISOString(), addedById: actorId, reference: item.key, summary: item.title, workItemId: item.id }];
+        await tx.testStepExecution.update({ where: { id: step.id }, data: { evidence: evidence as Prisma.InputJsonValue } });
+      }
+      await this.audit.record(tx, { organizationId: project.organizationId, workspaceId: project.workspaceId, actorId, action: "work_item.created", entityType: "work_item", entityId: item.id, nextData: this.auditItem(item), metadata: { source: "test_step_execution", executionId, stepRowId, testStepExecutionId: step.id } });
+      return item;
+    });
+    return this.getWorkItem(actorId, created.id);
   }
 
   private async assertArtifact(actorId: string, input: ArtifactInput, workspaceId: string) {
@@ -293,6 +401,11 @@ export class WorkManagementService {
       const execution = await this.prisma.testExecution.findUnique({ where: { id: input.testExecutionId }, include: { testCaseRow: { include: { document: true } } } });
       if (!execution || execution.testCaseRow.document.workspaceId !== workspaceId) throw new BadRequestException("Test execution is outside the project workspace");
       await this.access.assertRowAccess(actorId, execution.testCaseRowId, "read");
+    }
+    if (input.testStepExecutionId) {
+      const step = await this.prisma.testStepExecution.findUnique({ where: { id: input.testStepExecutionId }, include: { testStepRow: { include: { document: true } } } });
+      if (!step || step.testStepRow.document.workspaceId !== workspaceId) throw new BadRequestException("Test step execution is outside the project workspace");
+      await this.access.assertRowAccess(actorId, step.testStepRowId, "read");
     }
   }
 

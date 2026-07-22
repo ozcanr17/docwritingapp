@@ -6,20 +6,24 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The most recent task was **start expanding DocSys with Jira-inspired defect, work, document and test-plan tracking without separating it from controlled requirements and test execution**. The first vertical slice is implemented. DocSys now has a project-scoped work model, a Work and tests hub, first-class test plans and traceable links to documents, rows and real executions. The next task is Phase 2 of `docs/WORK_AND_TEST_MANAGEMENT.md`: deepen planning/execution and add configurable workflow behavior without weakening the existing document governance model.
+The most recent task was **continue Phase 2 of the Jira-inspired work and test management expansion**. This session delivered the first planning/execution-depth slice: users can open and edit work-item details, assign active organization members, comment and mention, navigate linked evidence, select real hierarchical test scenarios for a plan, remove unexecuted plan members, start real executions and create a first-class internal Defect directly from a failed execution step. The next task is configurable workflows, backlog/board ranking and release/iteration planning without weakening controlled-document governance.
 
 ### What was completed in the latest task
 
-1. A new `work-management` API module and PostgreSQL model introduce first-class Epic, Story, Task, Defect and Risk records with project keys, priorities, assignee/reporter, labels, due dates, hierarchy, optimistic versioning, soft deletion and audit events.
-2. Work items can link to other work items and to exactly one controlled document, document row or real test execution per artifact link. The API rechecks tenant, workspace, document and row permissions; cross-organization work-item links are rejected. Database constraints enforce the one-target artifact invariant and prevent duplicate artifact links.
-3. Comments, mentions and assignment notifications are native to work items. New `work_item.*` and `test_plan.*` permissions are included in system roles: viewers/reviewers read, editors write, project managers/admins manage.
-4. Test plans are first-class project objects with stable keys, lifecycle state, owner, environment/build and ordered test headings. Starting a planned item creates the existing real `TestExecution` and step records rather than duplicating execution history.
-5. The lazy-loaded Work and tests hub is available from primary navigation. It includes overview metrics, searchable/filterable list, Kanban view, status transitions, defect/task creation, context links to the current document or selected row and test-plan cards/creation.
-6. The Jira-derived capability boundaries and four-phase roadmap are documented in `docs/WORK_AND_TEST_MANAGEMENT.md`. Official Jira concepts are used as a reference, while requirements, test definitions and evidence remain native DocSys capabilities.
-7. Three new API integration tests cover linked defects, optimistic conflicts, audit/comment persistence, viewer read-only enforcement and a test-plan-started real execution. The current verified totals are web **93**, API **70** and worker **13**: **176/176** tests pass. `pnpm verify` passes. The browser-control surface was unavailable in this session, so no new visual/browser walkthrough or Playwright claim was made.
-8. The implementation is not yet a complete Jira replacement. Workflow configuration, drag ranking, releases/iterations, full plan editing, saved work queries, bulk operations, automation, dashboards and Jira synchronization remain Phase 2/3 work.
+1. The Phase 1 `work-management` module remains the foundation: first-class Epic, Story, Task, Defect and Risk records, stable project keys, optimistic versioning, soft deletion, permissions, audit, comments, mentions, notifications, artifact links and real test plans/executions.
+2. Work-item list rows and Kanban cards now open a wide detail editor. It supports summary, description, status, priority, active-member assignment, labels, optimistic save, comments, user mentions, linked engineering-evidence navigation and visible incoming/outgoing work relations.
+3. Work-item creation now uses the same active organization-member picker; ordinary authorized users no longer depend on administrator-only user discovery to assign work.
+4. Test-plan cards now open a plan workspace. It searches real test scenarios resolved from their descendant `test_step` rows, reports step counts, adds scenarios to the plan, navigates to the source heading, removes only members without execution history and starts the existing real execution model.
+5. `TestPlanItem` removal is now audited soft deletion. Active-membership queries, counts, candidate exclusion, detail and execution start all ignore deleted memberships. A partial unique index permits safe later re-addition without losing historical rows.
+6. A failed real execution step can create an internal Defect in an authorized project. The transaction allocates the stable work key, creates the Defect, links it to the exact `TestStepExecution`, sends assignment notification when needed, writes audit metadata and appends a compact evidence reference while a run remains editable.
+7. Work-item artifact links now support exactly one of document, row, test execution or test-step execution. The database check, partial uniqueness, foreign key, server ACL checks and read-side evidence filtering were extended together.
+8. API integration coverage now exercises test candidate resolution, planned execution, failed-step status, internal-defect creation, exact step linkage, evidence reference and soft-deleted plan membership. The web component test covers the internal-defect action.
+9. The verified totals are web **94**, API **70** and worker **13**: **177/177** tests pass. `pnpm verify`, production build/code-split budget, `pnpm audit --prod`, Rust desktop typecheck, desktop readiness and release alignment all pass. The audit reports no known vulnerability.
+10. The browser-control surface was not used in this session, so the new wide work-item/test-plan dialogs still need a real visual walkthrough at narrow and desktop widths before UX approval.
 
-9. CSV, XLSX and ReqIF import now use a non-mutating migration preview. It checks write permission, allowed row types, hierarchy gaps, invalid parents, missing titles/actions and duplicate requirement identifiers in both the source file and target document. Findings retain source-row numbers; errors block confirmation and no document mutation occurs before explicit confirmation.
+### Earlier verified production foundation
+
+1. CSV, XLSX and ReqIF import now use a non-mutating migration preview. It checks write permission, allowed row types, hierarchy gaps, invalid parents, missing titles/actions and duplicate requirement identifiers in both the source file and target document. Findings retain source-row numbers; errors block confirmation and no document mutation occurs before explicit confirmation.
 2. A first-project pilot checklist covers roles, requirements, tests, migration, traceability, baseline and backup. Progress is personal and device-local.
 3. Structured pilot feedback is available from Help and appears in an administrator-only inbox. Limited pilot diagnostics are default-off, require explicit consent and accept only allowlisted event names and bounded primitive metadata. Document text, credentials, tokens and attachments are excluded.
 4. PostgreSQL backup, restore and restore-drill scripts were added. Backups use custom format, restrictive permissions, SHA-256 manifests and verification. Restore requires an exact confirmation token and refuses protected development/test database names. A live drill restored 45 schema objects and all 16 migrations into a temporary database, verified them and cleaned up.
@@ -34,19 +38,24 @@ The most recent task was **start expanding DocSys with Jira-inspired defect, wor
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. Work management is intentionally at the end of Phase 1, not feature-complete Jira parity. The largest functional gaps are a work-item detail/editor surface, user assignment picker for non-admins, test-plan item selection/editing UI, direct internal-defect creation from a failed execution step, drag ranking, configurable workflows, releases and saved queries. The in-app browser was unavailable, so run a real visual walkthrough before treating the new hub layout as UX-approved. External pilot evidence and production signing/operations dependencies also remain unchanged.
+There is **no active code blocker**. The first Phase 2 vertical slice is complete, but Jira-grade planning is not. Configurable workflow transitions, drag ranking, releases/iterations, saved work queries, bulk operations, watchers, automation, dashboards and external synchronization remain. The new work-item and test-plan dialogs have type/unit/integration coverage but no browser screenshot walkthrough in this session. External pilot evidence and production signing/operations dependencies remain unchanged.
 
 ### Next plan
 
-1. Visually test the Work and tests hub at desktop and narrow widths, add stable `data-testid` selectors and a Playwright flow for creation, filtering, status transition and test-plan creation.
-2. Add the work-item detail/editor surface with assignment picker, comments/mentions, artifact links, relations and activity history; expose work assignments in the existing My Work surface.
-3. Add test-plan editing: searchable test selection, assignee/environment/data-set configuration, execution progress and direct navigation to existing run history.
-4. Create an internal Defect work item directly from a failed step, retaining evidence by reference and showing the requirement-test-plan-execution-defect chain bidirectionally.
-5. Then implement configurable transition rules, drag ranking/backlog, releases/iterations, saved work queries and bulk operations in that order. Automation and external Jira sync remain later phases.
-6. Run the real pilot plan in parallel and measure adoption; do not let broad work-tracking scope postpone migration, recovery and user-evidence validation.
+1. Run a real visual/browser walkthrough of the Work and tests hub, work-item detail, plan membership and failed-step Defect flow at desktop and narrow widths; add a Playwright journey with stable selectors.
+2. Add configurable workflow schemes by work type: allowed transitions, required fields, transition permissions and server-enforced validation. Preserve optimistic versions and audit each transition.
+3. Add persistent LexoRank-style backlog/board ordering and drag movement with keyboard alternatives, then WIP limits and optional swimlanes.
+4. Add iterations/releases/fix versions and plan-level assignment, environment, product variant and data-set configuration. Show aggregate execution progress and direct run-history navigation.
+5. Add saved personal/team work queries and bulk assign/transition/link/release operations before automation or external synchronization.
+6. Complete the bidirectional requirement -> test -> plan -> execution -> Defect -> verification explorer, including unresolved-defect readiness widgets.
+7. Run the controlled pilot in parallel; broad Jira parity must not postpone migration, recovery and real user-evidence validation.
 
 ### Pitfalls encountered in the latest task
 
+- `TestPlanItem` originally had no deletion metadata and the first removal implementation hard-deleted the join row. User-path hard deletion violates the project invariant even for association records. It now has `deletedAt`/`deletedById`, active-only queries and a partial unique index; preserve those filters in every future query/count.
+- A Defect linked only to the containing test or execution is not precise enough. Internal Defects now target the exact `TestStepExecution`; keep the database exactly-one-target constraint, row ACL filtering and execution evidence reference aligned when extending artifact types.
+- Prisma client types must be regenerated after schema changes before API typecheck. The migration also carries a PostgreSQL partial unique index that Prisma cannot express directly; do not remove it because it permits re-adding a previously soft-deleted plan membership.
+- The new work-management page source was mechanically formatted to make the large detail/plan surfaces maintainable. Do not interpret the resulting line-count diff as thousands of behavioral changes.
 - Playwright initially reused stale API/web processes because `reuseExistingServer` was enabled. That made new endpoints appear broken and left an old onboarding overlay intercepting clicks. Before interpreting an e2e failure, verify the processes listening on ports 3001, 3002, 3003 and 5173 actually run the current checkout.
 - First-use onboarding opens after workspace bootstrap on an effect, not necessarily in the same event tick. E2e tests must wait briefly for the dialog before dismissing it; an immediate `isVisible()` check races the effect.
 - Import is now two-stage. Tests and UI callers must wait for `migration-preview-valid` and explicitly activate `confirm-migration-import`; expecting rows immediately after file selection is incorrect.

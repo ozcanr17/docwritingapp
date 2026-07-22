@@ -1079,24 +1079,27 @@ model WorkItemRelation {
 }
 
 model WorkItemArtifactLink {
-  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workItemId      String               @db.Uuid
-  documentId      String?              @db.Uuid
-  rowId           String?              @db.Uuid
-  testExecutionId String?              @db.Uuid
-  role            WorkItemArtifactRole @default(relates_to)
-  createdById     String               @db.Uuid
-  createdAt       DateTime             @default(now()) @db.Timestamptz(6)
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workItemId          String               @db.Uuid
+  documentId          String?              @db.Uuid
+  rowId               String?              @db.Uuid
+  testExecutionId     String?              @db.Uuid
+  testStepExecutionId String?              @db.Uuid
+  role                WorkItemArtifactRole @default(relates_to)
+  createdById         String               @db.Uuid
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
 
-  workItem      WorkItem       @relation(fields: [workItemId], references: [id], onDelete: Restrict)
-  document      Document?      @relation(fields: [documentId], references: [id], onDelete: Restrict)
-  row           DocumentRow?   @relation(fields: [rowId], references: [id], onDelete: Restrict)
-  testExecution TestExecution? @relation(fields: [testExecutionId], references: [id], onDelete: Restrict)
+  workItem          WorkItem           @relation(fields: [workItemId], references: [id], onDelete: Restrict)
+  document          Document?          @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  row               DocumentRow?       @relation(fields: [rowId], references: [id], onDelete: Restrict)
+  testExecution     TestExecution?     @relation(fields: [testExecutionId], references: [id], onDelete: Restrict)
+  testStepExecution TestStepExecution? @relation(fields: [testStepExecutionId], references: [id], onDelete: Restrict)
 
   @@index([workItemId, createdAt])
   @@index([documentId])
   @@index([rowId])
   @@index([testExecutionId])
+  @@index([testStepExecutionId])
   @@map("work_item_artifact_links")
 }
 
@@ -1153,23 +1156,24 @@ model TestPlan {
 }
 
 model TestPlanItem {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  testPlanId    String   @db.Uuid
-  testCaseRowId String   @db.Uuid
-  assigneeId    String?  @db.Uuid
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  testPlanId    String    @db.Uuid
+  testCaseRowId String    @db.Uuid
+  assigneeId    String?   @db.Uuid
   environment   String?
   iteration     String?
   rank          Int
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt     DateTime? @db.Timestamptz(6)
+  deletedById   String?   @db.Uuid
 
   testPlan    TestPlan        @relation(fields: [testPlanId], references: [id], onDelete: Restrict)
   testCaseRow DocumentRow     @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
   assignee    User?           @relation("TestPlanItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   executions  TestExecution[]
 
-  @@unique([testPlanId, testCaseRowId, iteration])
-  @@index([testPlanId, rank])
+  @@index([testPlanId, rank, deletedAt])
   @@index([testCaseRowId])
   @@map("test_plan_items")
 }
@@ -1183,8 +1187,9 @@ model TestStepExecution {
   evidence      Json            @default("[]")
   executedAt    DateTime?       @db.Timestamptz(6)
 
-  execution   TestExecution @relation(fields: [executionId], references: [id], onDelete: Restrict)
-  testStepRow DocumentRow   @relation(fields: [testStepRowId], references: [id], onDelete: Restrict)
+  execution     TestExecution          @relation(fields: [executionId], references: [id], onDelete: Restrict)
+  testStepRow   DocumentRow            @relation(fields: [testStepRowId], references: [id], onDelete: Restrict)
+  workItemLinks WorkItemArtifactLink[]
 
   @@unique([executionId, testStepRowId])
   @@index([testStepRowId])

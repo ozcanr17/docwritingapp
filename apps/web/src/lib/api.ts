@@ -127,6 +127,23 @@ export interface WorkItemSummary {
   _count: { artifactLinks: number; comments: number };
 }
 
+export interface WorkUser { id: string; displayName: string }
+
+export interface WorkItemDetail extends Omit<WorkItemSummary, "reporter" | "_count"> {
+  reporter: { id: string; displayName: string; email: string };
+  artifactLinks: Array<{
+    id: string;
+    role: "relates_to" | "affects" | "found_in" | "verifies";
+    document: { id: string; title: string; documentType: DocumentType } | null;
+    row: { id: string; objectNumber: number; title: string; document: { id: string; title: string; documentType: DocumentType } } | null;
+    testExecution: { id: string; status: string; testCaseRow: { id: string; title: string; document: { id: string; title: string } } } | null;
+    testStepExecution: { id: string; status: string; testStepRow: { id: string; title: string; document: { id: string; title: string } }; execution: { id: string } } | null;
+  }>;
+  outgoingRelations: Array<{ id: string; relationType: string; target: Pick<WorkItemSummary, "id" | "key" | "title" | "status" | "type"> }>;
+  incomingRelations: Array<{ id: string; relationType: string; source: Pick<WorkItemSummary, "id" | "key" | "title" | "status" | "type"> }>;
+  comments: Array<{ id: string; body: string; mentions: string[]; createdAt: string; author: { id: string; displayName: string } }>;
+}
+
 export interface TestPlanSummary {
   id: string;
   key: string;
@@ -138,6 +155,20 @@ export interface TestPlanSummary {
   version: number;
   owner: { id: string; displayName: string };
   _count: { items: number };
+}
+
+export interface TestPlanCandidate { id: string; title: string; objectNumber: number; stepCount: number; document: { id: string; title: string } }
+
+export interface TestPlanDetail extends Omit<TestPlanSummary, "_count"> {
+  project: { id: string; name: string; code: string };
+  items: Array<{
+    id: string;
+    assignee: WorkUser | null;
+    environment: string | null;
+    iteration: string | null;
+    testCaseRow: { id: string; title: string; objectNumber: number; document: { id: string; title: string } };
+    executions: Array<{ id: string; status: string; createdAt: string; completedAt: string | null }>;
+  }>;
 }
 
 export interface UserProfile {
@@ -477,6 +508,7 @@ export interface TestExecution {
       reference?: string;
       summary?: string;
       url?: string;
+      workItemId?: string;
     }>;
     testStepRow: { id: string; title: string; testStepDetail: { action: string | null; expectedResult: string | null } | null };
   }>;

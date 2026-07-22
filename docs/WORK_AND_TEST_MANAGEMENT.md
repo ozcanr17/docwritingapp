@@ -27,6 +27,17 @@ Phase 1 introduces:
 
 ## Phase 2: planning and execution depth
 
+Delivered vertical slice:
+
+- work-item detail editing with optimistic version checks, assignment, labels, comments, mentions, artifact navigation and related-work visibility;
+- assignment pickers backed by active organization membership rather than administrator-only user discovery;
+- searchable test-scenario candidates resolved from real test-step hierarchy, plan membership editing and direct planned-execution start;
+- soft-deleted plan membership with history-preserving removal rules;
+- exact links from internal Defect work items to the failed `TestStepExecution`, with compact execution evidence referencing the created work key;
+- server-side workspace/project/row authorization and same-transaction audit for every new mutation.
+
+Remaining Phase 2 scope:
+
 - configurable workflows and transition rules by work-item type;
 - backlog ranking, drag-and-drop board movement, swimlanes and WIP limits;
 - iterations, milestones, releases and fix versions;
