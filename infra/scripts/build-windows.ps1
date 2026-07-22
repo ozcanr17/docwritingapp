@@ -5,3 +5,4 @@ param(
 $ErrorActionPreference = "Stop"
 & (Join-Path $PSScriptRoot "build-server-windows.ps1") -OutputDirectory $OutputDirectory
 & (Join-Path $PSScriptRoot "build-client-windows.ps1") -OutputDirectory $OutputDirectory
+& (Join-Path $PSScriptRoot "package-windows-release.ps1") -OutputDirectory $OutputDirectory

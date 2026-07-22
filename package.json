@@ -5,13 +5,19 @@
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "overrides": {
-      "exceljs>uuid": "11.1.1"
+      "@fastify/ajv-compiler>fast-uri": "3.1.4",
+      "ajv>fast-uri": "3.1.4",
+      "exceljs>uuid": "11.1.1",
+      "fast-json-stringify>fast-uri": "4.1.1",
+      "fast-xml-parser": "5.10.1"
     }
   },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
+    "release:check": "node infra/scripts/check-release-alignment.mjs",
+    "release:version": "node infra/scripts/set-release-version.mjs",
     "dev": "bash infra/scripts/dev-up.sh",
     "dev:down": "bash infra/scripts/dev-down.sh",
     "seed": "node infra/scripts/seed-admin.mjs",
@@ -29,8 +35,9 @@
     "windows:server:fast": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/update-server-runtime.ps1",
     "windows:server:deps": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/update-server-runtime.ps1 -Dependencies",
     "windows:client": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/build-client-windows.ps1",
+    "windows:package": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/package-windows-release.ps1",
     "windows:release": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/scripts/build-windows.ps1",
-    "verify": "pnpm db:validate && pnpm typecheck && pnpm lint && pnpm scan:chars && pnpm --filter @docsys/web test && pnpm --filter @docsys/api test && pnpm --filter @docsys/worker test && pnpm build",
+    "verify": "pnpm release:check && pnpm db:validate && pnpm typecheck && pnpm lint && pnpm scan:chars && pnpm --filter @docsys/web test && pnpm --filter @docsys/api test && pnpm --filter @docsys/worker test && pnpm build",
     "db:format": "pnpm --filter @docsys/database format",
     "db:validate": "pnpm --filter @docsys/database validate",
     "db:migrate": "pnpm --filter @docsys/database migrate:dev",

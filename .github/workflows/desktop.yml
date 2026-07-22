@@ -32,7 +32,37 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri -> target
       - run: pnpm install --frozen-lockfile
+      - run: pnpm release:check
       - run: pnpm desktop:check
       - run: pnpm --filter @docsys/web build
       - run: pnpm --filter @docsys/desktop typecheck
       - run: pnpm --filter @docsys/desktop build:binary
+
+  portable-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.5
+          cache-dependency-path: |
+            apps/portable/client/go.mod
+            apps/portable/launcher/go.mod
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm release:check
+      - name: Compile portable client
+        working-directory: apps/portable/client
+        run: go build -trimpath -o $env:RUNNER_TEMP\DocSys.exe .
+      - name: Compile portable server launcher
+        working-directory: apps/portable/launcher
+        run: go build -trimpath -o "$env:RUNNER_TEMP\DocSys Server.exe" .
+      - name: Compile portable payload packager
+        working-directory: apps/portable/packager
+        run: go build -trimpath -o $env:RUNNER_TEMP\docsys-packager.exe main.go

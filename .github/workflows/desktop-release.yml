@@ -3,6 +3,7 @@ name: desktop-release
 on:
   push:
     tags:
+      - "v*"
       - "desktop-v*"
 
 permissions:
@@ -42,6 +43,7 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri -> target
       - run: pnpm install --frozen-lockfile
+      - run: node infra/scripts/check-release-alignment.mjs --tag ${{ github.ref_name }}
       - run: pnpm desktop:check
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -62,3 +64,27 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  portable-windows:
+    needs: publish
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node infra/scripts/check-release-alignment.mjs --tag ${{ github.ref_name }}
+      - run: pnpm windows:release
+      - name: Upload portable Windows release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          Get-ChildItem dist-portable -File | Where-Object { $_.Name -like "DocSys-Windows-Portable-v*.zip*" } | ForEach-Object {
+            gh release upload $env:GITHUB_REF_NAME $_.FullName --clobber
+          }

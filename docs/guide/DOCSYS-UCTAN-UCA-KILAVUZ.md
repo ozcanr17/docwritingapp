@@ -894,9 +894,9 @@ pnpm desktop:typecheck
 |---|---|---|
 | `ci.yml` | main push / PR | DB migration, typecheck, lint, test ve web build |
 | `e2e.yml` | main push / PR | PostgreSQL, Redis, MinIO ve Playwright |
-| `desktop.yml` | main push / PR | macOS, Ubuntu ve Windows Tauri doğrulaması |
+| `desktop.yml` | main push / PR | macOS, Ubuntu ve Windows Tauri doğrulaması ile Windows taşınabilir Go derleme kontrolü |
 | `performance.yml` | Haftalık / manuel | 10.000 satır benchmark ve artifact |
-| `desktop-release.yml` | `desktop-v*` tag | Paket, updater artifact ve draft GitHub Release |
+| `desktop-release.yml` | `v*` tag | macOS/Linux/Windows Tauri paketleri, Windows taşınabilir arşivi, updater artifact ve draft GitHub Release |
 
 ## 27.2 Masaüstü release secret'ları
 
@@ -908,9 +908,9 @@ pnpm desktop:typecheck
 ## 27.3 Sürüm adımları
 
 1. Test ve changelog'u tamamlayın.
-2. Web ve desktop sürüm numaralarını eşleyin.
+2. `pnpm release:version X.Y.Z`, `pnpm install --lockfile-only` ve `pnpm release:check` çalıştırın.
 3. `pnpm verify`, e2e ve desktop matrix'i geçirin.
-4. `desktop-vX.Y.Z` tag'i oluşturun.
+4. `vX.Y.Z` tag'i oluşturun.
 5. Draft release artifact'larını, imzaları ve `latest.json` manifestini kontrol edin.
 6. macOS/Windows/Linux paketlerinde temiz makine smoke testi yapın.
 7. Release'i yayımlayın ve eski istemcide updater kabul testi yapın.

@@ -32,3 +32,9 @@ The Windows release contains two administrator-free executables. Keep `DocSys.ex
 The embedded infrastructure is extracted silently to the current user's `%LOCALAPPDATA%\DocSys` runtime cache. Application data remains in `%LOCALAPPDATA%\DocSys\data`; database backups created from the server panel are written to `%LOCALAPPDATA%\DocSys\backups`.
 
 See `docs/WINDOWS-PORTABLE.md` for usage, storage and incremental development details.
+
+## Cross-platform desktop releases
+
+The React/Vite product surface is shared by browser, Tauri and portable Windows builds. Tauri produces native macOS, Linux and Windows packages, while the portable Windows build additionally provides a self-contained local server for evaluation environments.
+
+Use `pnpm release:version <semver>` to advance every package/runtime version and `pnpm release:check` to reject drift. Push a matching `v<semver>` tag to build the native packages and the portable Windows archive in one draft GitHub release. See `docs/DESKTOP.md` for signing and publishing requirements.

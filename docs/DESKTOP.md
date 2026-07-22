@@ -21,17 +21,28 @@ pnpm desktop:check
 pnpm desktop:typecheck
 pnpm --filter @docsys/desktop dev
 pnpm desktop:build
+pnpm release:check
 ```
 
 `desktop:check`, web/desktop/Cargo sürümlerinin aynı olduğunu; tüm paket hedeflerinin, updater imzasının, HTTPS manifest adresinin, CSP güvenlik sınırlarının ve ikonların eksiksiz olduğunu doğrular. Bu kontrol hem normal masaüstü CI matrisinde hem de etiketli sürüm üretiminde zorunludur.
 
-`pnpm desktop:build`, kişisel test için işletim sistemi paketini updater özel anahtarı istemeden üretir. GitHub'daki `desktop-v*` sürüm akışı ana Tauri yapılandırmasını kullanır; imzalı updater artefaktları yalnız bu güvenli sürüm akışında oluşturulur.
+`pnpm desktop:build`, kişisel test için üzerinde çalışılan işletim sisteminin paketini updater özel anahtarı istemeden üretir. GitHub'daki `v*` sürüm akışı macOS, Linux ve Windows paketlerini yerel runner'larında oluşturur; ayrıca aynı sürüme Windows taşınabilir paketi ekler. Eski `desktop-v*` etiketi geçiş uyumluluğu için desteklenir. İmzalı updater artefaktları yalnız bu güvenli sürüm akışında oluşturulur.
+
+Sürüm numarası yalnız bir dosyada elle değiştirilmemelidir. Yeni sürüm hazırlarken:
+
+```bash
+pnpm release:version 0.1.7
+pnpm install --lockfile-only
+pnpm release:check
+```
+
+`release.json`, web telemetrisi, Tauri/Cargo paketleri ve Windows taşınabilir çalışma zamanı aynı ürün sürümüne bağlanır. Normal `pnpm verify` akışı da bu hizalamayı zorunlu olarak denetler.
 
 Tauri derlemesi Rust stable araç zinciri gerektirir. Linux'ta ayrıca WebKitGTK 4.1, AppIndicator, librsvg ve patchelf sistem paketleri gerekir.
 
 ## Güncelleme ve imzalama
 
-`desktop-v*` etiketi `.github/workflows/desktop-release.yml` akışını başlatır. Akış dört hedef üretir, Tauri güncelleme imzalarını oluşturur ve taslak GitHub sürümü açar. Depo ayarlarında en az şu GitHub Actions secret'ları bulunmalıdır:
+`v*` etiketi `.github/workflows/desktop-release.yml` akışını başlatır. Akış dört Tauri hedefini ve Windows taşınabilir arşivini üretir, Tauri güncelleme imzalarını oluşturur ve tek bir taslak GitHub sürümünde toplar. Depo ayarlarında en az şu GitHub Actions secret'ları bulunmalıdır:
 
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`

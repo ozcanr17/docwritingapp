@@ -51,4 +51,12 @@ corepack pnpm windows:server
 corepack pnpm windows:release
 ```
 
+Bu komut iki EXE'yi, ayrı SHA-256 dosyalarını ve `DocSys-Windows-Portable-vX.Y.Z.zip` arşivini üretir. Sürüm etiketi açılmadan önce ortak ürün sürümünü doğrulayın:
+
+```powershell
+corepack pnpm release:check
+```
+
+Ana dal ve pull request doğrulamasında Windows runner istemciyi, sunucu başlatıcısını ve payload paketleyicisini gerçekten derler. `vX.Y.Z` etiketi macOS/Linux/Windows Tauri paketleri ile bu taşınabilir arşivi aynı taslak GitHub sürümünde birleştirir.
+
 Tam release build yalnız bağımlılık sürümü, migration seti veya teslim edilecek backend değiştiğinde gerekir. Günlük frontend geliştirmesinde Vite dev server, backend geliştirmesinde hızlı runtime güncellemesi kullanılmalıdır.

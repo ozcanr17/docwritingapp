@@ -16,7 +16,7 @@ export function PilotFeedbackDialog({ organizationId, documentId, onClose }: { o
   const [description, setDescription] = useState("");
   const [telemetry, setTelemetry] = useState(pilotTelemetryEnabled());
   const submit = useMutation({
-    mutationFn: () => api(`/organizations/${organizationId}/pilot-feedback`, { method: "POST", body: JSON.stringify({ category, title, description, context: { route: window.location.pathname, ...(documentId ? { documentId } : {}), clientVersion: "0.1.5" } }) }),
+    mutationFn: () => api(`/organizations/${organizationId}/pilot-feedback`, { method: "POST", body: JSON.stringify({ category, title, description, context: { route: window.location.pathname, ...(documentId ? { documentId } : {}), clientVersion: __DOCSYS_VERSION__ } }) }),
     onSuccess: onClose,
   });
   const onSubmit = (event: FormEvent) => { event.preventDefault(); submit.mutate(); };

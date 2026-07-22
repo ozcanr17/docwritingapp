@@ -1,8 +1,15 @@
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { visualizer } from "rollup-plugin-visualizer";
 
+const productVersion = JSON.parse(
+  readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8"),
+).version as string;
+
 export default defineConfig({
+  define: { __DOCSYS_VERSION__: JSON.stringify(productVersion) },
   plugins: [
     react(),
     ...(process.env.ANALYZE === "true"
