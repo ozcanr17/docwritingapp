@@ -1,4 +1,4 @@
-DocSys 0.1.7 - Windows Portable
+DocSys 0.2.0 - Windows Portable
 ================================
 
 Kurulum, Docker, Node.js, PostgreSQL, Redis, terminal veya yonetici yetkisi gerekmez.

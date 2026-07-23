@@ -15,16 +15,24 @@ const artifact = z.object({
   testStepExecutionId: z.string().uuid().optional(),
   role: z.enum(["relates_to", "affects", "found_in", "verifies"]).default("relates_to"),
 }).refine((value) => [value.documentId, value.rowId, value.testExecutionId, value.testStepExecutionId].filter(Boolean).length === 1, "Exactly one artifact target is required");
+const artifactBatch = z.object({ artifacts: z.array(artifact).min(1).max(50) });
 const createWorkItem = z.object({
   type: workItemType.default("task"),
   title: z.string().trim().min(1).max(300),
   description: z.string().max(30000).optional(),
+  stepsToReproduce: z.string().max(30000).optional(),
+  expectedResult: z.string().max(30000).optional(),
+  actualResult: z.string().max(30000).optional(),
+  environment: z.string().max(500).optional(),
+  affectedVersion: z.string().max(200).optional(),
   priority: workItemPriority.default("medium"),
+  reporterId: z.string().uuid().optional(),
   assigneeId: z.string().uuid().nullable().optional(),
   parentId: z.string().uuid().nullable().optional(),
   labels: z.array(z.string().trim().min(1).max(50)).max(30).default([]),
   dueAt: z.string().datetime().nullable().optional(),
   artifact: artifact.optional(),
+  artifacts: z.array(artifact).max(50).default([]),
 });
 const updateWorkItem = z.object({
   expectedVersion: z.number().int().positive(),
@@ -33,6 +41,12 @@ const updateWorkItem = z.object({
   priority: workItemPriority.optional(),
   title: z.string().trim().min(1).max(300).optional(),
   description: z.string().max(30000).nullable().optional(),
+  stepsToReproduce: z.string().max(30000).nullable().optional(),
+  expectedResult: z.string().max(30000).nullable().optional(),
+  actualResult: z.string().max(30000).nullable().optional(),
+  environment: z.string().max(500).nullable().optional(),
+  affectedVersion: z.string().max(200).nullable().optional(),
+  reporterId: z.string().uuid().optional(),
   assigneeId: z.string().uuid().nullable().optional(),
   parentId: z.string().uuid().nullable().optional(),
   labels: z.array(z.string().trim().min(1).max(50)).max(30).optional(),
@@ -107,6 +121,11 @@ export class WorkManagementController {
     return this.service.listWorkUsers(user.userId, workspaceId);
   }
 
+  @Get("workspaces/:workspaceId/work-documents")
+  listWorkDocuments(@CurrentUser() user: SessionUser, @Param("workspaceId", ParseUUIDPipe) workspaceId: string) {
+    return this.service.listWorkDocuments(user.userId, workspaceId);
+  }
+
   @Post("projects/:projectId/work-items")
   createWorkItem(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string, @Body(new ZodBodyPipe(createWorkItem)) body: z.infer<typeof createWorkItem>) {
     return this.service.createWorkItem(user.userId, projectId, body);
@@ -115,6 +134,11 @@ export class WorkManagementController {
   @Get("projects/:projectId/workflow")
   getWorkflow(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
     return this.service.getWorkflow(user.userId, projectId);
+  }
+
+  @Get("projects/:projectId/work-dashboard")
+  getWorkDashboard(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
+    return this.service.getWorkDashboard(user.userId, projectId);
   }
 
   @Put("projects/:projectId/workflow")
@@ -146,6 +170,11 @@ export class WorkManagementController {
   @Post("work-items/:workItemId/artifacts")
   linkArtifact(@CurrentUser() user: SessionUser, @Param("workItemId", ParseUUIDPipe) workItemId: string, @Body(new ZodBodyPipe(artifact)) body: z.infer<typeof artifact>) {
     return this.service.linkArtifact(user.userId, workItemId, body);
+  }
+
+  @Post("work-items/:workItemId/artifacts/batch")
+  linkArtifacts(@CurrentUser() user: SessionUser, @Param("workItemId", ParseUUIDPipe) workItemId: string, @Body(new ZodBodyPipe(artifactBatch)) body: z.infer<typeof artifactBatch>) {
+    return this.service.linkArtifacts(user.userId, workItemId, body.artifacts);
   }
 
   @Post("work-items/:workItemId/relations")

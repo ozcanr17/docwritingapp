@@ -28,11 +28,63 @@ describe("work management", () => {
       method: "POST",
       url: `/projects/${project.id}/work-items`,
       headers: { cookie: owner.cookie },
-      payload: { type: "bug", title: "Session remains active", priority: "critical", assigneeId: owner.userId, labels: ["security"], artifact: { rowId: row.id, role: "affects" } },
+      payload: {
+        type: "bug",
+        title: "Session remains active",
+        description: "A revoked session remains usable.",
+        stepsToReproduce: "1. Sign in\n2. Revoke the session\n3. Refresh the protected page",
+        expectedResult: "The user is redirected to sign in.",
+        actualResult: "The protected page remains available.",
+        environment: "Windows 11 / Chrome 130 / QA",
+        affectedVersion: "0.1.7",
+        priority: "critical",
+        reporterId: owner.userId,
+        assigneeId: owner.userId,
+        labels: ["security", "regression"],
+        artifacts: [{ rowId: row.id, role: "affects" }, { documentId: document.id, role: "affects" }],
+      },
     });
     expect(createdResponse.statusCode).toBe(201);
     const created = JSON.parse(createdResponse.body) as { id: string; key: string; version: number; artifactLinks: unknown[] };
-    expect(created).toEqual(expect.objectContaining({ key: "DEL-1", version: 1, artifactLinks: [expect.objectContaining({ rowId: row.id })] }));
+    expect(created).toEqual(expect.objectContaining({
+      key: "DEL-1",
+      version: 1,
+      reporterId: owner.userId,
+      stepsToReproduce: expect.stringContaining("Revoke"),
+      expectedResult: "The user is redirected to sign in.",
+      actualResult: "The protected page remains available.",
+      environment: "Windows 11 / Chrome 130 / QA",
+      affectedVersion: "0.1.7",
+      labels: ["security", "regression"],
+      artifactLinks: expect.arrayContaining([expect.objectContaining({ rowId: row.id }), expect.objectContaining({ documentId: document.id })]),
+    }));
+    expect(created.artifactLinks).toHaveLength(2);
+    const documentsResponse = await app.inject({ method: "GET", url: `/workspaces/${workspace.id}/work-documents`, headers: { cookie: owner.cookie } });
+    expect(documentsResponse.statusCode).toBe(200);
+    expect(JSON.parse(documentsResponse.body)).toContainEqual(expect.objectContaining({ id: document.id }));
+    const dashboardResponse = await app.inject({ method: "GET", url: `/projects/${project.id}/work-dashboard`, headers: { cookie: owner.cookie } });
+    expect(dashboardResponse.statusCode).toBe(200);
+    expect(JSON.parse(dashboardResponse.body)).toEqual(expect.objectContaining({
+      myOpenBugs: [expect.objectContaining({ id: created.id })],
+      metrics: expect.objectContaining({ total: 1, open: 1, criticalOpen: 1 }),
+    }));
+    const designResponse = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/documents`, headers: { cookie: owner.cookie }, payload: { title: "Session Design", documentType: "general_document", folderId: null } });
+    const design = JSON.parse(designResponse.body) as { id: string };
+    const batchLinkResponse = await app.inject({
+      method: "POST",
+      url: `/work-items/${created.id}/artifacts/batch`,
+      headers: { cookie: owner.cookie },
+      payload: { artifacts: [{ documentId: design.id, role: "relates_to" }] },
+    });
+    expect(batchLinkResponse.statusCode).toBe(201);
+    expect(JSON.parse(batchLinkResponse.body)).toEqual([expect.objectContaining({ documentId: design.id })]);
+    const duplicateBatchResponse = await app.inject({
+      method: "POST",
+      url: `/work-items/${created.id}/artifacts/batch`,
+      headers: { cookie: owner.cookie },
+      payload: { artifacts: [{ documentId: design.id, role: "relates_to" }] },
+    });
+    expect(duplicateBatchResponse.statusCode).toBe(409);
     const updatedResponse = await app.inject({ method: "PATCH", url: `/work-items/${created.id}`, headers: { cookie: owner.cookie }, payload: { expectedVersion: 1, status: "in_progress" } });
     expect(updatedResponse.statusCode).toBe(200);
     expect(JSON.parse(updatedResponse.body)).toEqual(expect.objectContaining({ status: "in_progress", version: 2 }));
@@ -118,7 +170,14 @@ describe("work management", () => {
     const defectResponse = await app.inject({ method: "POST", url: `/executions/${execution.id}/steps/${step.id}/internal-defect`, headers: { cookie: owner.cookie }, payload: { projectId: project.id, title: "Invalid authentication is accepted", priority: "critical" } });
     expect(defectResponse.statusCode).toBe(201);
     const defect = JSON.parse(defectResponse.body) as { id: string; key: string; artifactLinks: Array<{ testStepExecutionId: string }> };
-    expect(defect).toEqual(expect.objectContaining({ key: "VER-1", artifactLinks: [expect.objectContaining({ testStepExecutionId: stepExecutionId })] }));
+    expect(defect).toEqual(expect.objectContaining({
+      key: "VER-1",
+      stepsToReproduce: "Sign in",
+      actualResult: "Authentication was accepted",
+      environment: "staging",
+      affectedVersion: "1.2.0",
+      artifactLinks: [expect.objectContaining({ testStepExecutionId: stepExecutionId })],
+    }));
     const storedStep = await prisma.testStepExecution.findUniqueOrThrow({ where: { id: stepExecutionId } });
     expect(storedStep.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "defect", reference: "VER-1", workItemId: defect.id })]));
     const removableTestResponse = await app.inject({ method: "POST", url: `/documents/${document.id}/rows`, headers: { cookie: owner.cookie }, payload: { rowType: "test_case", title: "Removable test", parentId: null } });

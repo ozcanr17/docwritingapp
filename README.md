@@ -2,6 +2,8 @@
 
 Enterprise requirements, test, and document management system (DOORS-class), browser-based, self-hostable.
 
+The Work and tests hub includes Jira-inspired Task, Story and Defect tracking, structured QA evidence, Reporter/Assignee ownership, labels, controlled-document links, project workflows, an interactive Kanban and operational Dashboard widgets.
+
 Monorepo layout:
 
 - `apps/` — deployable processes: web (React SPA), api (NestJS), collaboration (Hocuspocus), worker (BullMQ). Implemented from Phase 2 onward.

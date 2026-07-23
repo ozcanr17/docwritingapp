@@ -1019,29 +1019,34 @@ model TestExecution {
 }
 
 model WorkItem {
-  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String           @db.Uuid
-  workspaceId    String           @db.Uuid
-  projectId      String           @db.Uuid
-  sequence       Int
-  key            String
-  type           WorkItemType
-  status         WorkItemStatus   @default(backlog)
-  priority       WorkItemPriority @default(medium)
-  title          String
-  description    String?
-  reporterId     String           @db.Uuid
-  assigneeId     String?          @db.Uuid
-  parentId       String?          @db.Uuid
-  labels         String[]         @default([])
-  dueAt          DateTime?        @db.Timestamptz(6)
-  resolvedAt     DateTime?        @db.Timestamptz(6)
-  rank           Int
-  version        Int              @default(1)
-  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
-  deletedAt      DateTime?        @db.Timestamptz(6)
-  deletedById    String?          @db.Uuid
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String           @db.Uuid
+  workspaceId      String           @db.Uuid
+  projectId        String           @db.Uuid
+  sequence         Int
+  key              String
+  type             WorkItemType
+  status           WorkItemStatus   @default(backlog)
+  priority         WorkItemPriority @default(medium)
+  title            String
+  description      String?
+  stepsToReproduce String?
+  expectedResult   String?
+  actualResult     String?
+  environment      String?
+  affectedVersion  String?
+  reporterId       String           @db.Uuid
+  assigneeId       String?          @db.Uuid
+  parentId         String?          @db.Uuid
+  labels           String[]         @default([])
+  dueAt            DateTime?        @db.Timestamptz(6)
+  resolvedAt       DateTime?        @db.Timestamptz(6)
+  rank             Int
+  version          Int              @default(1)
+  createdAt        DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(6)
+  deletedAt        DateTime?        @db.Timestamptz(6)
+  deletedById      String?          @db.Uuid
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)

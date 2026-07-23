@@ -18,7 +18,7 @@ import (
 	"unsafe"
 )
 
-const version = "0.1.7-client.1"
+const version = "0.2.0-client.1"
 
 const createNoWindow = 0x08000000
 

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
+  Activity,
   ArrowDown,
   ArrowUp,
   Bug,
@@ -30,6 +31,8 @@ import {
   TestPlanDetail,
   TestPlanSummary,
   WorkItemDetail,
+  WorkDashboard,
+  WorkDocument,
   WorkItemPriority,
   WorkItemStatus,
   WorkItemSummary,
@@ -45,7 +48,7 @@ interface Project {
   code: string;
   description: string | null;
 }
-type HubTab = "items" | "board" | "plans";
+type HubTab = "dashboard" | "items" | "board" | "plans";
 
 const statuses: WorkItemStatus[] = [
   "backlog",
@@ -69,7 +72,7 @@ export function WorkManagementPage({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<HubTab>("items");
+  const [tab, setTab] = useState<HubTab>("dashboard");
   const [query, setQuery] = useState("");
   const [mine, setMine] = useState(false);
   const [bugsOnly, setBugsOnly] = useState(false);
@@ -94,11 +97,11 @@ export function WorkManagementPage({
   }, [activeProjectId, selectedProjectId]);
   const params = new URLSearchParams();
   if (activeProjectId) params.set("projectId", activeProjectId);
-  if (query.trim()) params.set("q", query.trim());
-  if (mine) params.set("assigneeId", "me");
-  if (bugsOnly) params.set("type", "bug");
+  if (tab !== "dashboard" && query.trim()) params.set("q", query.trim());
+  if (tab !== "dashboard" && mine) params.set("assigneeId", "me");
+  if (tab !== "dashboard" && bugsOnly) params.set("type", "bug");
   const items = useQuery({
-    queryKey: ["work-items", workspaceId, activeProjectId, query, mine, bugsOnly],
+    queryKey: ["work-items", workspaceId, activeProjectId, tab, query, mine, bugsOnly],
     queryFn: () =>
       api<WorkItemSummary[]>(
         `/workspaces/${workspaceId}/work-items?${params.toString()}`,
@@ -116,6 +119,17 @@ export function WorkManagementPage({
     queryFn: () => api<WorkItemWorkflow>(`/projects/${activeProjectId}/workflow`),
     enabled: activeProjectId !== null,
   });
+  const dashboard = useQuery({
+    queryKey: ["work-dashboard", activeProjectId],
+    queryFn: () => api<WorkDashboard>(`/projects/${activeProjectId}/work-dashboard`),
+    enabled: activeProjectId !== null,
+  });
+  const refreshWork = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["work-items", workspaceId] }),
+      queryClient.invalidateQueries({ queryKey: ["work-dashboard", activeProjectId] }),
+    ]);
+  };
   const update = useMutation({
     mutationFn: ({
       item,
@@ -128,10 +142,7 @@ export function WorkManagementPage({
         method: "PATCH",
         body: JSON.stringify({ expectedVersion: item.version, status }),
       }),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({
-        queryKey: ["work-items", workspaceId],
-      }),
+    onSuccess: refreshWork,
   });
   const move = useMutation({
     mutationFn: ({
@@ -154,24 +165,15 @@ export function WorkManagementPage({
           position,
         }),
       }),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({
-        queryKey: ["work-items", workspaceId],
-      }),
+    onSuccess: refreshWork,
   });
   const counts = useMemo(
     () => ({
-      open:
-        items.data?.filter(
-          (item) => !["done", "canceled"].includes(item.status),
-        ).length ?? 0,
-      bugs:
-        items.data?.filter(
-          (item) => item.type === "bug" && item.status !== "done",
-        ).length ?? 0,
-      plans: plans.data?.filter((plan) => plan.status === "active").length ?? 0,
+      open: dashboard.data?.metrics.open ?? 0,
+      bugs: dashboard.data?.metrics.myOpenBugCount ?? 0,
+      plans: dashboard.data?.metrics.activePlans ?? 0,
     }),
-    [items.data, plans.data],
+    [dashboard.data],
   );
 
   return (
@@ -236,6 +238,7 @@ export function WorkManagementPage({
             </button>
             <button
               type="button"
+              data-testid="open-create-item"
               className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primaryForeground hover:opacity-90"
               onClick={() => setCreateOpen(true)}
               disabled={!activeProjectId}
@@ -261,7 +264,7 @@ export function WorkManagementPage({
           />
           <Metric
             icon={<Bug size={16} />}
-            label={t("workHub.openBugs")}
+            label={t("workHub.myOpenBugs")}
             value={counts.bugs}
             tone="danger"
           />
@@ -275,6 +278,12 @@ export function WorkManagementPage({
       </header>
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2.5">
         <div className="flex rounded-lg border border-border bg-editorBackground p-0.5">
+          <TabButton
+            active={tab === "dashboard"}
+            onClick={() => setTab("dashboard")}
+            icon={<Activity size={14} />}
+            label={t("workHub.dashboard")}
+          />
           <TabButton
             active={tab === "items"}
             onClick={() => setTab("items")}
@@ -294,7 +303,7 @@ export function WorkManagementPage({
             label={t("workHub.testPlans")}
           />
         </div>
-        {tab !== "plans" && (
+        {tab !== "plans" && tab !== "dashboard" && (
           <>
             <label className="relative min-w-56 flex-1">
               <Search
@@ -348,6 +357,16 @@ export function WorkManagementPage({
                 <FolderPlus size={15} className="mr-1.5 inline" />
                 {t("workHub.createFirstProject")}
               </button>
+            }
+          />
+        ) : tab === "dashboard" ? (
+          <WorkDashboardView
+            dashboard={dashboard.data}
+            items={items.data ?? []}
+            workflow={workflow.data}
+            onOpen={setSelectedItemId}
+            onMove={(item, targetStatus, anchorId, position) =>
+              move.mutate({ item, targetStatus, anchorId, position })
             }
           />
         ) : tab === "plans" ? (
@@ -411,6 +430,7 @@ export function WorkManagementPage({
         <WorkItemDetailDialog
           workItemId={selectedItemId}
           workspaceId={workspaceId}
+          workflow={workflow.data}
           onClose={() => setSelectedItemId(null)}
         />
       )}
@@ -477,6 +497,92 @@ function TabButton({
       {icon}
       {label}
     </button>
+  );
+}
+
+function WorkDashboardView({
+  dashboard,
+  items,
+  workflow,
+  onOpen,
+  onMove,
+}: {
+  dashboard?: WorkDashboard;
+  items: WorkItemSummary[];
+  workflow?: WorkItemWorkflow;
+  onOpen: (id: string) => void;
+  onMove: (item: WorkItemSummary, status: WorkItemStatus, anchorId: string | null, position: "before" | "after") => void;
+}) {
+  const { t } = useTranslation();
+  if (!dashboard) return <Empty title={t("workHub.loadingDashboard")} detail={t("workHub.loadingDashboardHelp")} />;
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-3">
+        <DashboardCard title={t("workHub.myOpenBugs")} icon={<Bug size={17} className="text-danger" />}>
+          <DashboardItemList items={dashboard.myOpenBugs} empty={t("workHub.noMyOpenBugs")} onOpen={onOpen} />
+        </DashboardCard>
+        <DashboardCard title={t("workHub.recentItems")} icon={<ClipboardList size={17} className="text-primary" />}>
+          <DashboardItemList items={dashboard.recentItems} empty={t("workHub.noRecentItems")} onOpen={onOpen} />
+        </DashboardCard>
+        <DashboardCard title={t("workHub.systemMetrics")} icon={<Activity size={17} className="text-success" />}>
+          <div className="grid grid-cols-2 gap-2">
+            <DashboardMetric label={t("workHub.completionRate")} value={`${dashboard.metrics.completionRate}%`} />
+            <DashboardMetric label={t("workHub.totalItems")} value={dashboard.metrics.total} />
+            <DashboardMetric label={t("workHub.unassignedOpen")} value={dashboard.metrics.unassigned} tone={dashboard.metrics.unassigned ? "warning" : "success"} />
+            <DashboardMetric label={t("workHub.criticalOpen")} value={dashboard.metrics.criticalOpen} tone={dashboard.metrics.criticalOpen ? "danger" : "success"} />
+          </div>
+        </DashboardCard>
+      </div>
+      <section className="rounded-xl border border-border bg-surface p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-semibold">{t("workHub.workflowBoard")}</h2>
+            <p className="mt-0.5 text-xs text-mutedForeground">{t("workHub.workflowBoardHelp")}</p>
+          </div>
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-mutedForeground">{t("workHub.itemCount", { count: items.length })}</span>
+        </div>
+        <div className="overflow-x-auto pb-1">
+          <Board items={items} onOpen={onOpen} workflow={workflow} onMove={onMove} embedded />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DashboardCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+      <h2 className="flex items-center gap-2 text-sm font-semibold">{icon}{title}</h2>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function DashboardItemList({ items, empty, onOpen }: { items: WorkItemSummary[]; empty: string; onOpen: (id: string) => void }) {
+  if (!items.length) return <p className="py-5 text-center text-xs text-mutedForeground">{empty}</p>;
+  return (
+    <div className="space-y-1.5">
+      {items.map((item) => (
+        <button key={item.id} type="button" className="flex w-full items-center gap-2 rounded-lg border border-transparent bg-editorBackground px-3 py-2 text-left hover:border-primary/35 hover:bg-muted" onClick={() => onOpen(item.id)}>
+          <TypeIcon type={item.type} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-medium">{item.title}</span>
+            <span className="mt-0.5 block font-mono text-[10px] text-primary">{item.key}</span>
+          </span>
+          <PriorityBadge priority={item.priority} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DashboardMetric({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "success" | "warning" | "danger" }) {
+  const toneClass = tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : tone === "danger" ? "text-danger" : "text-foreground";
+  return (
+    <div className="rounded-lg bg-editorBackground p-3">
+      <div className="text-[11px] text-mutedForeground">{label}</div>
+      <div className={`mt-1 text-xl font-semibold tabular-nums ${toneClass}`}>{value}</div>
+    </div>
   );
 }
 
@@ -594,16 +700,18 @@ function Board({
   onOpen,
   onMove,
   workflow,
+  embedded = false,
 }: {
   items: WorkItemSummary[];
   onOpen: (id: string) => void;
   onMove: (item: WorkItemSummary, status: WorkItemStatus, anchorId: string | null, position: "before" | "after") => void;
   workflow?: WorkItemWorkflow;
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const [draggedId, setDraggedId] = useState<string | null>(null);
   return (
-    <div className="grid min-w-[980px] grid-cols-5 gap-3">
+    <div className={`grid grid-cols-5 gap-3 ${embedded ? "min-w-[1120px]" : "min-w-[980px]"}`}>
       {statuses.map((status) => (
         <section
           key={status}
@@ -1065,15 +1173,27 @@ function CreateItemDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<WorkItemPriority>("medium");
+  const [reporterId, setReporterId] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
+  const [labels, setLabels] = useState("");
+  const [stepsToReproduce, setStepsToReproduce] = useState("");
+  const [expectedResult, setExpectedResult] = useState("");
+  const [actualResult, setActualResult] = useState("");
+  const [environment, setEnvironment] = useState("");
+  const [affectedVersion, setAffectedVersion] = useState("");
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const users = useQuery({
     queryKey: ["work-users", workspaceId],
     queryFn: () => api<WorkUser[]>(`/workspaces/${workspaceId}/work-users`),
   });
+  const documents = useQuery({
+    queryKey: ["work-documents", workspaceId],
+    queryFn: () => api<WorkDocument[]>(`/workspaces/${workspaceId}/work-documents`),
+  });
   const [linkContext, setLinkContext] = useState(
     Boolean(contextRowId || contextDocumentId),
   );
-  const artifact = linkContext
+  const contextArtifact = linkContext
     ? contextRowId
       ? { rowId: contextRowId, role: type === "bug" ? "affects" : "relates_to" }
       : contextDocumentId
@@ -1083,6 +1203,12 @@ function CreateItemDialog({
           }
         : undefined
     : undefined;
+  const artifacts = [
+    ...(contextArtifact ? [contextArtifact] : []),
+    ...selectedDocumentIds
+      .filter((documentId) => documentId !== contextDocumentId || !linkContext)
+      .map((documentId) => ({ documentId, role: type === "bug" ? "affects" : "relates_to" })),
+  ];
   const create = useMutation({
     mutationFn: () =>
       api(`/projects/${projectId}/work-items`, {
@@ -1091,15 +1217,26 @@ function CreateItemDialog({
           type,
           title,
           description,
+          stepsToReproduce: type === "bug" ? stepsToReproduce : undefined,
+          expectedResult: type === "bug" ? expectedResult : undefined,
+          actualResult: type === "bug" ? actualResult : undefined,
+          environment: type === "bug" ? environment : undefined,
+          affectedVersion: type === "bug" ? affectedVersion : undefined,
           priority,
+          reporterId: reporterId || undefined,
           assigneeId: assigneeId || null,
-          artifact,
+          labels: labels
+            .split(",")
+            .map((label) => label.trim())
+            .filter(Boolean),
+          artifacts,
         }),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ["work-items", workspaceId],
-      });
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["work-items", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["work-dashboard", projectId] }),
+      ]);
       onClose();
     },
   });
@@ -1115,6 +1252,7 @@ function CreateItemDialog({
         <div className="grid grid-cols-2 gap-3">
           <Field label={t("workHub.type")}>
             <select
+              data-testid="work-item-type"
               value={type}
               onChange={(event) => setType(event.target.value as WorkItemType)}
               className="input"
@@ -1155,6 +1293,7 @@ function CreateItemDialog({
           <input
             autoFocus
             required
+            data-testid="work-item-summary"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             className="input"
@@ -1167,20 +1306,49 @@ function CreateItemDialog({
             className="input min-h-28 resize-y"
           />
         </Field>
-        <Field label={t("workHub.assignee")}>
-          <select
-            value={assigneeId}
-            onChange={(event) => setAssigneeId(event.target.value)}
-            className="input"
-          >
-            <option value="">{t("workHub.unassigned")}</option>
-            {(users.data ?? []).map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.displayName}
-              </option>
-            ))}
-          </select>
+        {type === "bug" && (
+          <section className="space-y-3 rounded-xl border border-danger/25 bg-danger/5 p-4">
+            <div>
+              <h3 className="text-sm font-semibold text-danger">{t("workHub.qaDetails")}</h3>
+              <p className="mt-1 text-xs text-mutedForeground">{t("workHub.qaDetailsHelp")}</p>
+            </div>
+            <Field label={t("workHub.stepsToReproduce")}>
+              <textarea data-testid="work-item-steps" value={stepsToReproduce} onChange={(event) => setStepsToReproduce(event.target.value)} className="input min-h-28 resize-y" placeholder={t("workHub.stepsToReproducePlaceholder")} />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("workHub.expectedResult")}>
+                <textarea data-testid="work-item-expected" value={expectedResult} onChange={(event) => setExpectedResult(event.target.value)} className="input min-h-24 resize-y" />
+              </Field>
+              <Field label={t("workHub.actualResult")}>
+                <textarea data-testid="work-item-actual" value={actualResult} onChange={(event) => setActualResult(event.target.value)} className="input min-h-24 resize-y" />
+              </Field>
+              <Field label={t("workHub.testEnvironment")}>
+                <input data-testid="work-item-environment" value={environment} onChange={(event) => setEnvironment(event.target.value)} className="input" placeholder={t("workHub.testEnvironmentPlaceholder")} />
+              </Field>
+              <Field label={t("workHub.affectedVersion")}>
+                <input data-testid="work-item-version" value={affectedVersion} onChange={(event) => setAffectedVersion(event.target.value)} className="input" placeholder={t("workHub.affectedVersionPlaceholder")} />
+              </Field>
+            </div>
+          </section>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t("workHub.reporter")}>
+            <select data-testid="work-item-reporter" value={reporterId} onChange={(event) => setReporterId(event.target.value)} className="input">
+              <option value="">{t("workHub.currentUser")}</option>
+              {(users.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.displayName}</option>)}
+            </select>
+          </Field>
+          <Field label={t("workHub.assignee")}>
+            <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="input">
+              <option value="">{t("workHub.unassigned")}</option>
+              {(users.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.displayName}</option>)}
+            </select>
+          </Field>
+        </div>
+        <Field label={t("workHub.labels")}>
+          <input data-testid="work-item-labels" value={labels} onChange={(event) => setLabels(event.target.value)} className="input" placeholder={t("workHub.labelsHelp")} />
         </Field>
+        <DocumentPicker documents={documents.data ?? []} selectedIds={selectedDocumentIds} onChange={setSelectedDocumentIds} />
         {(contextRowId || contextDocumentId) && (
           <label className="flex items-center gap-2 rounded-lg border border-border bg-editorBackground p-3 text-sm">
             <input
@@ -1193,6 +1361,7 @@ function CreateItemDialog({
               : t("workHub.linkCurrentDocument")}
           </label>
         )}
+        {create.isError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{t("workHub.createItemError")}</p>}
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -1203,6 +1372,7 @@ function CreateItemDialog({
           </button>
           <button
             type="submit"
+            data-testid="create-work-item-submit"
             disabled={!title.trim() || create.isPending}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primaryForeground disabled:opacity-50"
           >
@@ -1295,10 +1465,12 @@ function CreatePlanDialog({
 function WorkItemDetailDialog({
   workItemId,
   workspaceId,
+  workflow,
   onClose,
 }: {
   workItemId: string;
   workspaceId: string;
+  workflow?: WorkItemWorkflow;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -1311,27 +1483,47 @@ function WorkItemDetailDialog({
     queryKey: ["work-users", workspaceId],
     queryFn: () => api<WorkUser[]>(`/workspaces/${workspaceId}/work-users`),
   });
+  const documents = useQuery({
+    queryKey: ["work-documents", workspaceId],
+    queryFn: () => api<WorkDocument[]>(`/workspaces/${workspaceId}/work-documents`),
+  });
+  const [type, setType] = useState<WorkItemType>("task");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<WorkItemStatus>("backlog");
   const [priority, setPriority] = useState<WorkItemPriority>("medium");
+  const [reporterId, setReporterId] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
   const [labels, setLabels] = useState("");
+  const [stepsToReproduce, setStepsToReproduce] = useState("");
+  const [expectedResult, setExpectedResult] = useState("");
+  const [actualResult, setActualResult] = useState("");
+  const [environment, setEnvironment] = useState("");
+  const [affectedVersion, setAffectedVersion] = useState("");
+  const [documentIdsToLink, setDocumentIdsToLink] = useState<string[]>([]);
   const [comment, setComment] = useState("");
   const [mentionIds, setMentionIds] = useState<string[]>([]);
   useEffect(() => {
     if (!detail.data) return;
+    setType(detail.data.type);
     setTitle(detail.data.title);
     setDescription(detail.data.description ?? "");
     setStatus(detail.data.status);
     setPriority(detail.data.priority);
+    setReporterId(detail.data.reporter.id);
     setAssigneeId(detail.data.assignee?.id ?? "");
     setLabels(detail.data.labels.join(", "));
+    setStepsToReproduce(detail.data.stepsToReproduce ?? "");
+    setExpectedResult(detail.data.expectedResult ?? "");
+    setActualResult(detail.data.actualResult ?? "");
+    setEnvironment(detail.data.environment ?? "");
+    setAffectedVersion(detail.data.affectedVersion ?? "");
   }, [detail.data]);
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["work-item", workItemId] }),
       queryClient.invalidateQueries({ queryKey: ["work-items", workspaceId] }),
+      queryClient.invalidateQueries({ queryKey: ["work-dashboard", detail.data?.project.id] }),
     ]);
   };
   const save = useMutation({
@@ -1340,10 +1532,17 @@ function WorkItemDetailDialog({
         method: "PATCH",
         body: JSON.stringify({
           expectedVersion: detail.data?.version,
+          type,
           title,
           description,
+          stepsToReproduce: type === "bug" ? stepsToReproduce : null,
+          expectedResult: type === "bug" ? expectedResult : null,
+          actualResult: type === "bug" ? actualResult : null,
+          environment: type === "bug" ? environment : null,
+          affectedVersion: type === "bug" ? affectedVersion : null,
           status,
           priority,
+          reporterId,
           assigneeId: assigneeId || null,
           labels: labels
             .split(",")
@@ -1352,6 +1551,16 @@ function WorkItemDetailDialog({
         }),
       }),
     onSuccess: refresh,
+  });
+  const linkDocuments = useMutation({
+    mutationFn: () => api(`/work-items/${workItemId}/artifacts/batch`, {
+      method: "POST",
+      body: JSON.stringify({ artifacts: documentIdsToLink.map((documentId) => ({ documentId, role: type === "bug" ? "affects" : "relates_to" })) }),
+    }),
+    onSuccess: async () => {
+      setDocumentIdsToLink([]);
+      await refresh();
+    },
   });
   const addComment = useMutation({
     mutationFn: () =>
@@ -1366,6 +1575,7 @@ function WorkItemDetailDialog({
     },
   });
   const item = detail.data;
+  const linkedDocumentIds = new Set(item?.artifactLinks.flatMap((link) => link.document ? [link.document.id] : []) ?? []);
   return (
     <DialogFrame
       title={item ? `${item.key} - ${item.title}` : t("workHub.loading")}
@@ -1379,6 +1589,20 @@ function WorkItemDetailDialog({
       ) : (
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
           <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("workHub.type")}>
+                <select value={type} onChange={(event) => setType(event.target.value as WorkItemType)} className="input">
+                  {workTypes.map((value) => <option key={value} value={value}>{t(`workHub.types.${value}`)}</option>)}
+                </select>
+              </Field>
+              <Field label={t("workHub.status")}>
+                <select value={status} onChange={(event) => setStatus(event.target.value as WorkItemStatus)} className="input">
+                  {[item.status, ...(workflow?.schemes[type].transitions[item.status] ?? allStatuses)].filter((value, index, values) => values.indexOf(value) === index).map((value) => (
+                    <option key={value} value={value}>{t(`workHub.statuses.${value}`)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
             <Field label={t("workHub.summary")}>
               <input
                 value={title}
@@ -1393,22 +1617,32 @@ function WorkItemDetailDialog({
                 className="input min-h-32 resize-y"
               />
             </Field>
+            {type === "bug" && (
+              <section className="space-y-3 rounded-xl border border-danger/25 bg-danger/5 p-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-danger">{t("workHub.qaDetails")}</h3>
+                  <p className="mt-1 text-xs text-mutedForeground">{t("workHub.qaDetailsHelp")}</p>
+                </div>
+                <Field label={t("workHub.stepsToReproduce")}>
+                  <textarea value={stepsToReproduce} onChange={(event) => setStepsToReproduce(event.target.value)} className="input min-h-28 resize-y" />
+                </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label={t("workHub.expectedResult")}>
+                    <textarea value={expectedResult} onChange={(event) => setExpectedResult(event.target.value)} className="input min-h-24 resize-y" />
+                  </Field>
+                  <Field label={t("workHub.actualResult")}>
+                    <textarea value={actualResult} onChange={(event) => setActualResult(event.target.value)} className="input min-h-24 resize-y" />
+                  </Field>
+                  <Field label={t("workHub.testEnvironment")}>
+                    <input value={environment} onChange={(event) => setEnvironment(event.target.value)} className="input" />
+                  </Field>
+                  <Field label={t("workHub.affectedVersion")}>
+                    <input value={affectedVersion} onChange={(event) => setAffectedVersion(event.target.value)} className="input" />
+                  </Field>
+                </div>
+              </section>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t("workHub.status")}>
-                <select
-                  value={status}
-                  onChange={(event) =>
-                    setStatus(event.target.value as WorkItemStatus)
-                  }
-                  className="input"
-                >
-                  {[...statuses, "canceled" as const].map((value) => (
-                    <option key={value} value={value}>
-                      {t(`workHub.statuses.${value}`)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
               <Field label={t("workHub.priority")}>
                 <select
                   value={priority}
@@ -1431,6 +1665,11 @@ function WorkItemDetailDialog({
                       {t(`workHub.priorities.${value}`)}
                     </option>
                   ))}
+                </select>
+              </Field>
+              <Field label={t("workHub.reporter")}>
+                <select value={reporterId} onChange={(event) => setReporterId(event.target.value)} className="input">
+                  {(users.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.displayName}</option>)}
                 </select>
               </Field>
               <Field label={t("workHub.assignee")}>
@@ -1456,6 +1695,7 @@ function WorkItemDetailDialog({
                 />
               </Field>
             </div>
+            {save.isError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{t("workHub.saveItemError")}</p>}
             <div className="flex justify-end">
               <button
                 type="button"
@@ -1571,6 +1811,24 @@ function WorkItemDetailDialog({
                     {t("workHub.noEvidence")}
                   </p>
                 )}
+              </div>
+              <div className="mt-4 border-t border-border pt-4">
+                <DocumentPicker
+                  documents={(documents.data ?? []).filter((document) => !linkedDocumentIds.has(document.id))}
+                  selectedIds={documentIdsToLink}
+                  onChange={setDocumentIdsToLink}
+                  compact
+                />
+                <button
+                  type="button"
+                  disabled={!documentIdsToLink.length || linkDocuments.isPending}
+                  onClick={() => linkDocuments.mutate()}
+                  className="mt-3 w-full rounded-lg border border-primary px-3 py-2 text-xs font-medium text-primary disabled:opacity-50"
+                >
+                  <Link2 size={13} className="mr-1.5 inline" />
+                  {t("workHub.linkDocuments")}
+                </button>
+                {linkDocuments.isError && <p role="alert" className="mt-2 text-xs text-danger">{t("workHub.linkDocumentsError")}</p>}
               </div>
             </section>
             <section className="rounded-xl border border-border p-4">
@@ -1814,6 +2072,55 @@ function TestPlanDetailDialog({
         </section>
       </div>
     </DialogFrame>
+  );
+}
+
+function DocumentPicker({
+  documents,
+  selectedIds,
+  onChange,
+  compact = false,
+}: {
+  documents: WorkDocument[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  compact?: boolean;
+}) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  const normalized = query.trim().toLocaleLowerCase();
+  const visible = documents.filter((document) => !normalized || document.title.toLocaleLowerCase().includes(normalized));
+  return (
+    <section className={compact ? "" : "rounded-xl border border-border bg-editorBackground p-3"}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold">{t("workHub.linkDocumentsTitle")}</span>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-mutedForeground">{t("workHub.selectedCount", { count: selectedIds.length })}</span>
+      </div>
+      <label className="relative mt-2 block">
+        <Search size={13} className="absolute left-3 top-2.5 text-mutedForeground" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} className="input py-1.5 pl-8 text-xs" placeholder={t("workHub.searchDocuments")} />
+      </label>
+      <div className={`${compact ? "max-h-36" : "max-h-44"} mt-2 space-y-1 overflow-auto`}>
+        {visible.length ? visible.map((document) => {
+          const checked = selectedIds.includes(document.id);
+          return (
+            <label key={document.id} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-xs ${checked ? "border-primary/50 bg-primary/10" : "border-transparent hover:border-border hover:bg-muted"}`}>
+              <input
+                type="checkbox"
+                data-testid={`work-document-${document.id}`}
+                className="mt-0.5 h-4 w-4 accent-primary"
+                checked={checked}
+                onChange={() => onChange(checked ? selectedIds.filter((id) => id !== document.id) : [...selectedIds, document.id])}
+              />
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{document.title}</span>
+                <span className="mt-0.5 block text-[10px] text-mutedForeground">{t(`workHub.documentTypes.${document.documentType}`)}</span>
+              </span>
+            </label>
+          );
+        }) : <p className="py-4 text-center text-xs text-mutedForeground">{t("workHub.noDocuments")}</p>}
+      </div>
+    </section>
   );
 }
 

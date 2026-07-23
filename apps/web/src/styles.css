@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
   --background: 220 18% 96%;
   --foreground: 224 20% 12%;
   --surface: 0 0% 100%;
@@ -24,6 +25,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: 225 10% 8%;
   --foreground: 220 12% 91%;
   --surface: 224 10% 11%;
@@ -48,6 +50,44 @@ body {
   @apply bg-background text-foreground antialiased;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", sans-serif;
   letter-spacing: -0.008em;
+}
+
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    border-color: hsl(var(--border));
+    background-color: hsl(var(--editor-background));
+    color: hsl(var(--foreground));
+    caret-color: hsl(var(--foreground));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(var(--muted-foreground));
+    opacity: 1;
+  }
+
+  select option,
+  select optgroup {
+    background-color: hsl(var(--surface-elevated));
+    color: hsl(var(--foreground));
+  }
+
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    cursor: not-allowed;
+    background-color: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    opacity: 0.72;
+  }
+}
+
+@layer components {
+  .input {
+    @apply block w-full rounded-lg border border-border bg-editorBackground px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-mutedForeground hover:border-mutedForeground/60 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-muted disabled:text-mutedForeground disabled:opacity-70;
+  }
 }
 
 * {

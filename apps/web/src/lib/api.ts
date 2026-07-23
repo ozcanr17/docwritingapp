@@ -129,9 +129,16 @@ export interface WorkItemSummary {
   priority: WorkItemPriority;
   title: string;
   description: string | null;
+  stepsToReproduce: string | null;
+  expectedResult: string | null;
+  actualResult: string | null;
+  environment: string | null;
+  affectedVersion: string | null;
   labels: string[];
   version: number;
   dueAt: string | null;
+  createdAt: string;
+  updatedAt: string;
   project: { id: string; name: string; code: string };
   reporter: { id: string; displayName: string };
   assignee: { id: string; displayName: string } | null;
@@ -139,6 +146,30 @@ export interface WorkItemSummary {
 }
 
 export interface WorkUser { id: string; displayName: string }
+
+export interface WorkDocument {
+  id: string;
+  title: string;
+  documentType: DocumentType;
+  updatedAt: string;
+}
+
+export interface WorkDashboard {
+  projectId: string;
+  myOpenBugs: WorkItemSummary[];
+  recentItems: WorkItemSummary[];
+  statusCounts: Record<WorkItemStatus, number>;
+  metrics: {
+    total: number;
+    open: number;
+    completed: number;
+    completionRate: number;
+    myOpenBugCount: number;
+    unassigned: number;
+    criticalOpen: number;
+    activePlans: number;
+  };
+}
 
 export interface WorkItemDetail extends Omit<WorkItemSummary, "reporter" | "_count"> {
   reporter: { id: string; displayName: string; email: string };
