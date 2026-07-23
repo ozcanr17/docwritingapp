@@ -6,7 +6,7 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The most recent task was **continue Phase 2 of the Jira-inspired work and test management expansion and add the next useful production slice**. This session delivered project-specific workflow schemes, server-enforced transitions and persistent backlog/Kanban ordering. The next task is release/iteration planning, workflow permissions and higher-volume planning productivity without weakening controlled-document governance.
+The most recent task was **close the missing project-creation prerequisite in the Jira-inspired Work and tests area**. This session made project creation and selection a complete user-facing flow, hardened its server validation/permissions and fixed work-item queries to use the selected project instead of silently mixing the workspace or always using the first project. The next task is release/iteration planning, workflow permissions and higher-volume planning productivity without weakening controlled-document governance.
 
 ### What was completed in the latest task
 
@@ -21,6 +21,12 @@ The most recent task was **continue Phase 2 of the Jira-inspired work and test m
 9. API integration coverage verifies default/custom workflow reads, optimistic workflow conflicts, forbidden transitions, required fields, persistent ordering, audit and viewer read-only behavior.
 10. The verified totals are web **94**, API **71** and worker **13**: **178/178** tests pass. `pnpm verify`, production build/code-split budget, `pnpm audit --prod --audit-level high`, Rust desktop typecheck, desktop readiness and release alignment all pass. The production audit reports no known vulnerability.
 11. Browser control was not used, so the workflow editor and drag behavior still need a real visual/pointer walkthrough at narrow and desktop widths before UX approval.
+12. Work and tests now exposes a project selector and an always-discoverable New project action. With no project, the empty state directly opens the prerequisite creation form instead of leaving users at a dead end.
+13. Project creation collects name, stable 2–12 character code and description, explains what the project provides, normalizes codes to uppercase and reports validation, duplicate-code and missing-permission failures separately.
+14. Project creation now requires `project.manage`, allowing Organization administrators, Workspace administrators and Project managers while rejecting Viewer/Reviewer/Editor roles. The creator is recorded as a project member and the creation audit remains in the same transaction.
+15. The newly created project is automatically selected after the project list refreshes. Work items, workflow and test plans all follow that selected project; switching projects clears stale item/plan detail selection.
+16. A new web component test exercises empty-state project creation and automatic selection. Tenancy integration coverage verifies uppercase normalization, duplicate HTTP 409, creator membership/audit, Project-manager creation and Viewer rejection.
+17. The verified totals are web **95**, API **71** and worker **13**: **179/179** tests pass. `pnpm verify`, the **122.9 KiB gzip** initial bundle budget, the lazy **9.1 KiB gzip** Work Management route, desktop readiness, Rust typecheck and production dependency audit all pass.
 
 ### Earlier verified production foundation
 
@@ -39,7 +45,7 @@ The most recent task was **continue Phase 2 of the Jira-inspired work and test m
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. Configurable transitions and persistent drag ranking are complete, but Jira-grade planning is not. Transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation, dashboards and external synchronization remain. The work-management surfaces have type/integration coverage but no browser screenshot walkthrough in this session. External pilot evidence and production signing/operations dependencies remain unchanged.
+There is **no active code blocker**. Project creation/selection, configurable transitions and persistent drag ranking are complete, but Jira-grade planning is not. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation, dashboards and external synchronization remain. The work-management surfaces have type/integration coverage but no browser screenshot walkthrough in this session. External pilot evidence and production signing/operations dependencies remain unchanged.
 
 ### Next plan
 
@@ -53,6 +59,9 @@ There is **no active code blocker**. Configurable transitions and persistent dra
 
 ### Pitfalls encountered in the latest task
 
+- A prerequisite API is not a complete product feature. Project creation existed on the server but had no ordinary-user entry point; Work and tests therefore presented a dead-end empty state. Every future prerequisite must include discovery, creation/selection, permission feedback, loading/error states and a direct recovery path.
+- Work and tests previously selected the first project for workflow/test plans while listing work items across the whole workspace. Always drive every project-scoped query from the same explicit active-project identifier.
+- Project codes become permanent work/test key prefixes. Normalize them on the server, constrain the allowed shape and translate database uniqueness conflicts to HTTP 409 instead of leaking a generic database failure.
 - POST action routes default to HTTP 201 in NestJS. A move is an idempotency/version-sensitive state action rather than resource creation, so `/work-items/:id/move` explicitly uses HTTP 200. Preserve deliberate response semantics when adding planning actions.
 - Workflows stored as JSON must never be trusted directly. Read paths normalize every work type/status/field against server allowlists and fall back to safe defaults; write paths use strict zod validation. Keep both layers when evolving the JSON shape.
 - Reordering visible filtered items must preserve hidden items. The API orders the complete target project/status lane under an advisory lock and positions relative to a validated anchor; do not calculate authoritative ranks solely in the browser.
@@ -171,11 +180,11 @@ TypeScript modular monolith in a pnpm + Turborepo monorepo.
 
 **Migrations (16):** `init`, `hierarchy_prefix_indexes`, `suspect_links`, `platform_capabilities`, `test_step_result`, `requirement_numbers`, `stable_object_numbers`, `profiles_and_numbering`, `semantic_baselines`, `test_step_number_override`, `authoring_templates_comments`, `retest_packages`, `retest_package_constraints`, `document_requirement_prefix`, `baseline_bound_reviews`, `document_access_grants`.
 
-**Test status (all green as of 2026-07-23):** api **71**, worker **13**, web **94**. `pnpm verify` passes release alignment, database validation, TypeScript checking, lint, forbidden-character scan, all **178** unit/integration tests and the production build with bundle budgets (**122.2 KiB initial gzip**; lazy Work Management page **8.2 KiB gzip**). The previously verified Playwright suite is **9/9**, including the complete pilot guide/feedback/admin-inbox flow and WCAG A/AA audit. `pnpm desktop:check` and Rust `cargo check` pass; the previously built native Tauri `0.1.6` application/DMG remains the latest Apple Silicon package evidence. Workflow YAML parses successfully and `pnpm audit --prod --audit-level high` reports no known production dependency vulnerability. Windows and Linux native compilation is delegated to the checked GitHub Actions matrix; do not claim a local Windows/Linux build from this Mac.
+**Test status (all green as of 2026-07-23):** api **71**, worker **13**, web **95**. `pnpm verify` passes release alignment, database validation, TypeScript checking, lint, forbidden-character scan, all **179** unit/integration tests and the production build with bundle budgets (**122.9 KiB initial gzip**; lazy Work Management page **9.1 KiB gzip**). The previously verified Playwright suite is **9/9**, including the complete pilot guide/feedback/admin-inbox flow and WCAG A/AA audit. `pnpm desktop:check` and Rust `cargo check` pass; the previously built native Tauri `0.1.6` application/DMG remains the latest Apple Silicon package evidence. Workflow YAML parses successfully and `pnpm audit --prod --audit-level high` reports no known production dependency vulnerability. Windows and Linux native compilation is delegated to the checked GitHub Actions matrix; do not claim a local Windows/Linux build from this Mac.
 
 ## 4. Where we are / production-hardening work
 
-**Latest verification (2026-07-23):** api **71**, worker **13**, web **94**; all **178** tests and the full `pnpm verify` production gate pass. Initial JavaScript is **122.2 KiB gzip**; Work Management remains an **8.2 KiB gzip** lazy route and the migration preview, pilot feedback/checklist, administrator, document-access, document-overview, recent-document, command-palette, onboarding and other dialog surfaces remain lazy-loaded. The earlier **9/9** Playwright flows, WCAG A/AA automation and live backup/restore drill remain the latest evidence. Production dependency audit, release/desktop readiness and Rust type checking pass locally; the native `0.1.6` application/DMG compilation remains previously verified evidence.
+**Latest verification (2026-07-23):** api **71**, worker **13**, web **95**; all **179** tests and the full `pnpm verify` production gate pass. Initial JavaScript is **122.9 KiB gzip**; Work Management remains a **9.1 KiB gzip** lazy route and the migration preview, pilot feedback/checklist, administrator, document-access, document-overview, recent-document, command-palette, onboarding and other dialog surfaces remain lazy-loaded. The earlier **9/9** Playwright flows, WCAG A/AA automation and live backup/restore drill remain the latest evidence. Production dependency audit, release/desktop readiness and Rust type checking pass locally; the native `0.1.6` application/DMG compilation remains previously verified evidence.
 
 The requested capability set has working vertical slices. Remaining work is production depth rather than missing foundations:
 - Add provider-specific Jira/Azure DevOps/GitHub adapters, webhook retries and secret-vault integration; the current integration registry does not dispatch outbound work.

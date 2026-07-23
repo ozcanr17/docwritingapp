@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Columns3,
   ExternalLink,
+  FolderPlus,
   LayoutList,
   Link2,
   MessageSquare,
@@ -24,6 +25,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   api,
+  ApiError,
   TestPlanCandidate,
   TestPlanDetail,
   TestPlanSummary,
@@ -41,6 +43,7 @@ interface Project {
   id: string;
   name: string;
   code: string;
+  description: string | null;
 }
 type HubTab = "items" | "board" | "plans";
 
@@ -73,23 +76,34 @@ export function WorkManagementPage({
   const [createOpen, setCreateOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const projects = useQuery({
     queryKey: ["projects", workspaceId],
     queryFn: () => api<Project[]>(`/workspaces/${workspaceId}/projects`),
   });
-  const activeProjectId = projects.data?.[0]?.id ?? null;
+  const activeProjectId =
+    projects.data?.some((project) => project.id === selectedProjectId)
+      ? selectedProjectId
+      : projects.data?.[0]?.id ?? null;
+  useEffect(() => {
+    if (activeProjectId && activeProjectId !== selectedProjectId)
+      setSelectedProjectId(activeProjectId);
+  }, [activeProjectId, selectedProjectId]);
   const params = new URLSearchParams();
+  if (activeProjectId) params.set("projectId", activeProjectId);
   if (query.trim()) params.set("q", query.trim());
   if (mine) params.set("assigneeId", "me");
   if (bugsOnly) params.set("type", "bug");
   const items = useQuery({
-    queryKey: ["work-items", workspaceId, query, mine, bugsOnly],
+    queryKey: ["work-items", workspaceId, activeProjectId, query, mine, bugsOnly],
     queryFn: () =>
       api<WorkItemSummary[]>(
         `/workspaces/${workspaceId}/work-items?${params.toString()}`,
       ),
+    enabled: activeProjectId !== null,
   });
   const plans = useQuery({
     queryKey: ["test-plans", activeProjectId],
@@ -170,7 +184,37 @@ export function WorkManagementPage({
               {t("workHub.description")}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            {projects.data && projects.data.length > 0 && (
+              <label className="flex items-center gap-2 rounded-lg border border-border bg-editorBackground px-2">
+                <span className="sr-only">{t("workHub.activeProject")}</span>
+                <select
+                  data-testid="project-selector"
+                  className="max-w-52 bg-transparent py-2 text-sm outline-none"
+                  value={activeProjectId ?? ""}
+                  onChange={(event) => {
+                    setSelectedProjectId(event.target.value);
+                    setSelectedItemId(null);
+                    setSelectedPlanId(null);
+                  }}
+                >
+                  {projects.data.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.code} · {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button
+              type="button"
+              data-testid="open-create-project"
+              className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
+              onClick={() => setCreateProjectOpen(true)}
+            >
+              <FolderPlus size={15} className="mr-1.5 inline" />
+              {t("workHub.newProject")}
+            </button>
             <button
               type="button"
               data-testid="open-workflow-editor"
@@ -286,10 +330,25 @@ export function WorkManagementPage({
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-4">
-        {!activeProjectId ? (
+        {projects.isLoading ? (
+          <Empty title={t("workHub.loadingProjects")} detail={t("workHub.loadingProjectsHelp")} />
+        ) : projects.isError ? (
+          <Empty title={t("workHub.projectLoadError")} detail={t("workHub.projectLoadErrorHelp")} />
+        ) : !activeProjectId ? (
           <Empty
             title={t("workHub.noProject")}
             detail={t("workHub.noProjectHelp")}
+            action={
+              <button
+                type="button"
+                data-testid="empty-create-project"
+                className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primaryForeground"
+                onClick={() => setCreateProjectOpen(true)}
+              >
+                <FolderPlus size={15} className="mr-1.5 inline" />
+                {t("workHub.createFirstProject")}
+              </button>
+            }
           />
         ) : tab === "plans" ? (
           <PlanList plans={plans.data ?? []} onOpen={setSelectedPlanId} />
@@ -326,6 +385,13 @@ export function WorkManagementPage({
           contextDocumentId={contextDocumentId}
           contextRowId={contextRowId}
           onClose={() => setCreateOpen(false)}
+        />
+      )}
+      {createProjectOpen && (
+        <CreateProjectDialog
+          workspaceId={workspaceId}
+          onCreated={(projectId) => setSelectedProjectId(projectId)}
+          onClose={() => setCreateProjectOpen(false)}
         />
       )}
       {planOpen && activeProjectId && (
@@ -706,12 +772,21 @@ function PriorityBadge({ priority }: { priority: WorkItemPriority }) {
   );
 }
 
-function Empty({ title, detail }: { title: string; detail: string }) {
+function Empty({
+  title,
+  detail,
+  action,
+}: {
+  title: string;
+  detail: string;
+  action?: React.ReactNode;
+}) {
   return (
     <div className="mx-auto mt-16 max-w-md text-center">
       <ClipboardList size={36} className="mx-auto text-mutedForeground" />
       <h2 className="mt-4 font-semibold">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-mutedForeground">{detail}</p>
+      {action}
     </div>
   );
 }
@@ -756,6 +831,99 @@ function DialogFrame({
         {children}
       </div>
     </div>
+  );
+}
+
+function CreateProjectDialog({
+  workspaceId,
+  onCreated,
+  onClose,
+}: {
+  workspaceId: string;
+  onCreated: (projectId: string) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [description, setDescription] = useState("");
+  const create = useMutation({
+    mutationFn: () =>
+      api<Project>(`/workspaces/${workspaceId}/projects`, {
+        method: "POST",
+        body: JSON.stringify({ name, code, description }),
+      }),
+    onSuccess: async (project) => {
+      await queryClient.invalidateQueries({ queryKey: ["projects", workspaceId] });
+      onCreated(project.id);
+      onClose();
+    },
+  });
+  const errorKey =
+    create.error instanceof ApiError && create.error.status === 403
+      ? "workHub.projectPermissionError"
+      : create.error instanceof ApiError && create.error.status === 409
+        ? "workHub.projectCodeExists"
+        : "workHub.projectCreateError";
+  return (
+    <DialogFrame title={t("workHub.createProject")} onClose={onClose}>
+      <form
+        className="mt-5 space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          create.mutate();
+        }}
+      >
+        <Field label={t("workHub.projectName")}>
+          <input
+            data-testid="project-name"
+            autoFocus
+            required
+            maxLength={200}
+            value={name}
+            className="input"
+            onChange={(event) => setName(event.target.value)}
+          />
+        </Field>
+        <Field label={t("workHub.projectCode")}>
+          <input
+            data-testid="project-code"
+            required
+            minLength={2}
+            maxLength={12}
+            pattern="[A-Za-z][A-Za-z0-9]*"
+            value={code}
+            className="input font-mono uppercase"
+            onChange={(event) => setCode(event.target.value.toLocaleUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))}
+          />
+          <p className="mt-1 text-xs text-mutedForeground">{t("workHub.projectCodeHelp")}</p>
+        </Field>
+        <Field label={t("workHub.descriptionLabel")}>
+          <textarea
+            maxLength={2000}
+            value={description}
+            className="input min-h-24 resize-y"
+            onChange={(event) => setDescription(event.target.value)}
+          />
+        </Field>
+        <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-mutedForeground">
+          {t("workHub.projectCreationHelp")}
+        </div>
+        {create.isError && <p role="alert" className="text-sm text-danger">{t(errorKey)}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button>
+          <button
+            type="submit"
+            data-testid="create-project"
+            disabled={create.isPending || !name.trim() || code.length < 2}
+            className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primaryForeground disabled:opacity-50"
+          >
+            {create.isPending ? t("workHub.creatingProject") : t("workHub.createProject")}
+          </button>
+        </div>
+      </form>
+    </DialogFrame>
   );
 }
 

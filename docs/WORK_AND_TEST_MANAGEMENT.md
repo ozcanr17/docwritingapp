@@ -14,6 +14,7 @@ Every link in this chain must be queryable in both directions, permission checke
 
 Phase 1 introduces:
 
+- in-product project creation and selection with stable project codes, permission-aware errors and direct empty-state recovery;
 - project-scoped work items with stable keys;
 - Epic, Story, Task, Defect and Risk types;
 - Backlog, Ready, In progress, In review, Done and Canceled states;
@@ -29,6 +30,7 @@ Phase 1 introduces:
 
 Delivered vertical slice:
 
+- one active project consistently scopes work items, workflow and test plans; creating or switching a project no longer leaves stale cross-project detail state;
 - work-item detail editing with optimistic version checks, assignment, labels, comments, mentions, artifact navigation and related-work visibility;
 - assignment pickers backed by active organization membership rather than administrator-only user discovery;
 - searchable test-scenario candidates resolved from real test-step hierarchy, plan membership editing and direct planned-execution start;

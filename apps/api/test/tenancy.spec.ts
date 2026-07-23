@@ -19,15 +19,40 @@ describe("tenancy and isolation", () => {
 
   it("creates org, workspace, and project for the owner", async () => {
     const owner = await registerActor(app, "owner");
+    const manager = await registerActor(app, "project-manager");
     const { org, workspace } = await createOrgWorkspaceDocument(app, owner);
     expect(org.id).toBeTruthy();
     const projectRes = await app.inject({
       method: "POST",
       url: `/workspaces/${workspace.id}/projects`,
       headers: { cookie: owner.cookie },
-      payload: { name: "Project X", code: "PX" },
+      payload: { name: "Project X", code: "px" },
     });
     expect(projectRes.statusCode).toBe(201);
+    const project = JSON.parse(projectRes.body) as { id: string; code: string };
+    expect(project.code).toBe("PX");
+    expect(await prisma.projectMember.findFirst({ where: { projectId: project.id, userId: owner.userId, deletedAt: null } })).not.toBeNull();
+    expect(await prisma.auditEvent.findFirst({ where: { action: "project.created", entityId: project.id } })).not.toBeNull();
+    const duplicate = await app.inject({
+      method: "POST",
+      url: `/workspaces/${workspace.id}/projects`,
+      headers: { cookie: owner.cookie },
+      payload: { name: "Duplicate", code: "PX" },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    await app.inject({
+      method: "POST",
+      url: `/organizations/${org.id}/members`,
+      headers: { cookie: owner.cookie },
+      payload: { userId: manager.userId, roleKey: "project_manager" },
+    });
+    const managerProject = await app.inject({
+      method: "POST",
+      url: `/workspaces/${workspace.id}/projects`,
+      headers: { cookie: manager.cookie },
+      payload: { name: "Managed project", code: "MGR" },
+    });
+    expect(managerProject.statusCode).toBe(201);
   });
 
   it("prevents a non-member from reading another tenant's organization", async () => {
@@ -68,7 +93,7 @@ describe("tenancy and isolation", () => {
   it("grants viewer role read access but no write access", async () => {
     const owner = await registerActor(app, "granting-owner");
     const viewer = await registerActor(app, "viewer-user");
-    const { org, document } = await createOrgWorkspaceDocument(app, owner);
+    const { org, workspace, document } = await createOrgWorkspaceDocument(app, owner);
 
     const addMember = await app.inject({
       method: "POST",
@@ -92,6 +117,13 @@ describe("tenancy and isolation", () => {
       payload: { rowType: "requirement", title: "Denied", parentId: null },
     });
     expect(rowWrite.statusCode).toBe(403);
+    const projectCreate = await app.inject({
+      method: "POST",
+      url: `/workspaces/${workspace.id}/projects`,
+      headers: { cookie: viewer.cookie },
+      payload: { name: "Denied project", code: "DENY" },
+    });
+    expect(projectCreate.statusCode).toBe(403);
   });
 
   it("revokes role-derived access when organization membership is removed", async () => {

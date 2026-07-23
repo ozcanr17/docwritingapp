@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@docsys/database";
 import { hash } from "bcryptjs";
 import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
@@ -72,33 +73,39 @@ export class TenancyService {
 
   async createProject(actorId: string, workspaceId: string, name: string, code: string, description?: string) {
     const workspace = await this.requireWorkspace(workspaceId);
-    await this.access.assertPermission(actorId, "workspace.manage", {
+    await this.access.assertPermission(actorId, "project.manage", {
       organizationId: workspace.organizationId,
       workspaceId,
     });
-    return this.prisma.$transaction(async (tx) => {
-      const project = await tx.project.create({
-        data: {
+    const normalizedCode = code.toLocaleUpperCase();
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const project = await tx.project.create({
+          data: {
+            organizationId: workspace.organizationId,
+            workspaceId,
+            name,
+            code: normalizedCode,
+            description: description || null,
+            createdById: actorId,
+          },
+        });
+        await tx.projectMember.create({ data: { projectId: project.id, userId: actorId } });
+        await this.audit.record(tx, {
           organizationId: workspace.organizationId,
           workspaceId,
-          name,
-          code,
-          description: description ?? null,
-          createdById: actorId,
-        },
+          actorId,
+          action: "project.created",
+          entityType: "project",
+          entityId: project.id,
+          nextData: { name, code: normalizedCode },
+        });
+        return project;
       });
-      await tx.projectMember.create({ data: { projectId: project.id, userId: actorId } });
-      await this.audit.record(tx, {
-        organizationId: workspace.organizationId,
-        workspaceId,
-        actorId,
-        action: "project.created",
-        entityType: "project",
-        entityId: project.id,
-        nextData: { name, code },
-      });
-      return project;
-    });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ConflictException("Project code already exists in this workspace");
+      throw error;
+    }
   }
 
   async listProjects(actorId: string, workspaceId: string) {

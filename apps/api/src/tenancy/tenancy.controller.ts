@@ -14,9 +14,9 @@ const slugSchema = z
 const createOrgSchema = z.object({ name: z.string().min(1).max(200), slug: slugSchema });
 const createWorkspaceSchema = z.object({ name: z.string().min(1).max(200), slug: slugSchema });
 const createProjectSchema = z.object({
-  name: z.string().min(1).max(200),
-  code: z.string().min(1).max(40),
-  description: z.string().max(2000).optional(),
+  name: z.string().trim().min(1).max(200),
+  code: z.string().trim().min(2).max(12).regex(/^[A-Za-z][A-Za-z0-9]*$/),
+  description: z.string().trim().max(2000).optional(),
 });
 const addMemberSchema = z.object({
   userId: z.string().uuid(),
