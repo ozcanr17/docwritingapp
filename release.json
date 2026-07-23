@@ -1,5 +1,5 @@
 {
-  "version": "0.1.6",
-  "portableClientRuntime": "0.1.6-client.1",
-  "portableServerRuntime": "0.1.6-server.2"
+  "version": "0.1.7",
+  "portableClientRuntime": "0.1.7-client.1",
+  "portableServerRuntime": "0.1.7-server.1"
 }

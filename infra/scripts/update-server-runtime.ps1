@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $docsysRoot = Join-Path $env:LOCALAPPDATA "DocSys"
-$runtime = Join-Path $docsysRoot "runtime\0.1.6-server.2"
+$runtime = Join-Path $docsysRoot "runtime\0.1.7-server.1"
 $app = Join-Path $runtime "app"
 $next = Join-Path $runtime "app.next"
 $previous = Join-Path $runtime "app.previous"

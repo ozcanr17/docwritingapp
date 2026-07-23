@@ -49,12 +49,12 @@ updateJson("release.json", (value) => {
 
 replace(
   "apps/desktop/src-tauri/Cargo.toml",
-  /(\[package\][\s\S]*?\nversion = ")[^"]+("\n)/,
+  /(\[package\][\s\S]*?\r?\nversion = ")[^"]+("\r?\n)/,
   `$1${nextVersion}$2`,
 );
 replace(
   "apps/desktop/src-tauri/Cargo.lock",
-  /(\[\[package\]\]\nname = "docsys-desktop"\nversion = ")[^"]+("\n)/,
+  /(\[\[package\]\]\r?\nname = "docsys-desktop"\r?\nversion = ")[^"]+("\r?\n)/,
   `$1${nextVersion}$2`,
 );
 replace(

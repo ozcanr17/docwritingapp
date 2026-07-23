@@ -29,7 +29,7 @@ Architecture entry points: `docs/architecture/phase1-analysis.md`, `docs/adr/`.
 
 The Windows release contains two administrator-free executables. Keep `DocSys.exe` and `DocSys Server.exe` in the same directory and launch `DocSys.exe`; it starts the portable server automatically when needed. No Docker, Node.js, PostgreSQL, Redis, MinIO, runtime installer, Windows service, registry change, or PATH change is required on the target computer.
 
-The embedded infrastructure is extracted silently to the current user's `%LOCALAPPDATA%\DocSys` runtime cache. Application data remains in `%LOCALAPPDATA%\DocSys\data`; database backups created from the server panel are written to `%LOCALAPPDATA%\DocSys\backups`.
+The embedded infrastructure prefers the current user's `%LOCALAPPDATA%\DocSys` directory. If that location is unavailable or not writable, it automatically uses a `DocSysData` directory beside the two EXE files. Embedded child processes also receive private profile and temporary directories under the selected data root. Application data remains in `<root>\data`; database backups created from the server panel are written to `<root>\backups`. Startup failures include stage-specific `DS-SRV-*` or `DS-CLI-*` codes and exact diagnostic-log paths.
 
 See `docs/WINDOWS-PORTABLE.md` for usage, storage and incremental development details.
 

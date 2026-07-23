@@ -26,14 +26,14 @@ expect("portable package", json("apps/portable/package.json").version, version);
 expect("Tauri config", json("apps/desktop/src-tauri/tauri.conf.json").version, version);
 expect(
   "Cargo package",
-  capture("apps/desktop/src-tauri/Cargo.toml", /\[package\][\s\S]*?\nversion = "([^"]+)"/),
+  capture("apps/desktop/src-tauri/Cargo.toml", /\[package\][\s\S]*?\r?\nversion = "([^"]+)"/),
   version,
 );
 expect(
   "Cargo lock package",
   capture(
     "apps/desktop/src-tauri/Cargo.lock",
-    /\[\[package\]\]\nname = "docsys-desktop"\nversion = "([^"]+)"/,
+    /\[\[package\]\]\r?\nname = "docsys-desktop"\r?\nversion = "([^"]+)"/,
   ),
   version,
 );

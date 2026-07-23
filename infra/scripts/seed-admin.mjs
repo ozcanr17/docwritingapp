@@ -304,7 +304,7 @@ async function main() {
     { email: "reviewer@docsys.local", displayName: "Selin Demir - Test Lideri", roleKey: "reviewer" },
     { email: "viewer@docsys.local", displayName: "Mert Yılmaz - Proje Gözlemcisi", roleKey: "viewer" },
   ];
-  const demoPassword = process.env.DEMO_PASSWORD ?? "Test1234!";
+  const demoPassword = process.env.DEMO_PASSWORD ?? "Test12345!";
   const existingMembers = await requiredCall("/organizations/" + organizationId + "/members", {}, cookie);
   for (const demo of demoUsers) {
     if (existingMembers.some((member) => member.email === demo.email)) continue;
