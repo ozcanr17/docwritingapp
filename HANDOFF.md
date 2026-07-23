@@ -2,24 +2,25 @@
 
 Written for a brand-new session with zero prior context. Read this top to bottom before touching anything.
 
-## 0. Session handover snapshot (2026-07-22)
+## 0. Session handover snapshot (2026-07-23)
 
 ### Current task
 
-The most recent task was **continue Phase 2 of the Jira-inspired work and test management expansion**. This session delivered the first planning/execution-depth slice: users can open and edit work-item details, assign active organization members, comment and mention, navigate linked evidence, select real hierarchical test scenarios for a plan, remove unexecuted plan members, start real executions and create a first-class internal Defect directly from a failed execution step. The next task is configurable workflows, backlog/board ranking and release/iteration planning without weakening controlled-document governance.
+The most recent task was **continue Phase 2 of the Jira-inspired work and test management expansion and add the next useful production slice**. This session delivered project-specific workflow schemes, server-enforced transitions and persistent backlog/Kanban ordering. The next task is release/iteration planning, workflow permissions and higher-volume planning productivity without weakening controlled-document governance.
 
 ### What was completed in the latest task
 
-1. The Phase 1 `work-management` module remains the foundation: first-class Epic, Story, Task, Defect and Risk records, stable project keys, optimistic versioning, soft deletion, permissions, audit, comments, mentions, notifications, artifact links and real test plans/executions.
-2. Work-item list rows and Kanban cards now open a wide detail editor. It supports summary, description, status, priority, active-member assignment, labels, optimistic save, comments, user mentions, linked engineering-evidence navigation and visible incoming/outgoing work relations.
-3. Work-item creation now uses the same active organization-member picker; ordinary authorized users no longer depend on administrator-only user discovery to assign work.
-4. Test-plan cards now open a plan workspace. It searches real test scenarios resolved from their descendant `test_step` rows, reports step counts, adds scenarios to the plan, navigates to the source heading, removes only members without execution history and starts the existing real execution model.
-5. `TestPlanItem` removal is now audited soft deletion. Active-membership queries, counts, candidate exclusion, detail and execution start all ignore deleted memberships. A partial unique index permits safe later re-addition without losing historical rows.
-6. A failed real execution step can create an internal Defect in an authorized project. The transaction allocates the stable work key, creates the Defect, links it to the exact `TestStepExecution`, sends assignment notification when needed, writes audit metadata and appends a compact evidence reference while a run remains editable.
-7. Work-item artifact links now support exactly one of document, row, test execution or test-step execution. The database check, partial uniqueness, foreign key, server ACL checks and read-side evidence filtering were extended together.
-8. API integration coverage now exercises test candidate resolution, planned execution, failed-step status, internal-defect creation, exact step linkage, evidence reference and soft-deleted plan membership. The web component test covers the internal-defect action.
-9. The verified totals are web **94**, API **70** and worker **13**: **177/177** tests pass. `pnpm verify`, production build/code-split budget, `pnpm audit --prod`, Rust desktop typecheck, desktop readiness and release alignment all pass. The audit reports no known vulnerability.
-10. The browser-control surface was not used in this session, so the new wide work-item/test-plan dialogs still need a real visual walkthrough at narrow and desktop widths before UX approval.
+1. The Phase 1 and earlier Phase 2 work-management foundation remains intact: first-class work records, controlled evidence links, detail editing, comments/mentions, real test plans/executions and exact failed-step Defects.
+2. Each Project now stores a versioned JSON workflow configuration. Epic, Story, Task, Defect and Risk can each define allowed transitions from every status and Description, Assignee or Due date as fields required on entry.
+3. Workflow configuration uses optimistic `workflowVersion` checks. Only `work_item.manage` can update it, readers can inspect it, malformed inputs are rejected by zod and each update is audited in the same transaction.
+4. Work-item status changes are now validated against the current project/work-type scheme on the server. Invalid jumps and missing required fields return HTTP 422. Successful status changes use a distinct `work_item.transitioned` audit event.
+5. The Work and tests UI has a workflow editor with work-type tabs, transition checkboxes and required-field controls. List status selectors only show the current state and permitted next states.
+6. Backlog ordering is persistent. The move endpoint validates permission, tenant/project/status/anchor, workflow and optimistic item version, takes a project advisory lock, reindexes the target lane and records `work_item.moved` atomically.
+7. Kanban cards support drag-and-drop between permitted lanes and within a lane. The list provides keyboard-accessible up/down controls, so reordering does not depend on pointer drag.
+8. Migration `20260723100000_workflow_configuration` adds `Project.workflowConfig` and `Project.workflowVersion`; it was applied successfully to local development and test databases.
+9. API integration coverage verifies default/custom workflow reads, optimistic workflow conflicts, forbidden transitions, required fields, persistent ordering, audit and viewer read-only behavior.
+10. The verified totals are web **94**, API **71** and worker **13**: **178/178** tests pass. `pnpm verify`, production build/code-split budget, `pnpm audit --prod --audit-level high`, Rust desktop typecheck, desktop readiness and release alignment all pass. The production audit reports no known vulnerability.
+11. Browser control was not used, so the workflow editor and drag behavior still need a real visual/pointer walkthrough at narrow and desktop widths before UX approval.
 
 ### Earlier verified production foundation
 
@@ -38,19 +39,24 @@ The most recent task was **continue Phase 2 of the Jira-inspired work and test m
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. The first Phase 2 vertical slice is complete, but Jira-grade planning is not. Configurable workflow transitions, drag ranking, releases/iterations, saved work queries, bulk operations, watchers, automation, dashboards and external synchronization remain. The new work-item and test-plan dialogs have type/unit/integration coverage but no browser screenshot walkthrough in this session. External pilot evidence and production signing/operations dependencies remain unchanged.
+There is **no active code blocker**. Configurable transitions and persistent drag ranking are complete, but Jira-grade planning is not. Transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation, dashboards and external synchronization remain. The work-management surfaces have type/integration coverage but no browser screenshot walkthrough in this session. External pilot evidence and production signing/operations dependencies remain unchanged.
 
 ### Next plan
 
-1. Run a real visual/browser walkthrough of the Work and tests hub, work-item detail, plan membership and failed-step Defect flow at desktop and narrow widths; add a Playwright journey with stable selectors.
-2. Add configurable workflow schemes by work type: allowed transitions, required fields, transition permissions and server-enforced validation. Preserve optimistic versions and audit each transition.
-3. Add persistent LexoRank-style backlog/board ordering and drag movement with keyboard alternatives, then WIP limits and optional swimlanes.
-4. Add iterations/releases/fix versions and plan-level assignment, environment, product variant and data-set configuration. Show aggregate execution progress and direct run-history navigation.
+1. Run a real visual/browser walkthrough of the Work and tests hub, workflow editor, list ordering and Kanban drag behavior at desktop and narrow widths; add a Playwright journey with stable selectors.
+2. Add iterations, milestones, releases and fix versions, including release assignment, dates, progress and unresolved-defect visibility.
+3. Add transition permissions by project role, reusable workflow presets, WIP limits and optional board swimlanes.
+4. Add plan-level assignment, environment, product variant and data-set configuration. Show aggregate execution progress and direct run-history navigation.
 5. Add saved personal/team work queries and bulk assign/transition/link/release operations before automation or external synchronization.
 6. Complete the bidirectional requirement -> test -> plan -> execution -> Defect -> verification explorer, including unresolved-defect readiness widgets.
 7. Run the controlled pilot in parallel; broad Jira parity must not postpone migration, recovery and real user-evidence validation.
 
 ### Pitfalls encountered in the latest task
+
+- POST action routes default to HTTP 201 in NestJS. A move is an idempotency/version-sensitive state action rather than resource creation, so `/work-items/:id/move` explicitly uses HTTP 200. Preserve deliberate response semantics when adding planning actions.
+- Workflows stored as JSON must never be trusted directly. Read paths normalize every work type/status/field against server allowlists and fall back to safe defaults; write paths use strict zod validation. Keep both layers when evolving the JSON shape.
+- Reordering visible filtered items must preserve hidden items. The API orders the complete target project/status lane under an advisory lock and positions relative to a validated anchor; do not calculate authoritative ranks solely in the browser.
+- Board drag has accessible list up/down alternatives, but still lacks a browser-level pointer and narrow-width walkthrough. Do not claim visual UX approval from type/integration tests alone.
 
 - `TestPlanItem` originally had no deletion metadata and the first removal implementation hard-deleted the join row. User-path hard deletion violates the project invariant even for association records. It now has `deletedAt`/`deletedById`, active-only queries and a partial unique index; preserve those filters in every future query/count.
 - A Defect linked only to the containing test or execution is not precise enough. Internal Defects now target the exact `TestStepExecution`; keep the database exactly-one-target constraint, row ACL filtering and execution evidence reference aligned when extending artifact types.
@@ -165,11 +171,11 @@ TypeScript modular monolith in a pnpm + Turborepo monorepo.
 
 **Migrations (16):** `init`, `hierarchy_prefix_indexes`, `suspect_links`, `platform_capabilities`, `test_step_result`, `requirement_numbers`, `stable_object_numbers`, `profiles_and_numbering`, `semantic_baselines`, `test_step_number_override`, `authoring_templates_comments`, `retest_packages`, `retest_package_constraints`, `document_requirement_prefix`, `baseline_bound_reviews`, `document_access_grants`.
 
-**Test status (all green as of 2026-07-22):** api **67**, worker **13**, web **93**. `pnpm verify` passes release alignment, database validation, TypeScript checking, lint, forbidden-character scan, all **173** unit/integration tests and the production build with bundle budgets (**120.1 KiB initial gzip**; lazy Reports dialog **10.2 KiB gzip**). The previously verified Playwright suite is **9/9**, including the complete pilot guide/feedback/admin-inbox flow and WCAG A/AA audit. `pnpm desktop:check`, Rust `cargo check` and the native Tauri `0.1.6` application/DMG production build pass on Apple Silicon macOS. Workflow YAML parses successfully and `pnpm audit --prod --audit-level high` reports no known production dependency vulnerability. Windows and Linux native compilation is delegated to the checked GitHub Actions matrix; do not claim a local Windows/Linux build from this Mac.
+**Test status (all green as of 2026-07-23):** api **71**, worker **13**, web **94**. `pnpm verify` passes release alignment, database validation, TypeScript checking, lint, forbidden-character scan, all **178** unit/integration tests and the production build with bundle budgets (**122.2 KiB initial gzip**; lazy Work Management page **8.2 KiB gzip**). The previously verified Playwright suite is **9/9**, including the complete pilot guide/feedback/admin-inbox flow and WCAG A/AA audit. `pnpm desktop:check` and Rust `cargo check` pass; the previously built native Tauri `0.1.6` application/DMG remains the latest Apple Silicon package evidence. Workflow YAML parses successfully and `pnpm audit --prod --audit-level high` reports no known production dependency vulnerability. Windows and Linux native compilation is delegated to the checked GitHub Actions matrix; do not claim a local Windows/Linux build from this Mac.
 
 ## 4. Where we are / production-hardening work
 
-**Latest verification (2026-07-22):** api **67**, worker **13**, web **93**; all **173** tests and the full `pnpm verify` production gate pass after patched dependency overrides. Initial JavaScript is **120.1 KiB gzip**; migration preview, pilot feedback/checklist, administrator, document-access, document-overview, recent-document, command-palette, onboarding and other dialog surfaces remain lazy-loaded. The earlier **9/9** Playwright flows, WCAG A/AA automation and live backup/restore drill remain the latest evidence. Production dependency audit, release/desktop readiness, Rust type checking and native `0.1.6` application/DMG compilation pass locally on Apple Silicon.
+**Latest verification (2026-07-23):** api **71**, worker **13**, web **94**; all **178** tests and the full `pnpm verify` production gate pass. Initial JavaScript is **122.2 KiB gzip**; Work Management remains an **8.2 KiB gzip** lazy route and the migration preview, pilot feedback/checklist, administrator, document-access, document-overview, recent-document, command-palette, onboarding and other dialog surfaces remain lazy-loaded. The earlier **9/9** Playwright flows, WCAG A/AA automation and live backup/restore drill remain the latest evidence. Production dependency audit, release/desktop readiness and Rust type checking pass locally; the native `0.1.6` application/DMG compilation remains previously verified evidence.
 
 The requested capability set has working vertical slices. Remaining work is production depth rather than missing foundations:
 - Add provider-specific Jira/Azure DevOps/GitHub adapters, webhook retries and secret-vault integration; the current integration registry does not dispatch outbound work.

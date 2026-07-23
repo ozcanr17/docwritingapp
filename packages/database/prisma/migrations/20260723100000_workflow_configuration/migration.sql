@@ -1,0 +1,3 @@
+ALTER TABLE "projects"
+ADD COLUMN "workflowConfig" JSONB NOT NULL DEFAULT '{}',
+ADD COLUMN "workflowVersion" INTEGER NOT NULL DEFAULT 1;

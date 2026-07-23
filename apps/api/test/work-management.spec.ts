@@ -43,7 +43,46 @@ describe("work management", () => {
     const myWorkResponse = await app.inject({ method: "GET", url: "/my-work?kind=assignment&q=Session", headers: { cookie: owner.cookie } });
     expect(JSON.parse(myWorkResponse.body)).toContainEqual(expect.objectContaining({ workItemId: created.id, kind: "assignment" }));
     const events = await prisma.auditEvent.findMany({ where: { entityType: "work_item", entityId: created.id } });
-    expect(events.map((event) => event.action)).toEqual(expect.arrayContaining(["work_item.created", "work_item.updated", "work_item.comment_added"]));
+    expect(events.map((event) => event.action)).toEqual(expect.arrayContaining(["work_item.created", "work_item.transitioned", "work_item.comment_added"]));
+  });
+
+  it("enforces configurable workflows and persists audited ordering", async () => {
+    const owner = await registerActor(app, "workflow-owner");
+    const { workspace } = await createOrgWorkspaceDocument(app, owner);
+    const projectResponse = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/projects`, headers: { cookie: owner.cookie }, payload: { name: "Controlled delivery", code: "FLOW" } });
+    const project = JSON.parse(projectResponse.body) as { id: string };
+    const workflowResponse = await app.inject({ method: "GET", url: `/projects/${project.id}/workflow`, headers: { cookie: owner.cookie } });
+    expect(workflowResponse.statusCode).toBe(200);
+    const workflow = JSON.parse(workflowResponse.body) as { version: number; customized: boolean; schemes: Record<string, { transitions: Record<string, string[]>; requiredFields: Record<string, string[]> }> };
+    expect(workflow.customized).toBe(false);
+    workflow.schemes.task.transitions.backlog = ["ready"];
+    workflow.schemes.task.requiredFields.ready = ["description"];
+    const savedWorkflow = await app.inject({ method: "PUT", url: `/projects/${project.id}/workflow`, headers: { cookie: owner.cookie }, payload: { expectedVersion: workflow.version, schemes: workflow.schemes } });
+    expect(savedWorkflow.statusCode).toBe(200);
+    expect(JSON.parse(savedWorkflow.body)).toEqual(expect.objectContaining({ version: 2, customized: true }));
+    const staleWorkflow = await app.inject({ method: "PUT", url: `/projects/${project.id}/workflow`, headers: { cookie: owner.cookie }, payload: { expectedVersion: workflow.version, schemes: workflow.schemes } });
+    expect(staleWorkflow.statusCode).toBe(409);
+
+    const firstResponse = await app.inject({ method: "POST", url: `/projects/${project.id}/work-items`, headers: { cookie: owner.cookie }, payload: { type: "task", title: "First task" } });
+    const secondResponse = await app.inject({ method: "POST", url: `/projects/${project.id}/work-items`, headers: { cookie: owner.cookie }, payload: { type: "task", title: "Second task" } });
+    const thirdResponse = await app.inject({ method: "POST", url: `/projects/${project.id}/work-items`, headers: { cookie: owner.cookie }, payload: { type: "task", title: "Third task" } });
+    const first = JSON.parse(firstResponse.body) as { id: string; version: number };
+    const second = JSON.parse(secondResponse.body) as { id: string; version: number };
+    const third = JSON.parse(thirdResponse.body) as { id: string; version: number };
+    const invalidTransition = await app.inject({ method: "PATCH", url: `/work-items/${first.id}`, headers: { cookie: owner.cookie }, payload: { expectedVersion: first.version, status: "in_progress" } });
+    expect(invalidTransition.statusCode).toBe(422);
+    const missingRequiredField = await app.inject({ method: "PATCH", url: `/work-items/${first.id}`, headers: { cookie: owner.cookie }, payload: { expectedVersion: first.version, status: "ready" } });
+    expect(missingRequiredField.statusCode).toBe(422);
+    const validTransition = await app.inject({ method: "PATCH", url: `/work-items/${first.id}`, headers: { cookie: owner.cookie }, payload: { expectedVersion: first.version, status: "ready", description: "Ready for implementation" } });
+    expect(validTransition.statusCode).toBe(200);
+    const moved = await app.inject({ method: "POST", url: `/work-items/${second.id}/move`, headers: { cookie: owner.cookie }, payload: { expectedVersion: second.version, targetStatus: "backlog", anchorId: first.id, position: "before" } });
+    expect(moved.statusCode).toBe(400);
+    const reordered = await app.inject({ method: "POST", url: `/work-items/${third.id}/move`, headers: { cookie: owner.cookie }, payload: { expectedVersion: third.version, targetStatus: "backlog", anchorId: second.id, position: "before" } });
+    expect(reordered.statusCode).toBe(200);
+    const orderedResponse = await app.inject({ method: "GET", url: `/workspaces/${workspace.id}/work-items?projectId=${project.id}&status=backlog`, headers: { cookie: owner.cookie } });
+    expect((JSON.parse(orderedResponse.body) as Array<{ id: string }>).map((item) => item.id)).toEqual([third.id, second.id]);
+    const events = await prisma.auditEvent.findMany({ where: { OR: [{ entityType: "project", entityId: project.id }, { entityType: "work_item", entityId: third.id }] } });
+    expect(events.map((event) => event.action)).toEqual(expect.arrayContaining(["work_item.workflow_updated", "work_item.moved"]));
   });
 
   it("creates a test plan and starts a linked real execution", async () => {
@@ -107,6 +146,11 @@ describe("work management", () => {
     const workItem = JSON.parse(created.body) as { id: string };
     const listed = await app.inject({ method: "GET", url: `/workspaces/${workspace.id}/work-items`, headers: { cookie: viewer.cookie } });
     expect(listed.statusCode).toBe(200);
+    const workflow = await app.inject({ method: "GET", url: `/projects/${project.id}/workflow`, headers: { cookie: viewer.cookie } });
+    expect(workflow.statusCode).toBe(200);
+    const workflowBody = JSON.parse(workflow.body) as { version: number; schemes: unknown };
+    const deniedWorkflow = await app.inject({ method: "PUT", url: `/projects/${project.id}/workflow`, headers: { cookie: viewer.cookie }, payload: { expectedVersion: workflowBody.version, schemes: workflowBody.schemes } });
+    expect(deniedWorkflow.statusCode).toBe(403);
     const detail = await app.inject({ method: "GET", url: `/work-items/${workItem.id}`, headers: { cookie: viewer.cookie } });
     expect(JSON.parse(detail.body)).toEqual(expect.objectContaining({ artifactLinks: [] }));
     const denied = await app.inject({ method: "POST", url: `/projects/${project.id}/work-items`, headers: { cookie: viewer.cookie }, payload: { type: "bug", title: "Denied" } });

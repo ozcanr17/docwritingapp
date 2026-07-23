@@ -109,6 +109,17 @@ export type DocumentType = "requirement" | "test" | "general_document";
 export type WorkItemType = "epic" | "story" | "task" | "bug" | "risk";
 export type WorkItemStatus = "backlog" | "ready" | "in_progress" | "in_review" | "done" | "canceled";
 export type WorkItemPriority = "lowest" | "low" | "medium" | "high" | "highest" | "critical";
+export type WorkflowRequiredField = "description" | "assignee" | "dueAt";
+
+export interface WorkItemWorkflow {
+  projectId: string;
+  version: number;
+  customized: boolean;
+  schemes: Record<WorkItemType, {
+    transitions: Record<WorkItemStatus, WorkItemStatus[]>;
+    requiredFields: Record<WorkItemStatus, WorkflowRequiredField[]>;
+  }>;
+}
 
 export interface WorkItemSummary {
   id: string;

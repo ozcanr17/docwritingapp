@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   Bug,
   CheckCircle2,
   ClipboardList,
@@ -12,6 +14,7 @@ import {
   Play,
   Plus,
   Search,
+  Settings2,
   ShieldAlert,
   Trash2,
   UserRound,
@@ -29,6 +32,8 @@ import {
   WorkItemStatus,
   WorkItemSummary,
   WorkItemType,
+  WorkItemWorkflow,
+  WorkflowRequiredField,
   WorkUser,
 } from "../lib/api";
 
@@ -46,6 +51,9 @@ const statuses: WorkItemStatus[] = [
   "in_review",
   "done",
 ];
+const allStatuses: WorkItemStatus[] = [...statuses, "canceled"];
+const workTypes: WorkItemType[] = ["epic", "story", "task", "bug", "risk"];
+const requiredFields: WorkflowRequiredField[] = ["description", "assignee", "dueAt"];
 
 export function WorkManagementPage({
   workspaceId,
@@ -64,6 +72,7 @@ export function WorkManagementPage({
   const [bugsOnly, setBugsOnly] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  const [workflowOpen, setWorkflowOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const projects = useQuery({
@@ -88,6 +97,11 @@ export function WorkManagementPage({
       api<TestPlanSummary[]>(`/projects/${activeProjectId}/test-plans`),
     enabled: activeProjectId !== null,
   });
+  const workflow = useQuery({
+    queryKey: ["work-item-workflow", activeProjectId],
+    queryFn: () => api<WorkItemWorkflow>(`/projects/${activeProjectId}/workflow`),
+    enabled: activeProjectId !== null,
+  });
   const update = useMutation({
     mutationFn: ({
       item,
@@ -99,6 +113,32 @@ export function WorkManagementPage({
       api(`/work-items/${item.id}`, {
         method: "PATCH",
         body: JSON.stringify({ expectedVersion: item.version, status }),
+      }),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({
+        queryKey: ["work-items", workspaceId],
+      }),
+  });
+  const move = useMutation({
+    mutationFn: ({
+      item,
+      targetStatus,
+      anchorId,
+      position,
+    }: {
+      item: WorkItemSummary;
+      targetStatus: WorkItemStatus;
+      anchorId: string | null;
+      position: "before" | "after";
+    }) =>
+      api(`/work-items/${item.id}/move`, {
+        method: "POST",
+        body: JSON.stringify({
+          expectedVersion: item.version,
+          targetStatus,
+          anchorId,
+          position,
+        }),
       }),
     onSuccess: () =>
       void queryClient.invalidateQueries({
@@ -131,6 +171,16 @@ export function WorkManagementPage({
             </p>
           </div>
           <div className="flex gap-2">
+            <button
+              type="button"
+              data-testid="open-workflow-editor"
+              className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
+              onClick={() => setWorkflowOpen(true)}
+              disabled={!workflow.data}
+            >
+              <Settings2 size={15} className="mr-1.5 inline" />
+              {t("workHub.workflow")}
+            </button>
             <button
               type="button"
               className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
@@ -247,13 +297,25 @@ export function WorkManagementPage({
           <Board
             items={items.data ?? []}
             onOpen={setSelectedItemId}
-            onStatus={(item, status) => update.mutate({ item, status })}
+            workflow={workflow.data}
+            onMove={(item, targetStatus, anchorId, position) =>
+              move.mutate({ item, targetStatus, anchorId, position })
+            }
           />
         ) : (
           <ItemList
             items={items.data ?? []}
             onOpen={setSelectedItemId}
+            workflow={workflow.data}
             onStatus={(item, status) => update.mutate({ item, status })}
+            onMove={(item, anchorId, position) =>
+              move.mutate({
+                item,
+                targetStatus: item.status,
+                anchorId,
+                position,
+              })
+            }
           />
         )}
       </div>
@@ -270,6 +332,13 @@ export function WorkManagementPage({
         <CreatePlanDialog
           projectId={activeProjectId}
           onClose={() => setPlanOpen(false)}
+        />
+      )}
+      {workflowOpen && activeProjectId && workflow.data && (
+        <WorkflowDialog
+          projectId={activeProjectId}
+          workflow={workflow.data}
+          onClose={() => setWorkflowOpen(false)}
         />
       )}
       {selectedItemId && (
@@ -349,10 +418,14 @@ function ItemList({
   items,
   onOpen,
   onStatus,
+  onMove,
+  workflow,
 }: {
   items: WorkItemSummary[];
   onOpen: (id: string) => void;
   onStatus: (item: WorkItemSummary, status: WorkItemStatus) => void;
+  onMove: (item: WorkItemSummary, anchorId: string, position: "before" | "after") => void;
+  workflow?: WorkItemWorkflow;
 }) {
   const { t } = useTranslation();
   if (!items.length)
@@ -364,6 +437,7 @@ function ItemList({
       <table className="w-full text-left text-sm">
         <thead className="bg-muted/40 text-xs uppercase tracking-wide text-mutedForeground">
           <tr>
+            <th className="w-20 px-3 py-3"><span className="sr-only">{t("workHub.order")}</span></th>
             <th className="px-4 py-3">{t("workHub.key")}</th>
             <th className="px-4 py-3">{t("workHub.summary")}</th>
             <th className="px-4 py-3">{t("workHub.priority")}</th>
@@ -372,12 +446,40 @@ function ItemList({
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => (
+          {items.map((item, index) => (
             <tr
               key={item.id}
               className="cursor-pointer border-t border-border hover:bg-muted/30"
               onClick={() => onOpen(item.id)}
             >
+              <td className="px-2 py-3" onClick={(event) => event.stopPropagation()}>
+                <span className="flex">
+                  <button
+                    type="button"
+                    className="rounded p-1 text-mutedForeground hover:bg-muted hover:text-foreground disabled:opacity-25"
+                    aria-label={t("workHub.moveUp", { key: item.key })}
+                    disabled={index === 0 || items[index - 1]?.status !== item.status}
+                    onClick={() => {
+                      const anchor = items[index - 1];
+                      if (anchor) onMove(item, anchor.id, "before");
+                    }}
+                  >
+                    <ArrowUp size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded p-1 text-mutedForeground hover:bg-muted hover:text-foreground disabled:opacity-25"
+                    aria-label={t("workHub.moveDown", { key: item.key })}
+                    disabled={index === items.length - 1 || items[index + 1]?.status !== item.status}
+                    onClick={() => {
+                      const anchor = items[index + 1];
+                      if (anchor) onMove(item, anchor.id, "after");
+                    }}
+                  >
+                    <ArrowDown size={13} />
+                  </button>
+                </span>
+              </td>
               <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-primary">
                 {item.key}
               </td>
@@ -411,7 +513,7 @@ function ItemList({
                 className="px-4 py-3"
                 onClick={(event) => event.stopPropagation()}
               >
-                <StatusSelect item={item} onStatus={onStatus} />
+                <StatusSelect item={item} workflow={workflow} onStatus={onStatus} />
               </td>
             </tr>
           ))}
@@ -424,19 +526,31 @@ function ItemList({
 function Board({
   items,
   onOpen,
-  onStatus,
+  onMove,
+  workflow,
 }: {
   items: WorkItemSummary[];
   onOpen: (id: string) => void;
-  onStatus: (item: WorkItemSummary, status: WorkItemStatus) => void;
+  onMove: (item: WorkItemSummary, status: WorkItemStatus, anchorId: string | null, position: "before" | "after") => void;
+  workflow?: WorkItemWorkflow;
 }) {
   const { t } = useTranslation();
+  const [draggedId, setDraggedId] = useState<string | null>(null);
   return (
     <div className="grid min-w-[980px] grid-cols-5 gap-3">
       {statuses.map((status) => (
         <section
           key={status}
           className="rounded-xl border border-border bg-surface"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            const item = items.find((candidate) => candidate.id === draggedId);
+            const targetItems = items.filter((candidate) => candidate.status === status && candidate.id !== draggedId);
+            const anchor = targetItems.at(-1);
+            if (item && (item.status === status || allowedStatuses(item, workflow).includes(status))) onMove(item, status, anchor?.id ?? null, "after");
+            setDraggedId(null);
+          }}
         >
           <header className="flex items-center justify-between border-b border-border px-3 py-2.5 text-xs font-semibold uppercase tracking-wide">
             <span>{t(`workHub.statuses.${status}`)}</span>
@@ -450,7 +564,21 @@ function Board({
               .map((item) => (
                 <article
                   key={item.id}
-                  className="cursor-pointer rounded-lg border border-border bg-editorBackground p-3 shadow-sm hover:border-primary/50"
+                  draggable
+                  className="cursor-grab rounded-lg border border-border bg-editorBackground p-3 shadow-sm hover:border-primary/50 active:cursor-grabbing"
+                  onDragStart={(event) => {
+                    setDraggedId(item.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={() => setDraggedId(null)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const source = items.find((candidate) => candidate.id === draggedId);
+                    if (source && (source.status === status || allowedStatuses(source, workflow).includes(status))) onMove(source, status, item.id, "before");
+                    setDraggedId(null);
+                  }}
                   onClick={() => onOpen(item.id)}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -464,21 +592,7 @@ function Board({
                   </div>
                   <div className="mt-3 flex items-center justify-between">
                     <PriorityBadge priority={item.priority} />
-                    <select
-                      aria-label={t("workHub.status")}
-                      value={item.status}
-                      onClick={(event) => event.stopPropagation()}
-                      onChange={(event) =>
-                        onStatus(item, event.target.value as WorkItemStatus)
-                      }
-                      className="max-w-24 rounded border border-border bg-surface px-1 py-1 text-[10px]"
-                    >
-                      {statuses.map((option) => (
-                        <option key={option} value={option}>
-                          {t(`workHub.statuses.${option}`)}
-                        </option>
-                      ))}
-                    </select>
+                    <span className="text-[10px] text-mutedForeground">{item.assignee?.displayName ?? t("workHub.unassigned")}</span>
                   </div>
                 </article>
               ))}
@@ -544,9 +658,11 @@ function PlanList({
 function StatusSelect({
   item,
   onStatus,
+  workflow,
 }: {
   item: WorkItemSummary;
   onStatus: (item: WorkItemSummary, status: WorkItemStatus) => void;
+  workflow?: WorkItemWorkflow;
 }) {
   const { t } = useTranslation();
   return (
@@ -555,14 +671,17 @@ function StatusSelect({
       onChange={(event) => onStatus(item, event.target.value as WorkItemStatus)}
       className="rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs"
     >
-      {statuses.map((status) => (
+      {[item.status, ...allowedStatuses(item, workflow)].filter((status, index, values) => values.indexOf(status) === index).map((status) => (
         <option key={status} value={status}>
           {t(`workHub.statuses.${status}`)}
         </option>
       ))}
-      <option value="canceled">{t("workHub.statuses.canceled")}</option>
     </select>
   );
+}
+
+function allowedStatuses(item: WorkItemSummary, workflow?: WorkItemWorkflow) {
+  return workflow?.schemes[item.type].transitions[item.status] ?? allStatuses.filter((status) => status !== item.status);
 }
 
 function TypeIcon({ type }: { type: WorkItemType }) {
@@ -620,6 +739,7 @@ function DialogFrame({
       <div
         role="dialog"
         aria-modal="true"
+        data-testid="dialog-frame"
         className={`max-h-[90vh] w-full overflow-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl ${wide ? "max-w-5xl" : "max-w-lg"}`}
       >
         <header className="flex items-center justify-between">
@@ -636,6 +756,125 @@ function DialogFrame({
         {children}
       </div>
     </div>
+  );
+}
+
+function WorkflowDialog({
+  projectId,
+  workflow,
+  onClose,
+}: {
+  projectId: string;
+  workflow: WorkItemWorkflow;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [type, setType] = useState<WorkItemType>("task");
+  const [draft, setDraft] = useState<WorkItemWorkflow>(() => structuredClone(workflow));
+  const save = useMutation({
+    mutationFn: () =>
+      api<WorkItemWorkflow>(`/projects/${projectId}/workflow`, {
+        method: "PUT",
+        body: JSON.stringify({
+          expectedVersion: draft.version,
+          schemes: draft.schemes,
+        }),
+      }),
+    onSuccess: (next) => {
+      queryClient.setQueryData(["work-item-workflow", projectId], next);
+      onClose();
+    },
+  });
+  const toggleTransition = (from: WorkItemStatus, to: WorkItemStatus) => {
+    setDraft((current) => {
+      const next = structuredClone(current);
+      const values = next.schemes[type].transitions[from];
+      next.schemes[type].transitions[from] = values.includes(to)
+        ? values.filter((value) => value !== to)
+        : [...values, to];
+      return next;
+    });
+  };
+  const toggleRequired = (status: WorkItemStatus, field: WorkflowRequiredField) => {
+    setDraft((current) => {
+      const next = structuredClone(current);
+      const values = next.schemes[type].requiredFields[status];
+      next.schemes[type].requiredFields[status] = values.includes(field)
+        ? values.filter((value) => value !== field)
+        : [...values, field];
+      return next;
+    });
+  };
+  return (
+    <DialogFrame title={t("workHub.workflowTitle")} onClose={onClose} wide>
+      <p className="mt-2 text-sm text-mutedForeground">{t("workHub.workflowHelp")}</p>
+      <div className="mt-4 flex flex-wrap gap-1.5" role="tablist" aria-label={t("workHub.type")}>
+        {workTypes.map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={value === type}
+            className={`rounded-lg border px-3 py-1.5 text-xs ${value === type ? "border-primary bg-primary/10 text-primary" : "border-border"}`}
+            onClick={() => setType(value)}
+          >
+            {t(`workHub.types.${value}`)}
+          </button>
+        ))}
+      </div>
+      <div className="mt-4 overflow-auto rounded-xl border border-border">
+        <table className="min-w-[780px] w-full text-left text-xs">
+          <thead className="bg-muted/40 text-mutedForeground">
+            <tr>
+              <th className="px-3 py-2">{t("workHub.fromStatus")}</th>
+              <th className="px-3 py-2">{t("workHub.allowedTransitions")}</th>
+              <th className="px-3 py-2">{t("workHub.requiredFields")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allStatuses.map((from) => (
+              <tr key={from} className="border-t border-border align-top">
+                <th className="whitespace-nowrap px-3 py-3 font-medium">{t(`workHub.statuses.${from}`)}</th>
+                <td className="px-3 py-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {allStatuses.filter((to) => to !== from).map((to) => (
+                      <label key={to} className="flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1">
+                        <input
+                          type="checkbox"
+                          checked={draft.schemes[type].transitions[from].includes(to)}
+                          onChange={() => toggleTransition(from, to)}
+                        />
+                        {t(`workHub.statuses.${to}`)}
+                      </label>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {requiredFields.map((field) => (
+                      <label key={field} className="flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1">
+                        <input
+                          type="checkbox"
+                          checked={draft.schemes[type].requiredFields[from].includes(field)}
+                          onChange={() => toggleRequired(from, field)}
+                        />
+                        {t(`workHub.workflowFields.${field}`)}
+                      </label>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {save.isError && <p role="alert" className="mt-3 text-sm text-danger">{t("workHub.workflowSaveError")}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button>
+        <button type="button" data-testid="save-workflow" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primaryForeground disabled:opacity-50" disabled={save.isPending} onClick={() => save.mutate()}>{t("save")}</button>
+      </div>
+    </DialogFrame>
   );
 }
 

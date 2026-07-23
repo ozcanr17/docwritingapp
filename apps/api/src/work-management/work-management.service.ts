@@ -31,6 +31,27 @@ type WorkItemUpdate = {
   dueAt?: string | null;
 };
 type InternalDefectInput = { projectId: string; title: string; description?: string; priority: WorkItemCreate["priority"]; assigneeId?: string | null };
+type WorkStatus = NonNullable<WorkItemUpdate["status"]>;
+type WorkType = WorkItemCreate["type"];
+type WorkflowRequiredField = "description" | "assignee" | "dueAt";
+type WorkflowScheme = { transitions: Record<WorkStatus, WorkStatus[]>; requiredFields: Record<WorkStatus, WorkflowRequiredField[]> };
+type WorkflowConfiguration = { schemes: Record<WorkType, WorkflowScheme> };
+type WorkflowSchemeInput = { transitions: Partial<Record<WorkStatus, WorkStatus[]>>; requiredFields: Partial<Record<WorkStatus, WorkflowRequiredField[]>> };
+
+const workStatuses: WorkStatus[] = ["backlog", "ready", "in_progress", "in_review", "done", "canceled"];
+const workTypes: WorkType[] = ["epic", "story", "task", "bug", "risk"];
+const defaultTransitions: Record<WorkStatus, WorkStatus[]> = {
+  backlog: ["ready", "in_progress", "canceled"],
+  ready: ["backlog", "in_progress", "canceled"],
+  in_progress: ["ready", "in_review", "done", "canceled"],
+  in_review: ["in_progress", "done", "canceled"],
+  done: ["in_progress"],
+  canceled: ["backlog"],
+};
+
+function defaultWorkflow(): WorkflowConfiguration {
+  return { schemes: Object.fromEntries(workTypes.map((type) => [type, { transitions: Object.fromEntries(workStatuses.map((status) => [status, [...defaultTransitions[status]]])), requiredFields: Object.fromEntries(workStatuses.map((status) => [status, []])) }])) as unknown as Record<WorkType, WorkflowScheme> };
+}
 
 const detailInclude = {
   reporter: { select: { id: true, displayName: true, email: true } },
@@ -91,6 +112,24 @@ export class WorkManagementService {
       orderBy: { user: { displayName: "asc" } },
     });
     return members.map((member) => member.user);
+  }
+
+  async getWorkflow(actorId: string, projectId: string) {
+    const project = await this.requireProject(projectId);
+    await this.access.assertPermission(actorId, "work_item.read", this.projectScope(project));
+    return { projectId, version: project.workflowVersion, customized: this.hasWorkflowConfiguration(project.workflowConfig), ...this.effectiveWorkflow(project.workflowConfig) };
+  }
+
+  async updateWorkflow(actorId: string, projectId: string, input: { expectedVersion: number; schemes: Record<WorkType, WorkflowSchemeInput> }) {
+    const project = await this.requireProject(projectId);
+    await this.access.assertPermission(actorId, "work_item.manage", this.projectScope(project));
+    const configuration = this.normalizeWorkflow({ schemes: input.schemes });
+    await this.prisma.$transaction(async (tx) => {
+      const result = await tx.project.updateMany({ where: { id: projectId, workflowVersion: input.expectedVersion, deletedAt: null }, data: { workflowConfig: configuration as unknown as Prisma.InputJsonValue, workflowVersion: { increment: 1 } } });
+      if (!result.count) throw new ConflictException("Workflow was changed by another user");
+      await this.audit.record(tx, { organizationId: project.organizationId, workspaceId: project.workspaceId, actorId, action: "work_item.workflow_updated", entityType: "project", entityId: projectId, previousData: this.effectiveWorkflow(project.workflowConfig) as unknown as Prisma.InputJsonValue, nextData: configuration as unknown as Prisma.InputJsonValue });
+    });
+    return this.getWorkflow(actorId, projectId);
   }
 
   async createWorkItem(actorId: string, projectId: string, input: WorkItemCreate) {
@@ -156,6 +195,7 @@ export class WorkManagementService {
     if (input.parentId === workItemId) throw new BadRequestException("A work item cannot be its own parent");
     if (input.parentId) await this.assertParent(input.parentId, current.projectId);
     const { expectedVersion, ...fields } = input;
+    if (fields.status && fields.status !== current.status) await this.assertWorkflowTransition(current, fields.status, fields);
     const data: Prisma.WorkItemUncheckedUpdateManyInput = {
       ...fields,
       description: fields.description === undefined ? undefined : fields.description,
@@ -171,7 +211,37 @@ export class WorkManagementService {
       if (result.count === 0) throw new ConflictException("Work item was changed by another user");
       const updated = await tx.workItem.findUniqueOrThrow({ where: { id: workItemId } });
       if (updated.assigneeId && updated.assigneeId !== current.assigneeId && updated.assigneeId !== actorId) await tx.notification.create({ data: { organizationId: current.organizationId, recipientId: updated.assigneeId, type: "assignment", payload: { entityType: "work_item", workItemId, key: updated.key, title: updated.title } } });
-      await this.audit.record(tx, { organizationId: current.organizationId, workspaceId: current.workspaceId, actorId, action: "work_item.updated", entityType: "work_item", entityId: workItemId, previousData: this.auditItem(current), nextData: this.auditItem(updated) });
+      await this.audit.record(tx, { organizationId: current.organizationId, workspaceId: current.workspaceId, actorId, action: fields.status && fields.status !== current.status ? "work_item.transitioned" : "work_item.updated", entityType: "work_item", entityId: workItemId, previousData: this.auditItem(current), nextData: this.auditItem(updated), metadata: fields.status && fields.status !== current.status ? { fromStatus: current.status, toStatus: fields.status } : undefined });
+    });
+    return this.getWorkItem(actorId, workItemId);
+  }
+
+  async moveWorkItem(actorId: string, workItemId: string, input: { expectedVersion: number; targetStatus: WorkStatus; anchorId: string | null; position: "before" | "after" }) {
+    const current = await this.requireWorkItem(workItemId);
+    await this.access.assertPermission(actorId, "work_item.write", this.itemScope(current));
+    if (input.targetStatus !== current.status) await this.assertWorkflowTransition(current, input.targetStatus, {});
+    if (input.anchorId === workItemId) throw new BadRequestException("A work item cannot be positioned relative to itself");
+    if (input.anchorId) {
+      const anchor = await this.requireWorkItem(input.anchorId);
+      if (anchor.projectId !== current.projectId || anchor.status !== input.targetStatus) throw new BadRequestException("Move anchor must be in the same project and target status");
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${current.projectId}::text, 0))`;
+      const latest = await tx.workItem.findFirst({ where: { id: workItemId, deletedAt: null } });
+      if (!latest || latest.version !== input.expectedVersion) throw new ConflictException("Work item was changed by another user");
+      const targetItems = await tx.workItem.findMany({ where: { projectId: current.projectId, status: input.targetStatus, deletedAt: null, id: { not: workItemId } }, orderBy: [{ rank: "asc" }, { createdAt: "asc" }], select: { id: true } });
+      let insertAt = targetItems.length;
+      if (input.anchorId) {
+        const anchorIndex = targetItems.findIndex((item) => item.id === input.anchorId);
+        if (anchorIndex === -1) throw new ConflictException("Move anchor is no longer available");
+        insertAt = input.position === "before" ? anchorIndex : anchorIndex + 1;
+      }
+      targetItems.splice(insertAt, 0, { id: workItemId });
+      await Promise.all(targetItems.map((item, index) => item.id === workItemId
+        ? tx.workItem.update({ where: { id: item.id }, data: { status: input.targetStatus, rank: (index + 1) * 1024, resolvedAt: input.targetStatus === "done" ? new Date() : null, version: { increment: 1 } } })
+        : tx.workItem.update({ where: { id: item.id }, data: { rank: (index + 1) * 1024 } })));
+      const updated = await tx.workItem.findUniqueOrThrow({ where: { id: workItemId } });
+      await this.audit.record(tx, { organizationId: current.organizationId, workspaceId: current.workspaceId, actorId, action: "work_item.moved", entityType: "work_item", entityId: workItemId, previousData: this.auditItem(current), nextData: this.auditItem(updated), metadata: { fromStatus: current.status, toStatus: input.targetStatus, anchorId: input.anchorId, position: input.position, rank: updated.rank } });
     });
     return this.getWorkItem(actorId, workItemId);
   }
@@ -384,6 +454,58 @@ export class WorkManagementService {
       return item;
     });
     return this.getWorkItem(actorId, created.id);
+  }
+
+  private async assertWorkflowTransition(current: { projectId: string; type: WorkType; status: WorkStatus; description: string | null; assigneeId: string | null; dueAt: Date | null }, targetStatus: WorkStatus, fields: Partial<WorkItemUpdate>) {
+    const project = await this.prisma.project.findUniqueOrThrow({ where: { id: current.projectId }, select: { workflowConfig: true } });
+    const scheme = this.effectiveWorkflow(project.workflowConfig).schemes[fields.type ?? current.type];
+    if (!scheme.transitions[current.status].includes(targetStatus)) throw new UnprocessableEntityException(`Transition from ${current.status} to ${targetStatus} is not allowed`);
+    const values = {
+      description: fields.description === undefined ? current.description : fields.description,
+      assignee: fields.assigneeId === undefined ? current.assigneeId : fields.assigneeId,
+      dueAt: fields.dueAt === undefined ? current.dueAt : fields.dueAt,
+    };
+    const missing = scheme.requiredFields[targetStatus].filter((field) => !values[field] || typeof values[field] === "string" && !values[field]?.trim());
+    if (missing.length) throw new UnprocessableEntityException(`Required fields for ${targetStatus}: ${missing.join(", ")}`);
+  }
+
+  private hasWorkflowConfiguration(value: Prisma.JsonValue) {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length);
+  }
+
+  private normalizeWorkflow(configuration: { schemes: Record<WorkType, WorkflowSchemeInput> }): WorkflowConfiguration {
+    const defaults = defaultWorkflow();
+    return {
+      schemes: Object.fromEntries(workTypes.map((type) => {
+        const input = configuration.schemes[type];
+        return [type, {
+          transitions: Object.fromEntries(workStatuses.map((status) => [status, [...new Set((input.transitions[status] ?? defaults.schemes[type].transitions[status]).filter((target) => target !== status))]])) as Record<WorkStatus, WorkStatus[]>,
+          requiredFields: Object.fromEntries(workStatuses.map((status) => [status, [...new Set(input.requiredFields[status] ?? [])]])) as Record<WorkStatus, WorkflowRequiredField[]>,
+        }];
+      })) as unknown as Record<WorkType, WorkflowScheme>,
+    };
+  }
+
+  private effectiveWorkflow(value: Prisma.JsonValue): WorkflowConfiguration {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return defaultWorkflow();
+    const rawSchemes = "schemes" in value && value.schemes && typeof value.schemes === "object" && !Array.isArray(value.schemes) ? value.schemes : null;
+    if (!rawSchemes) return defaultWorkflow();
+    const defaults = defaultWorkflow();
+    const schemes = Object.fromEntries(workTypes.map((type) => {
+      const rawScheme = type in rawSchemes && rawSchemes[type] && typeof rawSchemes[type] === "object" && !Array.isArray(rawSchemes[type]) ? rawSchemes[type] : null;
+      const rawTransitions = rawScheme && "transitions" in rawScheme && rawScheme.transitions && typeof rawScheme.transitions === "object" && !Array.isArray(rawScheme.transitions) ? rawScheme.transitions : null;
+      const rawRequired = rawScheme && "requiredFields" in rawScheme && rawScheme.requiredFields && typeof rawScheme.requiredFields === "object" && !Array.isArray(rawScheme.requiredFields) ? rawScheme.requiredFields : null;
+      const transitions = Object.fromEntries(workStatuses.map((status) => {
+        const candidates = rawTransitions && status in rawTransitions && Array.isArray(rawTransitions[status]) ? rawTransitions[status] : defaults.schemes[type].transitions[status];
+        return [status, [...new Set(candidates.filter((entry): entry is WorkStatus => typeof entry === "string" && workStatuses.includes(entry as WorkStatus) && entry !== status))]];
+      })) as Record<WorkStatus, WorkStatus[]>;
+      const requiredFields = Object.fromEntries(workStatuses.map((status) => {
+        const candidates = rawRequired && status in rawRequired && Array.isArray(rawRequired[status]) ? rawRequired[status] : [];
+        return [status, [...new Set(candidates.filter((entry): entry is WorkflowRequiredField => entry === "description" || entry === "assignee" || entry === "dueAt"))]];
+      })) as Record<WorkStatus, WorkflowRequiredField[]>;
+      return [type, { transitions, requiredFields }];
+    })) as unknown as Record<WorkType, WorkflowScheme>;
+    return { schemes };
   }
 
   private async assertArtifact(actorId: string, input: ArtifactInput, workspaceId: string) {

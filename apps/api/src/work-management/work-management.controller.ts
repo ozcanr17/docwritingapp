@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from "@nestjs/common";
 import { z } from "zod";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionUser } from "../auth/auth.types";
@@ -64,6 +64,34 @@ const internalDefect = z.object({
   priority: workItemPriority.default("high"),
   assigneeId: z.string().uuid().nullable().optional(),
 });
+const workflowRequiredField = z.enum(["description", "assignee", "dueAt"]);
+const workflowTransitions = z.object({
+  backlog: z.array(workItemStatus).max(6).optional(),
+  ready: z.array(workItemStatus).max(6).optional(),
+  in_progress: z.array(workItemStatus).max(6).optional(),
+  in_review: z.array(workItemStatus).max(6).optional(),
+  done: z.array(workItemStatus).max(6).optional(),
+  canceled: z.array(workItemStatus).max(6).optional(),
+}).strict();
+const workflowRequiredFields = z.object({
+  backlog: z.array(workflowRequiredField).max(3).optional(),
+  ready: z.array(workflowRequiredField).max(3).optional(),
+  in_progress: z.array(workflowRequiredField).max(3).optional(),
+  in_review: z.array(workflowRequiredField).max(3).optional(),
+  done: z.array(workflowRequiredField).max(3).optional(),
+  canceled: z.array(workflowRequiredField).max(3).optional(),
+}).strict();
+const workflowScheme = z.object({ transitions: workflowTransitions, requiredFields: workflowRequiredFields.default({}) }).strict();
+const workflowConfiguration = z.object({
+  expectedVersion: z.number().int().positive(),
+  schemes: z.object({ epic: workflowScheme, story: workflowScheme, task: workflowScheme, bug: workflowScheme, risk: workflowScheme }).strict(),
+});
+const moveWorkItem = z.object({
+  expectedVersion: z.number().int().positive(),
+  targetStatus: workItemStatus,
+  anchorId: z.string().uuid().nullable().default(null),
+  position: z.enum(["before", "after"]).default("after"),
+});
 
 @Controller()
 export class WorkManagementController {
@@ -84,6 +112,16 @@ export class WorkManagementController {
     return this.service.createWorkItem(user.userId, projectId, body);
   }
 
+  @Get("projects/:projectId/workflow")
+  getWorkflow(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
+    return this.service.getWorkflow(user.userId, projectId);
+  }
+
+  @Put("projects/:projectId/workflow")
+  updateWorkflow(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string, @Body(new ZodBodyPipe(workflowConfiguration)) body: z.infer<typeof workflowConfiguration>) {
+    return this.service.updateWorkflow(user.userId, projectId, body);
+  }
+
   @Get("work-items/:workItemId")
   getWorkItem(@CurrentUser() user: SessionUser, @Param("workItemId", ParseUUIDPipe) workItemId: string) {
     return this.service.getWorkItem(user.userId, workItemId);
@@ -92,6 +130,12 @@ export class WorkManagementController {
   @Patch("work-items/:workItemId")
   updateWorkItem(@CurrentUser() user: SessionUser, @Param("workItemId", ParseUUIDPipe) workItemId: string, @Body(new ZodBodyPipe(updateWorkItem)) body: z.infer<typeof updateWorkItem>) {
     return this.service.updateWorkItem(user.userId, workItemId, body);
+  }
+
+  @Post("work-items/:workItemId/move")
+  @HttpCode(200)
+  moveWorkItem(@CurrentUser() user: SessionUser, @Param("workItemId", ParseUUIDPipe) workItemId: string, @Body(new ZodBodyPipe(moveWorkItem)) body: z.infer<typeof moveWorkItem>) {
+    return this.service.moveWorkItem(user.userId, workItemId, body);
   }
 
   @Delete("work-items/:workItemId")

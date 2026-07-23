@@ -35,11 +35,15 @@ Delivered vertical slice:
 - soft-deleted plan membership with history-preserving removal rules;
 - exact links from internal Defect work items to the failed `TestStepExecution`, with compact execution evidence referencing the created work key;
 - server-side workspace/project/row authorization and same-transaction audit for every new mutation.
+- project-specific workflow schemes for every work type, including allowed status transitions and fields required on entry;
+- optimistic workflow configuration versions, server-enforced transition validation and distinct transition audit events;
+- persistent backlog ordering with advisory-locked, audited moves and optimistic item versions;
+- drag-and-drop Kanban movement plus accessible list move controls;
+- status selectors that expose only the transitions permitted by the active project workflow.
 
 Remaining Phase 2 scope:
 
-- configurable workflows and transition rules by work-item type;
-- backlog ranking, drag-and-drop board movement, swimlanes and WIP limits;
+- transition permissions by role, workflow presets, swimlanes and WIP limits;
 - iterations, milestones, releases and fix versions;
 - test-plan item selection from saved test queries;
 - configuration, product variant, environment and data-set matrices;

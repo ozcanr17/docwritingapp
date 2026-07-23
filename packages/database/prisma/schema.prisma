@@ -432,6 +432,8 @@ model Project {
   name               String
   code               String
   description        String?
+  workflowConfig     Json      @default("{}")
+  workflowVersion    Int       @default(1)
   nextWorkItemNumber Int       @default(1)
   nextTestPlanNumber Int       @default(1)
   createdAt          DateTime  @default(now()) @db.Timestamptz(6)
