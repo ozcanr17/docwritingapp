@@ -2,8 +2,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, FileSearch, X } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useEscapeClose } from "../hooks/useEscapeClose";
 import { api, RowType } from "../lib/api";
+import { ModalSurface } from "./TransientSurface";
 
 type ImportFormat = "csv" | "xlsx" | "reqif";
 
@@ -33,7 +33,6 @@ function bodyFor(format: ImportFormat, content: string) {
 
 export function MigrationWizard({ documentId, format, fileName, content, onClose, onImported }: { documentId: string; format: ImportFormat; fileName: string; content: string; onClose: () => void; onImported: () => Promise<void> }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose, true);
   const preview = useQuery({
     queryKey: ["import-preview", documentId, format, fileName, content.length],
     queryFn: () => api<ImportPreview>(pathFor(documentId, format, true), { method: "POST", body: bodyFor(format, content) }),
@@ -47,8 +46,7 @@ export function MigrationWizard({ documentId, format, fileName, content, onClose
     if (preview.data) window.dispatchEvent(new CustomEvent("docsys:pilot-event", { detail: { eventName: "import_previewed", metadata: { format, rowCount: preview.data.rowCount, valid: preview.data.valid } } }));
   }, [format, preview.data]);
   const counts = preview.data ? Object.entries(preview.data.counts).filter(([, count]) => count > 0) : [];
-  return <div className="fixed inset-0 z-[240] flex items-center justify-center bg-black/55 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="migration-wizard-title">
-    <section data-testid="migration-wizard" className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-surfaceElevated shadow-2xl">
+  return <ModalSurface onClose={onClose} labelledBy="migration-wizard-title" testId="migration-wizard" panelClassName="flex max-h-[88vh] w-full max-w-4xl flex-col">
       <header className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><span className="rounded-xl bg-primary/10 p-2 text-primary"><FileSearch size={20} /></span><div><h2 id="migration-wizard-title" className="font-semibold">{t("migrationWizardTitle")}</h2><p className="text-xs text-mutedForeground">{fileName} - {format.toUpperCase()}</p></div></div><button aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></header>
       <div className="min-h-0 flex-1 overflow-auto p-5">
         {preview.isLoading && <p className="text-sm text-mutedForeground">{t("analyzingImport")}</p>}
@@ -62,6 +60,5 @@ export function MigrationWizard({ documentId, format, fileName, content, onClose
       </div>
       <footer className="flex items-center justify-between border-t border-border px-5 py-4"><p className="text-xs text-mutedForeground">{t("importNoChangesUntilConfirm")}</p><div className="flex gap-2"><button className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button><button data-testid="confirm-migration-import" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primaryForeground disabled:opacity-40" disabled={!preview.data?.valid || importFile.isPending} onClick={() => importFile.mutate()}>{importFile.isPending ? t("importing") : t("confirmImport")}</button></div></footer>
       {importFile.isError && <div className="border-t border-destructive/30 bg-destructive/10 px-5 py-2 text-xs text-destructive">{t("operationFailed")}</div>}
-    </section>
-  </div>;
+  </ModalSurface>;
 }

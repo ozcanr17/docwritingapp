@@ -26,6 +26,8 @@ import { ShortcutCommandId } from "../lib/keyboardShortcuts";
 import { EditImpactDialog } from "./EditImpactDialog";
 import { useEscapeClose } from "../hooks/useEscapeClose";
 import { useSaveStatusStore } from "../stores/saveStatus";
+import { userFacingError } from "../lib/userFacingError";
+import { ModalSurface } from "./TransientSurface";
 
 interface GridProps {
   documentId: string;
@@ -344,7 +346,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
 
   const handleMutationError = (error: unknown) => {
     if (error instanceof ApiError && error.status === 409) setSaveStatus(documentId, "conflict");
-    pushToast("error", error instanceof ApiError && error.status === 409 ? t("conflictError") : t("genericError"));
+    pushToast("error", userFacingError(error, t));
     void invalidate();
   };
 
@@ -575,7 +577,15 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
     mutationFn: (input: { row: OutlineRow; childStrategy: "delete_subtree" | "promote_children" }) =>
       api(`/rows/${input.row.id}`, { method: "DELETE", body: JSON.stringify({ childStrategy: input.childStrategy }) }),
     onSuccess: (_, input) => {
-      if (input.childStrategy === "delete_subtree") pushHistory(documentId, { kind: "delete", rowId: input.row.id });
+      if (input.childStrategy === "delete_subtree") {
+        pushHistory(documentId, { kind: "delete", rowId: input.row.id });
+        pushToast("success", t("rowDeletedUndoAvailable"), {
+          label: t("command.undo"),
+          onAction: () => window.dispatchEvent(new CustomEvent("docsys:undo", { detail: { documentId } })),
+        });
+      } else {
+        pushToast("success", t("rowDeleted"));
+      }
       setDeleteTarget(null);
     },
     onSettled: invalidate,
@@ -615,6 +625,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
     onSuccess: () => {
       clearRows();
       setConfirmBulkDelete(false);
+      pushToast("success", t("selectedRowsDeleted", { count: selectedRootRowIds.length }));
     },
     onSettled: invalidate,
     onError: handleMutationError,
@@ -1377,8 +1388,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         { key: "hide", label: t("hideColumn"), disabled: columnMenu.column.key === "number", onSelect: () => hideColumn(documentId, columnMenu.column.key) },
       ]} />}
       {confirmBulkDelete && (
-        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 backdrop-blur-sm">
-          <div role="dialog" aria-modal="true" className="w-full max-w-sm rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl">
+        <ModalSurface onClose={() => setConfirmBulkDelete(false)} label={t("deleteSelected")} panelClassName="w-full max-w-sm p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="font-semibold">{t("deleteSelected")}</h2>
@@ -1411,8 +1421,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                 {t("deleteAction")}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalSurface>
       )}
       {deleteTarget && (
         <DeleteRowDialog
@@ -1455,14 +1464,14 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         onConfirm={() => { saveCell.mutate(pendingEdit); setPendingEdit(null); }}
       />}
       {templateParentId !== undefined && (
-        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-          <form className="w-full max-w-sm rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl" onSubmit={(event) => { event.preventDefault(); if (templateName.trim()) createTestTemplate.mutate({ name: templateName.trim(), parentId: templateParentId }); }}>
+        <ModalSurface onClose={() => setTemplateParentId(undefined)} label={t("addTestTemplate")} panelClassName="w-full max-w-sm p-5">
+          <form onSubmit={(event) => { event.preventDefault(); if (templateName.trim()) createTestTemplate.mutate({ name: templateName.trim(), parentId: templateParentId }); }}>
             <h2 className="font-semibold">{t("addTestTemplate")}</h2>
             <p className="mt-1 text-sm text-mutedForeground">{t("testTemplateHelp")}</p>
             <label className="mt-4 block text-sm">{t("testName")}<input autoFocus className="mt-1 w-full rounded-lg border border-border bg-editorBackground px-3 py-2" value={templateName} onChange={(event) => setTemplateName(event.target.value)} /></label>
             <div className="mt-5 flex justify-end gap-2"><button type="button" className="rounded-lg px-3 py-2 text-sm hover:bg-muted" onClick={() => setTemplateParentId(undefined)}>{t("cancel")}</button><button disabled={!templateName.trim() || createTestTemplate.isPending} className="rounded-lg bg-primary px-3 py-2 text-sm text-primaryForeground disabled:opacity-50">{t("create")}</button></div>
           </form>
-        </div>
+        </ModalSurface>
       )}
       {addColumnAt && <AddColumnDialog onClose={() => setAddColumnAt(null)} onSubmit={(input) => addColumn.mutate(input)} />}
     </div>
@@ -1487,10 +1496,8 @@ function DeleteRowDialog({
   onDelete: (strategy: "delete_subtree" | "promote_children") => void;
 }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose);
   return (
-    <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-      <div role="dialog" aria-modal="true" aria-labelledby="delete-row-title" className="w-full max-w-md rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl">
+    <ModalSurface onClose={onClose} labelledBy="delete-row-title" panelClassName="w-full max-w-md p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id="delete-row-title" className="font-semibold">{t("deleteHeadingTitle")}</h2>
@@ -1516,8 +1523,7 @@ function DeleteRowDialog({
           <button data-testid="delete-subtree" disabled={pending} className="rounded-lg bg-destructive px-3 py-2 text-left text-sm text-white disabled:opacity-50" onClick={() => onDelete("delete_subtree")}>{t(hasChildren ? "deleteWithAllContent" : "deleteAction")}</button>
           <button disabled={pending} className="rounded-lg px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button>
         </div>
-      </div>
-    </div>
+    </ModalSurface>
   );
 }
 
@@ -1537,15 +1543,10 @@ function NumberingDialog({
   onSave: () => void;
 }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose);
   const valid = Number.isInteger(Number(value)) && Number(value) > 0;
   return (
-    <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+    <ModalSurface onClose={onClose} labelledBy="numbering-title" panelClassName="w-full max-w-sm p-5">
       <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="numbering-title"
-        className="w-full max-w-sm rounded-xl border border-border bg-surfaceElevated p-5 shadow-2xl"
         onSubmit={(event) => { event.preventDefault(); if (valid) onSave(); }}
       >
         <h2 id="numbering-title" className="font-semibold">{t("setNumbering")}</h2>
@@ -1560,7 +1561,7 @@ function NumberingDialog({
           <button disabled={!valid || pending} className="rounded-lg bg-primary px-3 py-2 text-sm text-primaryForeground disabled:opacity-50">{t("apply")}</button>
         </div>
       </form>
-    </div>
+    </ModalSurface>
   );
 }
 

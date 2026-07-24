@@ -3,7 +3,7 @@ import { Command, FileText, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
-import { useEscapeClose } from "../hooks/useEscapeClose";
+import { ModalSurface } from "./TransientSurface";
 
 export interface PaletteCommand {
   id: string;
@@ -32,7 +32,6 @@ export function CommandPalette({ workspaceId, commands, onClose, onSelectResult 
   onSelectResult: (result: SearchResult) => void;
 }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const commandOnly = query.trimStart().startsWith(">");
@@ -60,8 +59,7 @@ export function CommandPalette({ workspaceId, commands, onClose, onSelectResult 
       }
     }
   };
-  return <div className="fixed inset-0 z-[210] flex justify-center bg-black/35 px-4 pt-[8vh] backdrop-blur-sm" onMouseDown={onClose}>
-    <div data-testid="command-palette" role="dialog" aria-modal="true" aria-label={t("commandPalette")} className="flex max-h-[72vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-surfaceElevated shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+  return <ModalSurface onClose={onClose} label={t("commandPalette")} testId="command-palette" align="top" panelClassName="flex max-h-[72vh] w-full max-w-3xl flex-col">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
         <Command size={18} className="text-primary" />
         <input
@@ -120,6 +118,5 @@ export function CommandPalette({ workspaceId, commands, onClose, onSelectResult 
         {items.length === 0 && !results.isFetching && <div className="p-8 text-center text-sm text-mutedForeground">{t("noCommandsFound")}</div>}
       </div>
       <div className="flex flex-wrap gap-3 border-t border-border px-4 py-2 text-[10px] text-mutedForeground"><span>{t("paletteNavigateHelp")}</span><span>{t("paletteCommandOnlyHelp")}</span></div>
-    </div>
-  </div>;
+  </ModalSurface>;
 }

@@ -4,11 +4,11 @@ import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, UserProfile } from "../lib/api";
 import { useToastStore } from "../stores/toasts";
-import { useEscapeClose } from "../hooks/useEscapeClose";
+import { ModalSurface } from "./TransientSurface";
+import { userFacingError } from "../lib/userFacingError";
 
 export function ProfileDialog({ userId, currentUserId, allowEdit = true, onClose }: { userId: string; currentUserId: string; allowEdit?: boolean; onClose: () => void }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
   const editable = allowEdit && userId === currentUserId;
@@ -29,15 +29,15 @@ export function ProfileDialog({ userId, currentUserId, allowEdit = true, onClose
       void queryClient.invalidateQueries({ queryKey: ["me"] });
       pushToast("success", t("profileSaved"));
     },
-    onError: () => pushToast("error", t("genericError")),
+    onError: (error) => pushToast("error", userFacingError(error, t)),
   });
 
   const update = (key: keyof Omit<UserProfile, "id">, value: string) => setForm((current) => ({ ...current, [key]: value || null }));
   const submit = (event: FormEvent) => { event.preventDefault(); if (editable && form.email && form.displayName) save.mutate(); };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <form role="dialog" aria-modal="true" aria-labelledby="profile-title" className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-2xl border border-border bg-surfaceElevated p-6 shadow-2xl" onSubmit={submit}>
+    <ModalSurface onClose={onClose} labelledBy="profile-title" panelClassName="max-h-[90vh] w-full max-w-lg overflow-auto p-6">
+      <form onSubmit={submit}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-lg font-semibold text-primaryForeground">{form.displayName.charAt(0).toUpperCase() || <UserRound size={20} />}</div>
@@ -59,7 +59,7 @@ export function ProfileDialog({ userId, currentUserId, allowEdit = true, onClose
         )}
         {editable && <><p className="mt-4 text-xs text-mutedForeground">{t("profileVisibilityHelp")}</p><div className="mt-5 flex justify-end gap-2"><button type="button" className="rounded-lg px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button><button disabled={save.isPending || !form.email || !form.displayName} className="rounded-lg bg-primary px-4 py-2 text-sm text-primaryForeground disabled:opacity-50">{t("save")}</button></div></>}
       </form>
-    </div>
+    </ModalSurface>
   );
 }
 

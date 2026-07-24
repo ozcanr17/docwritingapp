@@ -2,6 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useEscapeClose } from "../hooks/useEscapeClose";
+import { transientLayers, useRestoreFocus } from "./TransientSurface";
 
 export interface MenuEntry {
   key: string;
@@ -21,6 +22,7 @@ export function Menu({ label, entries, testId }: { label: string; entries: MenuE
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: 0, top: 0 });
   useEscapeClose(() => setOpen(false), open);
+  useRestoreFocus(open);
 
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
@@ -64,7 +66,7 @@ export function Menu({ label, entries, testId }: { label: string; entries: MenuE
           role="menu"
           data-testid={`${testId ?? "menu"}-popover`}
           style={position}
-          className="fixed z-[190] min-w-56 rounded-xl border border-border bg-surfaceElevated p-1.5 shadow-2xl"
+          className={`fixed ${transientLayers.popover} min-w-56 rounded-xl border border-border bg-surfaceElevated p-1.5 shadow-2xl`}
         >
           <MenuItems entries={entries} onClose={() => setOpen(false)} />
         </div>,
@@ -102,7 +104,7 @@ function MenuItems({ entries, onClose }: { entries: MenuEntry[]; onClose: () => 
         {entry.children && <ChevronRight size={14} className="shrink-0 text-mutedForeground" />}
       </button>
       {entry.children && activeSubmenu === entry.key && (
-        <div role="menu" className="absolute left-full top-0 z-[71] ml-1 min-w-64 rounded-xl border border-border bg-surfaceElevated p-1.5 shadow-2xl">
+        <div role="menu" className={`absolute left-full top-0 ${transientLayers.popover} ml-1 min-w-64 rounded-xl border border-border bg-surfaceElevated p-1.5 shadow-2xl`}>
           <MenuItems entries={entry.children} onClose={onClose} />
         </div>
       )}

@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronDown, ChevronRight, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentType, RowDetail } from "../lib/api";
 import { useEscapeClose } from "../hooks/useEscapeClose";
+import { transientLayers, useRestoreFocus } from "./TransientSurface";
 
 interface NotificationItem {
   id: string;
@@ -41,7 +42,17 @@ export function NotificationCenter() {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("all");
   const [showRoutine, setShowRoutine] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   useEscapeClose(() => setOpen(false), open);
+  useRestoreFocus(open);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [open]);
   const { data = [] } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => api<NotificationItem[]>("/notifications"),
@@ -84,13 +95,13 @@ export function NotificationCenter() {
     setOpen(false);
   };
   return (
-    <div className="relative ml-auto">
+    <div ref={rootRef} className="relative ml-auto">
       <button data-testid="notifications-toggle" className="relative rounded-lg p-1.5 hover:bg-muted" title={t("notifications")} onClick={() => setOpen((current) => !current)}>
         <Bell size={16} />
         {unread > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-destructive px-1 text-center text-[9px] text-white">{unread}</span>}
       </button>
       {open && (
-        <div data-testid="notifications-panel" className="absolute right-0 top-full z-[210] mt-1 w-[25rem] max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-surfaceElevated p-2 shadow-2xl">
+        <div data-testid="notifications-panel" className={`absolute right-0 top-full ${transientLayers.popover} mt-1 w-[25rem] max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-surfaceElevated p-2 shadow-2xl`}>
           <div className="mb-2 grid grid-cols-2 rounded-lg bg-editorBackground p-0.5"><button className={`rounded-md px-2 py-1.5 text-xs ${tab === "notifications" ? "bg-surface shadow-sm" : "text-mutedForeground"}`} onClick={() => setTab("notifications")}>{t("notifications")}{unread > 0 ? ` (${unread})` : ""}</button><button data-testid="my-work-tab" className={`rounded-md px-2 py-1.5 text-xs ${tab === "work" ? "bg-surface shadow-sm" : "text-mutedForeground"}`} onClick={() => setTab("work")}>{t("myWork")}</button></div>
           {tab === "notifications" && <div>{unread > 0 && <div className="mb-1 flex justify-end"><button className="rounded-lg px-2 py-1 text-[10px] text-primary hover:bg-primary/10" disabled={readAll.isPending} onClick={() => readAll.mutate()}>{t("markAllRead")}</button></div>}<div className="max-h-96 overflow-auto">{data.length === 0 ? <div className="px-2 py-4 text-center text-xs text-mutedForeground">{t("noNotifications")}</div> : <>
             <NotificationGroup title={t("notificationActionRequired")} items={groupedNotifications.action} tone="text-warning" onOpen={(item) => { if (!item.readAt) read.mutate(item.id); const rowId = typeof item.payload.rowId === "string" ? item.payload.rowId : null; if (rowId) void openRow(rowId); }} />

@@ -6,9 +6,23 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1, 2 and 3 are complete. Stage 4 (window, menu and feedback system) is next.
+The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 through 4 are complete. Stage 5 (work, defect, test-plan and execution experience) is next.
 
 ### What was completed in the latest task
+
+1. Completed Stage 4 in `docs/UI-UX-DONUSUM-PLANI.md`; Stages 1 through 4 are checked and all later stages remain unchecked.
+2. Added `TransientSurface.tsx` as the shared transient UI foundation. Modal layers now render through a body portal with one centrally defined layer scale, backdrop behavior, top-layer Escape handling, focus trapping, initial focus and focus restoration.
+3. Migrated Add Column, profile, recent documents, history, command palette, workspace settings, reports, administration, document access, migration preview, onboarding, pilot feedback/checklist, work-management dialogs, Tree create/move/delete, bulk actions, edit-impact, row deletion, numbering and test-template creation onto the common modal behavior.
+4. Added an in-app `ConfirmDialog` and removed the browser-native administrator user-removal confirmation. Layer stacking was live-tested: Escape closes only the nested confirmation, leaves the administrator panel open and then returns focus to the Management launcher when the parent closes.
+5. Standardized context-menu keyboard navigation with Arrow Up/Down, Home and End, outside-click dismissal and focus return. Menu, global search, notification and advanced-filter layers now use the centralized popover level; notifications also close on outside click and return focus.
+6. Reworked toast feedback into consistent success/info/warning/error notices with icons, accessible live-region roles, close controls and optional actions. Safe single-row subtree deletion exposes an Undo action; bulk and promote-children deletion report explicit completion counts/results.
+7. Added `userFacingError.ts` to map validation, authentication, permission, missing-resource, conflict, upload-size, rate-limit, offline/network and unknown failures to actionable localized messages without leaking server payloads. Document editing, profile and workspace-setting mutations use it.
+8. Added regression coverage for modal Escape/backdrop/focus trap/focus restoration, context-menu keyboard behavior, actionable toasts and safe error mapping. The complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **112 web + 71 API + 13 worker = 196/196 tests**, production build and bundle budget; initial gzip is **127.0 KiB**.
+9. Live macOS browser validation against the user's running `localhost:5173` service confirmed the latest sources are served. The administrator modal renders above the shell, the nested in-app removal confirmation closes independently with Escape, the parent remains open, and closing it returns focus to the Management button.
+10. The reason the earlier work looked subtle in the user's browser was verified: the dev server and current `main` were correct, there is no service-worker cache, but Stages 1–3 were primarily incremental shell/editor behavior and many changes only appear under split view, narrow width, selection/editing, density/frozen-column preferences or the empty detail state. Stage 4 introduces directly visible shared dialog and feedback behavior.
+11. Desktop code and packages remain intentionally unchanged, per the user's instruction for this transformation.
+
+### What was completed in UI/UX Stage 3
 
 1. Completed Stage 3 in `docs/UI-UX-DONUSUM-PLANI.md`; Stages 1, 2 and 3 are checked and all later stages remain unchecked.
 2. Made primary selection, secondary multi-selection and active editing visually distinct. Grid rows now expose explicit accessible selection and machine-testable row-state attributes; the active editor has a stronger inset accent and cell focus ring without hiding baseline/change indicators.
@@ -80,14 +94,14 @@ The active task is the user-approved **eight-stage professional UI/UX transforma
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stages 1, 2 and 3 are complete and Stage 4 is ready to start. The in-app browser cannot reach the host's `localhost`, so live browser verification uses the Mac LAN address with session-only `VITE_API_URL`, `VITE_COLLAB_URL`, `APP_BASE_URL` and CORS values. This is a test-harness networking constraint, not a product change. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. UI/UX Stages 1 through 4 are complete and Stage 5 is ready to start. The current in-app browser can reach the user's host `localhost:5173`; do not stop or replace the user's correctly running dev services without a concrete need. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
-1. Implement Stage 4 from `docs/UI-UX-DONUSUM-PLANI.md`: inventory modal, popover, context-menu, selector and toast surfaces, then move them onto a small shared interaction standard.
-2. Centralize portal/layer ordering and eliminate any remaining surface that can open behind sticky document chrome.
-3. Verify Escape, outside-click and focus-return behavior for every transient surface without allowing several layers to close from one key press.
-4. Standardize destructive, move and bulk-operation confirmation outcomes; add a clear undo opportunity only where replay is actually safe.
+1. Implement Stage 5 from `docs/UI-UX-DONUSUM-PLANI.md`: reorganize Work and tests into a Jira-grade but document-aware information architecture.
+2. Simplify transitions among defects, tasks, test plans, test sets, executions and evidence while retaining requirement/document context.
+3. Unify saved views and filters across work list, board and detail surfaces.
+4. Add one readable requirement-test-execution-defect flow and role-relevant author/test/review landing metrics.
 5. Standardize actionable API and validation errors without leaking server internals or replacing precise conflict/permission explanations with generic failures.
 6. Add regression tests and run wide, narrow, details-panel and split-view live walkthroughs before checking Stage 4.
 7. Preserve the Jira-grade planning backlog, but do not mix unrelated capability expansion into the UI/UX stages unless it is required to eliminate a broken or undiscoverable user path.

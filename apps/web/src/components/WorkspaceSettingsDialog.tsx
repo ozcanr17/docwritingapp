@@ -9,12 +9,12 @@ import { useThemeStore } from "../stores/theme";
 import { DocumentFontFamily, documentFontFamilies, useAuthoringPreferencesStore } from "../stores/authoringPreferences";
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
 import { RoleGuide } from "./RoleGuide";
-import { useEscapeClose } from "../hooks/useEscapeClose";
 import { pilotTelemetryEnabled, setPilotTelemetryEnabled } from "../lib/pilotTelemetry";
+import { ModalSurface } from "./TransientSurface";
+import { userFacingError } from "../lib/userFacingError";
 
 export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentId, onClose }: { organizationId: string; workspaceId: string; documentId: string | null; onClose: () => void }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose);
   const queryClient = useQueryClient();
   const toast = useToastStore((state) => state.push);
   const themeMode = useThemeStore((state) => state.mode);
@@ -37,12 +37,12 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
   const createConfiguration = useMutation({
     mutationFn: () => api(`/workspaces/${workspaceId}/configurations`, { method: "POST", body: JSON.stringify({ name, kind, rules: {} }) }),
     onSuccess: () => { setName(""); void queryClient.invalidateQueries({ queryKey: ["configurations", workspaceId] }); },
-    onError: () => toast("error", t("genericError")),
+    onError: (error) => toast("error", userFacingError(error, t)),
   });
   const createIntegration = useMutation({
     mutationFn: () => api(`/organizations/${organizationId}/integrations`, { method: "POST", body: JSON.stringify({ name: name || "Webhook", integrationType: "webhook", configuration: { url: integrationUrl }, enabled: true }) }),
     onSuccess: () => { setName(""); setIntegrationUrl(""); void queryClient.invalidateQueries({ queryKey: ["integrations", organizationId] }); },
-    onError: () => toast("error", t("genericError")),
+    onError: (error) => toast("error", userFacingError(error, t)),
   });
   const configureSso = useMutation({
     mutationFn: () => {
@@ -50,7 +50,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
       return api(`/organizations/${organizationId}/sso`, { method: "POST", body: JSON.stringify({ issuer, clientId, authorizationEndpoint: `${base}/authorize`, tokenEndpoint: `${base}/token`, scopes: ["openid", "profile", "email"], enabled: true }) });
     },
     onSuccess: () => toast("success", t("ssoSaved")),
-    onError: () => toast("error", t("genericError")),
+    onError: (error) => toast("error", userFacingError(error, t)),
   });
   const updateDocument = useMutation({
     mutationFn: () => api<DocumentSummary>(`/documents/${documentId}`, { method: "PATCH", body: JSON.stringify({ expectedVersion: document.data?.version, requirementPrefix: requirementPrefix.toUpperCase() }) }),
@@ -59,12 +59,11 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
       void queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] });
       toast("success", t("documentSettingsSaved"));
     },
-    onError: () => toast("error", t("genericError")),
+    onError: (error) => toast("error", userFacingError(error, t)),
   });
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div data-testid="workspace-settings-dialog" className="flex max-h-[82vh] w-[46rem] flex-col rounded-2xl border border-border bg-surfaceElevated p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{t("workspaceSettings")}</h2><button data-testid="close-workspace-settings" aria-label={t("close")} onClick={onClose}><X size={17} /></button></div>
+    <ModalSurface onClose={onClose} labelledBy="workspace-settings-title" testId="workspace-settings-dialog" panelClassName="flex max-h-[82vh] w-[46rem] max-w-full flex-col p-5">
+        <div className="mb-4 flex items-center justify-between"><h2 id="workspace-settings-title" className="font-semibold">{t("workspaceSettings")}</h2><button data-testid="close-workspace-settings" aria-label={t("close")} onClick={onClose}><X size={17} /></button></div>
         <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-muted p-1">
           {document.data?.documentType === "requirement" && <Tab active={tab === "document"} onClick={() => setTab("document")} icon={<FileCog size={14} />} label={t("documentSettings")} />}
           <Tab active={tab === "authoring"} onClick={() => setTab("authoring")} icon={<SlidersHorizontal size={14} />} label={t("authoringSettings")} />
@@ -126,8 +125,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
         </div>}
         {tab === "sso" && <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); configureSso.mutate(); }}><p className="text-sm text-mutedForeground">{t("ssoHint")}</p><input type="url" className="w-full rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder="https://identity.example.com" value={issuer} onChange={(event) => setIssuer(event.target.value)} /><input className="w-full rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder={t("clientId")} value={clientId} onChange={(event) => setClientId(event.target.value)} /><button className="rounded-lg bg-primary px-3 py-2 text-primaryForeground" disabled={!issuer || !clientId}>{t("save")}</button></form>}
         </div>
-      </div>
-    </div>
+    </ModalSurface>
   );
 }
 

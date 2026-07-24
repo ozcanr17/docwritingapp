@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GridColumn } from "../lib/columns";
 import { OperationImpactSummary } from "./OperationImpactSummary";
-import { useEscapeClose } from "../hooks/useEscapeClose";
+import { ModalSurface } from "./TransientSurface";
 
 export interface BulkActionInput {
   action: "edit" | "move" | "copy" | "link";
@@ -27,7 +27,6 @@ export function BulkActionsDialog({
   onSubmit: (input: BulkActionInput) => void;
 }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose);
   const [action, setAction] = useState<BulkActionInput["action"]>("edit");
   const [field, setField] = useState("description");
   const [value, setValue] = useState("");
@@ -37,8 +36,8 @@ export function BulkActionsDialog({
     onSubmit({ action, field, value, targetId: targetId.trim() || undefined });
   };
   return (
-    <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-      <form data-testid="bulk-actions-dialog" className="w-full max-w-md rounded-2xl border border-border bg-surfaceElevated p-5 shadow-2xl" onSubmit={submit}>
+    <ModalSurface onClose={onClose} label={t("bulkActions")} testId="bulk-actions-dialog" panelClassName="w-full max-w-md p-5">
+      <form onSubmit={submit}>
         <h2 className="font-semibold">{t("bulkActions")}</h2>
         <p className="mt-1 text-sm text-mutedForeground">{t("selectedRows", { count })}</p>
         <label className="mt-4 block text-sm">
@@ -88,6 +87,6 @@ export function BulkActionsDialog({
           <button data-testid="bulk-action-submit" className="rounded-lg bg-primary px-3 py-2 text-sm text-primaryForeground">{t("apply")}</button>
         </div>
       </form>
-    </div>
+    </ModalSurface>
   );
 }

@@ -5,11 +5,10 @@ import { useTranslation } from "react-i18next";
 import { api, ApiError, DocumentHistoryEntry, RowDetail, RowHistoryEntry } from "../lib/api";
 import { useToastStore } from "../stores/toasts";
 import { RowHistoryPanel } from "./RowHistoryPanel";
-import { useEscapeClose } from "../hooks/useEscapeClose";
+import { ModalSurface } from "./TransientSurface";
 
 export function HistoryDialog({ documentId, rowId, mode, onClose, onOpenRow }: { documentId: string; rowId: string | null; mode: "row" | "document"; onClose: () => void; onOpenRow: (rowId: string) => void }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
   const [query, setQuery] = useState("");
@@ -33,8 +32,7 @@ export function HistoryDialog({ documentId, rowId, mode, onClose, onOpenRow }: {
   });
 
   return (
-    <div data-testid="history-dialog" className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/55 p-5" role="dialog" aria-modal="true" aria-label={t(mode === "row" ? "selectedRowHistory" : "documentHistory")}>
-      <div className="flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
+    <ModalSurface onClose={onClose} label={t(mode === "row" ? "selectedRowHistory" : "documentHistory")} testId="history-dialog" panelClassName="flex max-h-[86vh] w-full max-w-5xl flex-col">
         <header className="flex items-center justify-between border-b border-border px-5 py-3"><div className="flex items-center gap-2 font-semibold"><History size={17} />{t(mode === "row" ? "selectedRowHistory" : "documentHistory")}</div><button aria-label={t("closePanel")} className="rounded-lg p-1.5 text-mutedForeground hover:bg-muted" onClick={onClose}><X size={17} /></button></header>
         <div className="min-h-0 flex-1 overflow-auto p-5">
           {mode === "row" && (row.isLoading || rowHistory.isLoading) && <div className="text-sm text-mutedForeground">{t("loading")}</div>}
@@ -48,7 +46,6 @@ export function HistoryDialog({ documentId, rowId, mode, onClose, onOpenRow }: {
             <ol className="space-y-2">{visibleDocumentHistory.map((entry) => <li key={entry.id} className="flex items-start gap-3 rounded-xl border border-border bg-editorBackground p-3"><span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-medium">{t(`historyAction.${entry.action}`, { defaultValue: entry.action })}</span><span className="text-xs text-mutedForeground">{new Date(entry.createdAt).toLocaleString()}</span></div><div className="mt-1 text-xs text-mutedForeground">{entry.actor?.displayName ?? t("systemUser")}{entry.row ? ` · ID ${entry.row.objectNumber}` : ""}</div>{entry.row && <button className="mt-1 max-w-full truncate text-left text-xs text-primary hover:underline" onClick={() => onOpenRow(entry.row?.id ?? entry.entityId)}>{entry.row.title || t("untitled")}</button>}</div></li>)}</ol>
           </div>}
         </div>
-      </div>
-    </div>
+    </ModalSurface>
   );
 }

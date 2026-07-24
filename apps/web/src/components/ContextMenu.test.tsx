@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ContextMenu } from "./ContextMenu";
@@ -42,5 +42,24 @@ describe("ContextMenu", () => {
     render(<ContextMenu x={20} y={700} onClose={vi.fn()} items={[{ key: "one", label: "One", onSelect: vi.fn() }]} />);
     expect(screen.getByTestId("context-menu")).toHaveStyle({ top: "500px" });
     bounds.mockRestore();
+  });
+
+  it("supports menu keyboard navigation and restores the previous focus", async () => {
+    const onClose = vi.fn();
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const view = render(<ContextMenu x={0} y={0} onClose={onClose} items={[
+      { key: "one", label: "One", onSelect: vi.fn() },
+      { key: "two", label: "Two", onSelect: vi.fn() },
+    ]} />);
+    const first = screen.getByRole("menuitem", { name: "One" });
+    const second = screen.getByRole("menuitem", { name: "Two" });
+    await vi.waitFor(() => expect(first).toHaveFocus());
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(second).toHaveFocus();
+    view.unmount();
+    expect(trigger).toHaveFocus();
+    trigger.remove();
   });
 });

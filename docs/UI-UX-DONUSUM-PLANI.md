@@ -41,11 +41,11 @@ Bu belge, DocSys'in profesyonel ve kurumsal bir urun arayuzune donusumunu izleme
 
 ## Asama 4 - Pencere, menu ve geri bildirim sistemi
 
-- [ ] Modal, popover, baglam menusu, secici ve toast katmanlarini ortak bilesen standardina tasimak.
-- [ ] Tum gecici yuzeyleri Escape, disariya tiklama ve mantikli odak iadesiyle kapatmak.
-- [ ] Katman sirasi ve portal kullanimini merkezilestirerek arkada acilan pencere sorunlarini bitirmek.
-- [ ] Silme, tasima ve toplu islemlerde acik sonuc ve geri alma firsati sunmak.
-- [ ] Hata mesajlarini teknik ama kullaniciya yol gosteren bir dille standartlastirmak.
+- [x] Modal, popover, baglam menusu, secici ve toast katmanlarini ortak bilesen standardina tasimak.
+- [x] Tum gecici yuzeyleri Escape, disariya tiklama ve mantikli odak iadesiyle kapatmak.
+- [x] Katman sirasi ve portal kullanimini merkezilestirerek arkada acilan pencere sorunlarini bitirmek.
+- [x] Silme, tasima ve toplu islemlerde acik sonuc ve geri alma firsati sunmak.
+- [x] Hata mesajlarini teknik ama kullaniciya yol gosteren bir dille standartlastirmak.
 
 ## Asama 5 - Is, hata, test plani ve kosum deneyimi
 

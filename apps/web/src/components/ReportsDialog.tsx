@@ -5,12 +5,12 @@ import { useTranslation } from "react-i18next";
 import { api, ImpactAnalysis, ReleaseReadinessReport, RetestPackage } from "../lib/api";
 import { storedLanguage } from "../lib/i18n";
 import { useToastStore } from "../stores/toasts";
-import { useEscapeClose } from "../hooks/useEscapeClose";
 import { useSelectionStore } from "../stores/selection";
 import { TraceabilityGraph, TraceMatrixRow } from "./TraceabilityGraph";
 import { ReleaseReadinessPanel } from "./ReleaseReadinessPanel";
 import { BaselineDiffData, BaselineDiffView } from "./BaselineDiffView";
 import { OperationImpactSummary } from "./OperationImpactSummary";
+import { ModalSurface } from "./TransientSurface";
 
 interface ReportsDialogProps {
   documentId: string;
@@ -91,7 +91,6 @@ async function pollReportExport(jobId: string): Promise<{ ready: boolean; status
 
 export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) {
   const { t } = useTranslation();
-  useEscapeClose(onClose);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
   const openDetail = useSelectionStore((s) => s.openDetail);
@@ -258,12 +257,12 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
   });
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div
-        data-testid="reports-dialog"
-        className={`max-h-[84vh] overflow-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl ${tab === "matrix" ? "w-[64rem] max-w-[calc(100vw-2rem)]" : tab === "readiness" ? "w-[58rem] max-w-[calc(100vw-2rem)]" : "w-[36rem] max-w-[calc(100vw-2rem)]"}`}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalSurface
+      onClose={onClose}
+      label={tab === "readiness" ? t("releaseReadiness") : tab === "baselines" ? t("baselines") : tab === "coverage" ? t("coverageReport") : tab === "matrix" ? t("traceabilityMatrix") : tab === "runs" ? t("testRuns") : t("reviews")}
+      testId="reports-dialog"
+      panelClassName={`max-h-[84vh] overflow-auto bg-surface p-5 ${tab === "matrix" ? "w-[64rem] max-w-[calc(100vw-2rem)]" : tab === "readiness" ? "w-[58rem] max-w-[calc(100vw-2rem)]" : "w-[36rem] max-w-[calc(100vw-2rem)]"}`}
+    >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold">
             {tab === "readiness" ? t("releaseReadiness") : tab === "baselines" ? t("baselines") : tab === "coverage" ? t("coverageReport") : tab === "matrix" ? t("traceabilityMatrix") : tab === "runs" ? t("testRuns") : t("reviews")}
@@ -543,8 +542,7 @@ export function ReportsDialog({ documentId, tab, onClose }: ReportsDialogProps) 
             ))}
           </div>
         )}
-      </div>
-    </div>
+    </ModalSurface>
   );
 }
 

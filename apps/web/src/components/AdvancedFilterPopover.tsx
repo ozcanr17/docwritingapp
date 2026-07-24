@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { AdvancedFilterConfig, FilterCondition, FilterOperator } from "../lib/advancedFilters";
 import { GridColumn } from "../lib/columns";
 import { useEscapeClose } from "../hooks/useEscapeClose";
+import { transientLayers } from "./TransientSurface";
 
 export function AdvancedFilterPopover({ config, columns, onChange, onClose }: { config: AdvancedFilterConfig; columns: GridColumn[]; onChange: (config: AdvancedFilterConfig) => void; onClose: () => void }) {
   const { t } = useTranslation();
@@ -16,7 +17,7 @@ export function AdvancedFilterPopover({ config, columns, onChange, onClose }: { 
     conditions: [...config.conditions, { id: crypto.randomUUID(), field: "all", operator: "contains", value: "" }],
   });
   return (
-    <div data-testid="advanced-filter-popover" className="absolute right-3 top-full z-40 mt-1 max-h-[min(42rem,calc(100vh-8rem))] w-[48rem] max-w-[calc(100vw-2rem)] overflow-auto rounded-2xl border border-border bg-surfaceElevated p-4 shadow-2xl">
+    <div data-testid="advanced-filter-popover" className={`absolute right-3 top-full ${transientLayers.popover} mt-1 max-h-[min(42rem,calc(100vh-8rem))] w-[48rem] max-w-[calc(100vw-2rem)] overflow-auto rounded-2xl border border-border bg-surfaceElevated p-4 shadow-2xl`}>
       <div className="flex items-start justify-between gap-4">
         <div><h2 className="font-semibold">{t("advancedFilters")}</h2><p className="mt-0.5 text-xs text-mutedForeground">{t("advancedFiltersHelp")}</p></div>
         <button aria-label={t("close")} className="rounded-lg p-1.5 hover:bg-muted" onClick={onClose}><X size={15} /></button>

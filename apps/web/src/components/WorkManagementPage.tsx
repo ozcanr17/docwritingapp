@@ -41,6 +41,7 @@ import {
   WorkflowRequiredField,
   WorkUser,
 } from "../lib/api";
+import { ModalSurface } from "./TransientSurface";
 
 interface Project {
   id: string;
@@ -910,21 +911,13 @@ function DialogFrame({
   children: React.ReactNode;
   wide?: boolean;
 }) {
-  useEffect(() => {
-    const listener = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
-  }, [onClose]);
   return (
-    <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/50 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        data-testid="dialog-frame"
-        className={`max-h-[90vh] w-full overflow-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl ${wide ? "max-w-5xl" : "max-w-lg"}`}
-      >
+    <ModalSurface
+      onClose={onClose}
+      label={title}
+      testId="dialog-frame"
+      panelClassName={`max-h-[90vh] w-full overflow-auto bg-surface p-5 ${wide ? "max-w-5xl" : "max-w-lg"}`}
+    >
         <header className="flex items-center justify-between">
           <h2 className="text-base font-semibold">{title}</h2>
           <button
@@ -937,8 +930,7 @@ function DialogFrame({
           </button>
         </header>
         {children}
-      </div>
-    </div>
+    </ModalSurface>
   );
 }
 

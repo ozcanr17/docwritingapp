@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CustomFieldType } from "../lib/api";
-import { useEscapeClose } from "../hooks/useEscapeClose";
+import { ModalSurface } from "./TransientSurface";
 
 const FIELD_TYPES: CustomFieldType[] = [
   "text",
@@ -25,7 +25,6 @@ export function AddColumnDialog({
   onSubmit: (input: { displayName: string; fieldType: CustomFieldType; allowedValues: string[] }) => void;
 }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose);
   const [displayName, setDisplayName] = useState("");
   const [fieldType, setFieldType] = useState<CustomFieldType>("text");
   const [options, setOptions] = useState("");
@@ -42,14 +41,12 @@ export function AddColumnDialog({
     });
   };
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+    <ModalSurface onClose={onClose} labelledBy="add-column-title" testId="add-column-dialog" panelClassName="w-full max-w-md p-5">
       <form
-        data-testid="add-column-dialog"
-        className="w-full max-w-md rounded-2xl border border-border bg-surfaceElevated p-5 shadow-2xl"
         onSubmit={submit}
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">{t("addColumn")}</h2>
+          <h2 id="add-column-title" className="font-semibold">{t("addColumn")}</h2>
           <button type="button" aria-label={t("close")} className="rounded-lg p-1.5 hover:bg-muted" onClick={onClose}>
             <X size={16} />
           </button>
@@ -101,6 +98,6 @@ export function AddColumnDialog({
           </button>
         </div>
       </form>
-    </div>
+    </ModalSurface>
   );
 }

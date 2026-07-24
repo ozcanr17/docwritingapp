@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowRight, Link2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { OutlineRow } from "../lib/api";
-import { useEscapeClose } from "../hooks/useEscapeClose";
+import { ModalSurface } from "./TransientSurface";
 
 export function EditImpactDialog({ row, fieldLabel, beforeValue, afterValue, pending, onCancel, onConfirm }: {
   row: OutlineRow;
@@ -13,9 +13,7 @@ export function EditImpactDialog({ row, fieldLabel, beforeValue, afterValue, pen
   onConfirm: () => void;
 }) {
   const { t } = useTranslation();
-  useEscapeClose(onCancel);
-  return <div className="absolute inset-0 z-[205] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-    <div data-testid="edit-impact-dialog" role="dialog" aria-modal="true" aria-labelledby="edit-impact-title" className="w-full max-w-xl rounded-2xl border border-border bg-surfaceElevated p-5 shadow-2xl">
+  return <ModalSurface onClose={onCancel} labelledBy="edit-impact-title" testId="edit-impact-dialog" panelClassName="w-full max-w-xl p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3"><span className="rounded-xl bg-warning/10 p-2 text-warning"><AlertTriangle size={18} /></span><div><h2 id="edit-impact-title" className="font-semibold">{t("editImpactTitle")}</h2><p className="mt-1 text-sm text-mutedForeground">{t("editImpactHelp", { count: row.linkCount })}</p></div></div>
         <button type="button" aria-label={t("close")} className="rounded-lg p-1.5 hover:bg-muted" onClick={onCancel}><X size={16} /></button>
@@ -32,6 +30,5 @@ export function EditImpactDialog({ row, fieldLabel, beforeValue, afterValue, pen
       </div>
       <div className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning">{t("editImpactWarning")}</div>
       <div className="mt-5 flex justify-end gap-2"><button type="button" disabled={pending} className="rounded-lg px-3 py-2 text-sm hover:bg-muted" onClick={onCancel}>{t("cancel")}</button><button type="button" data-testid="confirm-impact-edit" disabled={pending} className="rounded-lg bg-primary px-3 py-2 text-sm text-primaryForeground disabled:opacity-50" onClick={onConfirm}>{t("saveAndMarkSuspect")}</button></div>
-    </div>
-  </div>;
+  </ModalSurface>;
 }

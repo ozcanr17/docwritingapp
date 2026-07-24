@@ -2,15 +2,14 @@ import { useMutation } from "@tanstack/react-query";
 import { MessageSquareWarning, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useEscapeClose } from "../hooks/useEscapeClose";
 import { api } from "../lib/api";
 import { pilotTelemetryEnabled, recordPilotEvent, setPilotTelemetryEnabled } from "../lib/pilotTelemetry";
+import { ModalSurface } from "./TransientSurface";
 
 type FeedbackCategory = "bug" | "usability" | "data_migration" | "performance" | "feature_request";
 
 export function PilotFeedbackDialog({ organizationId, documentId, onClose }: { organizationId: string; documentId: string | null; onClose: () => void }) {
   const { t } = useTranslation();
-  useEscapeClose(onClose, true);
   const [category, setCategory] = useState<FeedbackCategory>("bug");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -20,8 +19,8 @@ export function PilotFeedbackDialog({ organizationId, documentId, onClose }: { o
     onSuccess: onClose,
   });
   const onSubmit = (event: FormEvent) => { event.preventDefault(); submit.mutate(); };
-  return <div className="fixed inset-0 z-[240] flex items-center justify-center bg-black/55 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="pilot-feedback-title">
-    <form data-testid="pilot-feedback-dialog" className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-surfaceElevated shadow-2xl" onSubmit={onSubmit}>
+  return <ModalSurface onClose={onClose} labelledBy="pilot-feedback-title" testId="pilot-feedback-dialog" panelClassName="w-full max-w-xl">
+    <form onSubmit={onSubmit}>
       <header className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><span className="rounded-xl bg-primary/10 p-2 text-primary"><MessageSquareWarning size={19} /></span><div><h2 id="pilot-feedback-title" className="font-semibold">{t("pilotFeedback")}</h2><p className="text-xs text-mutedForeground">{t("pilotFeedbackHelp")}</p></div></div><button type="button" aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></header>
       <div className="space-y-4 p-5">
         <label className="block text-sm"><span className="font-medium">{t("feedbackCategoryLabel")}</span><select data-testid="feedback-category" className="mt-1 w-full rounded-lg border border-border bg-editorBackground px-3 py-2" value={category} onChange={(event) => setCategory(event.target.value as FeedbackCategory)}>{(["bug", "usability", "data_migration", "performance", "feature_request"] as const).map((value) => <option key={value} value={value}>{t(`feedbackCategory.${value}`)}</option>)}</select></label>
@@ -32,5 +31,5 @@ export function PilotFeedbackDialog({ organizationId, documentId, onClose }: { o
       </div>
       <footer className="flex justify-end gap-2 border-t border-border px-5 py-4"><button type="button" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button><button data-testid="submit-pilot-feedback" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primaryForeground disabled:opacity-40" disabled={title.trim().length < 3 || description.trim().length < 10 || submit.isPending}>{t("sendFeedback")}</button></footer>
     </form>
-  </div>;
+  </ModalSurface>;
 }

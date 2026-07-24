@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
 import { useEscapeClose } from "../hooks/useEscapeClose";
+import { transientLayers } from "./TransientSurface";
 
 interface SearchResult {
   id: string;
@@ -66,7 +67,7 @@ export function GlobalSearchDialog({ workspaceId, query, onClose, onSelect }: Gl
       ref={panelRef}
       data-testid="global-search-results"
       style={bounds ?? { visibility: "hidden" }}
-      className="fixed z-[190] max-h-[min(32rem,70vh)] overflow-auto rounded-b-xl border border-t-0 border-border bg-surfaceElevated p-2 shadow-2xl"
+      className={`fixed ${transientLayers.popover} max-h-[min(32rem,70vh)] overflow-auto rounded-b-xl border border-t-0 border-border bg-surfaceElevated p-2 shadow-2xl`}
     >
       {results.isFetching && <div className="p-5 text-center text-sm text-mutedForeground">{t("loading")}</div>}
       {!results.isFetching && results.data?.map((result) => (

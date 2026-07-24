@@ -6,7 +6,7 @@ import { api, DocumentSummary, FolderSummary } from "../lib/api";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import { DocumentTab, useDocumentTabsStore } from "../stores/documentTabs";
 import { useToastStore } from "../stores/toasts";
-import { useEscapeClose } from "../hooks/useEscapeClose";
+import { ConfirmDialog, ModalSurface } from "./TransientSurface";
 
 interface TreePanelProps {
   workspaceId: string;
@@ -61,11 +61,6 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [draggedNode, setDraggedNode] = useState<DraggedNode | null>(null);
   const [dropTarget, setDropTarget] = useState<string | "root" | null>(null);
-  useEscapeClose(() => {
-    if (deleteState) setDeleteState(null);
-    else if (moveState) setMoveState(null);
-    else if (createState) setCreateState(null);
-  }, Boolean(createState || moveState || deleteState));
   const pushToast = useToastStore((state) => state.push);
   const favoriteDocuments = useDocumentTabsStore((state) => state.favoriteDocuments);
   const toggleFavorite = useDocumentTabsStore((state) => state.toggleFavorite);
@@ -307,8 +302,12 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
       {draggedNode && <div className="pointer-events-none sticky bottom-2 mx-2 rounded-lg border border-primary/30 bg-surfaceElevated/95 px-3 py-2 text-xs shadow-lg">{t("dragMoveHint", { name: draggedNode.label })}</div>}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu)} onClose={() => setMenu(null)} />}
       {createState && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
-          <form className="w-full max-w-md rounded border border-border bg-surfaceElevated p-4 shadow-lg" onSubmit={createNode}>
+        <ModalSurface
+          onClose={() => setCreateState(null)}
+          label={createState.kind === "folder" ? t("newFolder") : createState.kind === "textDocument" ? t("newTextDocument") : createState.kind === "testDocument" ? t("newTestDocument") : t("newRequirementDocument")}
+          panelClassName="w-full max-w-md p-4"
+        >
+          <form onSubmit={createNode}>
             <h2 className="mb-3 text-sm font-semibold">
               {createState.kind === "folder"
                 ? t("newFolder")
@@ -347,11 +346,11 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
               </button>
             </div>
           </form>
-        </div>
+        </ModalSurface>
       )}
       {moveState && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
-          <form className="w-full max-w-md rounded-xl border border-border bg-surfaceElevated p-4 shadow-xl" onSubmit={moveNode}>
+        <ModalSurface onClose={() => setMoveState(null)} label={t("moveToFolder")} panelClassName="w-full max-w-md p-4">
+          <form onSubmit={moveNode}>
             <h2 className="mb-3 text-sm font-semibold">{t("moveToFolder")}</h2>
             <label className="block text-xs text-mutedForeground">
               {t("folder")}
@@ -367,19 +366,18 @@ export function TreePanel({ workspaceId, selectedDocumentId, onSelectDocument }:
               <button type="submit" className="rounded bg-primary px-3 py-1.5 text-sm text-primaryForeground">{t("moveAction")}</button>
             </div>
           </form>
-        </div>
+        </ModalSurface>
       )}
       {deleteState && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" role="alertdialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-xl border border-border bg-surfaceElevated p-4 shadow-xl">
-            <h2 className="text-sm font-semibold">{deleteState.kind === "folder" ? t("deleteFolderTitle") : t("deleteDocumentTitle")}</h2>
-            <p className="mt-2 text-sm text-mutedForeground">{deleteState.kind === "folder" ? t("deleteFolderMessage") : t("deleteDocumentMessage")}</p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className="rounded px-3 py-1.5 text-sm hover:bg-muted" onClick={() => setDeleteState(null)}>{t("cancel")}</button>
-              <button type="button" className="rounded bg-danger px-3 py-1.5 text-sm text-white" onClick={() => void confirmDelete()}>{t("deleteAction")}</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={deleteState.kind === "folder" ? t("deleteFolderTitle") : t("deleteDocumentTitle")}
+          description={deleteState.kind === "folder" ? t("deleteFolderMessage") : t("deleteDocumentMessage")}
+          confirmLabel={t("deleteAction")}
+          cancelLabel={t("cancel")}
+          destructive
+          onClose={() => setDeleteState(null)}
+          onConfirm={() => void confirmDelete()}
+        />
       )}
     </div>
   );

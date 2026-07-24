@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useEscapeClose } from "../hooks/useEscapeClose";
+import { transientLayers, useRestoreFocus } from "./TransientSurface";
 
 export interface MenuItem {
   key: string;
@@ -20,6 +21,7 @@ interface ContextMenuProps {
 
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   useEscapeClose(onClose);
+  useRestoreFocus();
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: x, top: y });
 
@@ -52,7 +54,25 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       data-testid="context-menu"
       role="menu"
       style={position}
-      className="fixed z-[150] max-h-[calc(100vh-1rem)] min-w-48 overflow-y-auto rounded-xl border border-border bg-surfaceElevated py-1.5 shadow-2xl"
+      className={`fixed ${transientLayers.popover} max-h-[calc(100vh-1rem)] min-w-48 overflow-y-auto rounded-xl border border-border bg-surfaceElevated py-1.5 shadow-2xl`}
+      onKeyDown={(event) => {
+        const buttons = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']:not(:disabled)") ?? []);
+        if (buttons.length === 0) return;
+        const index = Math.max(0, buttons.indexOf(document.activeElement as HTMLButtonElement));
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          buttons[(index + 1) % buttons.length]?.focus();
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          buttons[(index - 1 + buttons.length) % buttons.length]?.focus();
+        } else if (event.key === "Home") {
+          event.preventDefault();
+          buttons[0]?.focus();
+        } else if (event.key === "End") {
+          event.preventDefault();
+          buttons.at(-1)?.focus();
+        }
+      }}
     >
       {items.map((item) => (
         <button
