@@ -2,6 +2,21 @@ name: performance-budgets
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "apps/web/src/lib/**"
+      - "packages/database/**"
+      - "tests/performance/**"
+      - ".github/workflows/performance.yml"
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "apps/web/src/lib/**"
+      - "packages/database/**"
+      - "tests/performance/**"
+      - ".github/workflows/performance.yml"
   schedule:
     - cron: "20 2 * * 1"
 

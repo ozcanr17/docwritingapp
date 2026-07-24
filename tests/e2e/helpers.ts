@@ -1,5 +1,25 @@
 import { Page } from "@playwright/test";
 
+export async function registerWorkspace(
+  page: Page,
+  prefix: string,
+  displayName: string,
+) {
+  const suffix = Date.now();
+  await page.goto("/login");
+  await page.getByTestId("auth-toggle").click();
+  await page.getByTestId("auth-display-name").fill(displayName);
+  await page
+    .getByTestId("auth-email")
+    .fill(`${prefix}-${suffix}@example.com`);
+  await page.getByTestId("auth-password").fill("password-123");
+  await page.getByTestId("auth-submit").click();
+  await page.getByTestId("bootstrap-org-name").fill(`${prefix} Organization`);
+  await page.getByTestId("bootstrap-workspace-name").fill("Main Workspace");
+  await page.getByTestId("bootstrap-submit").click();
+  await dismissOnboarding(page);
+}
+
 export async function createTreeNode(page: Page, menuTestId: string, name: string) {
   await page.getByTestId("tree-section").click({ button: "right" });
   await page.getByTestId(menuTestId).click();

@@ -9,6 +9,7 @@ const jwtSecret = process.env.JWT_SECRET ?? "test-secret-at-least-16-chars";
 const rowCount = Number(process.env.LARGE_DOC_ROWS ?? 10000);
 const iterations = Number(process.env.LARGE_DOC_ITERATIONS ?? 5);
 const maxP95Ms = Number(process.env.LARGE_DOC_MAX_P95_MS ?? 2500);
+const maxSearchP95Ms = Number(process.env.LARGE_DOC_SEARCH_MAX_P95_MS ?? 1500);
 const resultPath = process.env.PERF_RESULT_PATH ?? "large-document-results.json";
 
 process.env.DATABASE_URL = databaseUrl;
@@ -31,6 +32,7 @@ async function insertRows(documentId, organizationId) {
           id,
           organizationId,
           documentId,
+          objectNumber: index + 1,
           rank: `i${index.toString(36).padStart(8, "0")}z`,
           rowType: index % 12 === 0 ? "heading" : "requirement",
           title: index % 12 === 0 ? `Section ${index}` : `Requirement ${index}`,
@@ -67,6 +69,7 @@ async function main() {
     const seedMs = performance.now() - seedStartedAt;
     const token = jwt.sign({ sub: user.id, email: user.email }, jwtSecret, { expiresIn: "15m" });
     const samples = [];
+    const searchSamples = [];
     let responseBytes = 0;
 
     for (let iteration = 0; iteration <= iterations; iteration += 1) {
@@ -80,6 +83,21 @@ async function main() {
       if (iteration > 0) samples.push(performance.now() - startedAt);
     }
 
+    for (let iteration = 0; iteration <= iterations; iteration += 1) {
+      const startedAt = performance.now();
+      const response = await fetch(
+        `${apiUrl}/workspaces/${workspace.id}/search?q=${encodeURIComponent("REQ-0009999")}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) {
+        throw new Error(`workspace search failed with ${response.status}`);
+      }
+      await response.arrayBuffer();
+      if (iteration > 0) {
+        searchSamples.push(performance.now() - startedAt);
+      }
+    }
+
     const result = {
       rowCount,
       iterations,
@@ -90,10 +108,13 @@ async function main() {
       p95Ms: Number(percentile(samples, 95).toFixed(1)),
       maxMs: Number(Math.max(...samples).toFixed(1)),
       budgetMs: maxP95Ms,
+      searchP95Ms: Number(percentile(searchSamples, 95).toFixed(1)),
+      searchBudgetMs: maxSearchP95Ms,
     };
     await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
     globalThis.console.log(JSON.stringify(result, null, 2));
     if (result.p95Ms > maxP95Ms) throw new Error(`p95 ${result.p95Ms} ms exceeds ${maxP95Ms} ms budget`);
+    if (result.searchP95Ms > maxSearchP95Ms) throw new Error(`search p95 ${result.searchP95Ms} ms exceeds ${maxSearchP95Ms} ms budget`);
   } finally {
     await prisma.requirementDetail.deleteMany({ where: { row: { documentId: document.id } } });
     await prisma.documentRow.deleteMany({ where: { documentId: document.id } });

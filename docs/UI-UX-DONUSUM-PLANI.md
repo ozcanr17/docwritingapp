@@ -73,11 +73,11 @@ Bu belge, DocSys'in profesyonel ve kurumsal bir urun arayuzune donusumunu izleme
 
 ## Asama 8 - Dogrulama ve surekli kalite
 
-- [ ] Temel yazar, testci, inceleyici ve yonetici akislari icin E2E testleri olusturmak.
-- [ ] Genis, dar, detay panelli ve split view ekran goruntusu regresyonlarini eklemek.
-- [ ] Buyuk dokumanlarda kaydirma, arama, filtreleme ve duzenleme benchmarklarini korumak.
-- [ ] Her asamada TypeScript, birim testleri, erisilebilirlik ve uretim derlemesini calistirmak.
-- [ ] Tamamlanan her asamayi `HANDOFF.md` ve bu kontrol listesinde kaydetmek.
+- [x] Temel yazar, testci, inceleyici ve yonetici akislari icin E2E testleri olusturmak.
+- [x] Genis, dar, detay panelli ve split view ekran goruntusu regresyonlarini eklemek.
+- [x] Buyuk dokumanlarda kaydirma, arama, filtreleme ve duzenleme benchmarklarini korumak.
+- [x] Her asamada TypeScript, birim testleri, erisilebilirlik ve uretim derlemesini calistirmak.
+- [x] Tamamlanan her asamayi `HANDOFF.md` ve bu kontrol listesinde kaydetmek.
 
 ## Asama tamamlanma olcutu
 

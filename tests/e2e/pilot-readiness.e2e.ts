@@ -32,5 +32,6 @@ test("pilot guide, consent and administrator feedback inbox work end to end", as
   await expect(page.getByTestId("pilot-feedback-dialog")).toBeHidden();
 
   await page.getByTestId("nav-admin").click();
-  await expect(page.getByText("First project flow")).toBeVisible();
+  await page.getByTestId("admin-tab-feedback").click();
+  await expect(page.locator('[data-testid^="pilot-feedback-item-"]')).toHaveCount(1);
 });

@@ -6,7 +6,19 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 through 7 are complete. Stage 8 (continuous visual, workflow and performance verification) is next.
+The user-approved **eight-stage professional UI/UX transformation is complete**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; all items are checked. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. The next product task should be chosen from the Jira-grade planning backlog or pilot feedback rather than extending the completed transformation without evidence.
+
+### What was completed in UI/UX Stage 8
+
+1. Added a stable role-workspace browser journey covering Author, Tester and Reviewer task entry points plus administrator Overview, Users/Roles and Audit navigation. Interactive role and administrator tabs now expose durable test identifiers instead of relying on localized visible text.
+2. Added platform-independent Playwright screenshot baselines for the wide workspace, responsive detail overlay, horizontal split view and narrow stacked split view. Animations/caret are disabled, dynamic profile content is masked and the regression budget is limited to two percent.
+3. Extended WCAG automation and the complete browser suite to 11 serialized end-to-end journeys. The full clean-stack run passes **11/11**, including registration/bootstrap, desktop login, import/export, rich-text persistence, traceability, split view, role workspaces, pilot feedback and visual regression.
+4. Added a 10,000-row client interaction budget covering advanced filtering, quick type classification, immutable row update and virtual-window derivation. The focused test completes in about 15 ms locally against a 750 ms CI budget.
+5. Repaired the server benchmark after discovering that its seed no longer populated the required `objectNumber` field. The benchmark now measures both document outline and workspace search, cleans its temporary tenant and emits both budgets in the JSON artifact.
+6. The verified local 10,000-row result is: 755 ms seed, 5.91 MiB response, 409 ms outline p95 against 2500 ms and 98.7 ms search p95 against 1500 ms.
+7. Performance CI now runs for relevant main-branch and pull-request changes in addition to the weekly schedule. Browser CI automatically runs all visual, accessibility and workflow scenarios.
+8. The complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **124 web + 71 API + 13 worker = 208/208 tests**, production build and bundle budget; initial gzip is **129.6 KiB**.
+9. `docs/PERFORMANCE-ACCESSIBILITY.md` documents the new budgets, screenshot update discipline and continuous workflow. Desktop code and packages remain intentionally unchanged.
 
 ### What was completed in UI/UX Stage 7
 
@@ -136,16 +148,14 @@ The active task is the user-approved **eight-stage professional UI/UX transforma
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stages 1 through 7 are complete and Stage 8 is ready to start. The current in-app browser can reach the user's host `localhost:5173`; do not stop or replace the user's correctly running dev services without a concrete need. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. UI/UX Stages 1 through 8 are complete. The current macOS development stack was restarted once to clear the intentional registration rate limit and is running the latest sources at `localhost:5173`. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
-1. Implement Stage 8 from `docs/UI-UX-DONUSUM-PLANI.md`: complete browser-level author, tester, reviewer and administrator workflow coverage.
-2. Add stable wide, narrow, detail-overlay and horizontal/vertical split screenshot baselines with an intentional review/update workflow.
-3. Re-run and document the 10,000-row authoring benchmark for scroll, search, filtering and inline editing; establish regression thresholds suitable for CI.
-4. Make typecheck, unit/integration tests, WCAG automation, production build and selected visual checks one continuously enforced quality gate.
-5. Complete a final macOS browser walkthrough across light/dark, 100%/125%, high contrast, reduced motion, keyboard-only navigation and responsive breakpoints before checking Stage 8.
-6. Preserve the Jira-grade planning backlog, but do not mix unrelated capability expansion into the UI/UX stages unless it is required to eliminate a broken or undiscoverable user path.
+1. Review real pilot feedback and choose the next coherent product increment; do not reopen the completed UI/UX checklist for unrelated capability work.
+2. Highest-value Jira-grade candidates remain project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, shared saved queries, bulk planning operations, watchers, automation and external synchronization.
+3. Keep each increment end-to-end: server authority, discoverable UI, permission states, audit, bilingual labels, tests, documentation and production validation.
+4. Monitor the first Linux visual-regression CI run after intentional snapshot changes. If font rendering exceeds the two-percent budget, inspect the diff artifact before adjusting the threshold; never update references merely to make CI green.
 
 ### Pitfalls encountered in the latest task
 
@@ -161,6 +171,9 @@ There is **no active code blocker**. UI/UX Stages 1 through 7 are complete and S
 - Do not persist responsive fallback state as a user preference. Compact Explorer, overlay details and stacked split view are derived from viewport width; the user's wide-screen configuration must return unchanged.
 - Keep panel separators as real keyboard-operable ARIA separators. Pointer-only resizing is not acceptable, and Home/End must continue to honor the configured minimum and maximum.
 - Playwright may be installed without its browser binaries after dependency updates. If an accessibility run fails before launching with a missing executable, run `pnpm --filter @docsys/e2e exec playwright install chromium`; do not misdiagnose it as an application regression.
+- Full local E2E runs create several users and therefore share the development API's intentional registration rate limit. Repeated partial/full runs can exhaust the 20-per-15-minute allowance even when the suite is correct. Restart the local dev stack for one clean full run; never weaken the production/development authentication limit to accommodate test repetition.
+- Screenshot references deliberately omit the operating-system suffix so the same reviewed layout is enforced on macOS and Linux. Mask dynamic profile identity and wait for delayed responsive/detail state before capturing. Keep the two-percent difference budget unless a reviewed cross-platform artifact demonstrates a genuine rendering-only need.
+- The 10,000-row benchmark must seed every current required `DocumentRow` field. It previously stopped before measurement because `objectNumber` was missing; when the schema changes, run the benchmark locally rather than trusting the scheduled workflow definition.
 - The in-app browser test surface cannot access the Mac host through its own `localhost`. For live visual checks, run Vite on `--host` and use the Mac LAN address for the browser plus session-only API/collaboration/CORS environment values. Do not commit a private LAN address or replace production defaults.
 - A prerequisite API is not a complete product feature. Project creation existed on the server but had no ordinary-user entry point; Work and tests therefore presented a dead-end empty state. Every future prerequisite must include discovery, creation/selection, permission feedback, loading/error states and a direct recovery path.
 - Work and tests previously selected the first project for workflow/test plans while listing work items across the whole workspace. Always drive every project-scoped query from the same explicit active-project identifier.

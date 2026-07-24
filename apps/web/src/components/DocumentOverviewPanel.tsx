@@ -19,7 +19,7 @@ export function DocumentOverviewPanel({ documentId, onClose }: { documentId: str
   return <div data-testid="document-overview-panel" className="flex min-h-0 flex-1 flex-col">
     <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
       <div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-wider text-mutedForeground">{t("documentOverview")}</div><h2 className="mt-1 truncate font-semibold">{document.data?.title ?? t("loading")}</h2></div>
-      <button type="button" className="rounded-md p-1.5 text-mutedForeground hover:bg-muted hover:text-foreground" aria-label={t("closeDetailsPanel")} onClick={onClose}><X size={16} /></button>
+      <button type="button" data-testid="close-document-overview" className="rounded-md p-1.5 text-mutedForeground hover:bg-muted hover:text-foreground" aria-label={t("closeDetailsPanel")} onClick={onClose}><X size={16} /></button>
     </header>
     <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
       <p className="text-sm leading-6 text-mutedForeground">{t("documentOverviewHelp")}</p>
