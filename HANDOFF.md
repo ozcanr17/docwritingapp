@@ -6,7 +6,19 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The user-approved **eight-stage professional UI/UX transformation is complete**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; all items are checked. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. The next product task should be chosen from the Jira-grade planning backlog or pilot feedback rather than extending the completed transformation without evidence.
+The user-approved **eight-stage professional UI/UX transformation is complete**. The first post-transformation Jira-grade product increment, project lifecycle and member administration, is also complete and pushed to `main`. The living UI/UX scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; all items are checked. Desktop packaging remains intentionally out of scope until the user changes that direction. The next coherent product increment should continue from the remaining workflow/governance backlog or real pilot evidence.
+
+### What was completed in the project lifecycle increment
+
+1. Added server-authoritative project update, archive, restore, management-access and project-member APIs. Project names/descriptions can change while the issued work-key prefix remains immutable.
+2. Project archive is a reversible soft delete. Work items, workflow and test plans remain preserved; archived projects are excluded from normal selectors and can be restored from Project Settings.
+3. Project membership uses the existing project-scoped role model rather than a duplicate authorization system. Active organization members can be assigned Project Manager, Editor, Reviewer or Viewer roles, changed later or removed.
+4. Every project update, archive, restore, member assignment/change and member removal is written to the audit log in the same database transaction as the authoritative mutation.
+5. Added a bilingual Project Settings surface with General, Members and Archived Projects sections. It supports rename/description editing, stable-key guidance, member/role management, destructive archive confirmation and restoration.
+6. The Project Settings launcher is permission-aware. Workflow editing is also disabled when the current project cannot be managed; the server remains authoritative for every operation.
+7. Added API coverage for scoped member management, delegated project-manager updates, archive/list/restore behavior, revoked authority and all five audit event categories. Added component coverage for project editing and member assignment.
+8. Added a real Playwright journey that creates, renames, archives and restores a project through the Turkish UI. The focused journey passes.
+9. The complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **126 web + 72 API + 13 worker = 211/211 tests**, production build and bundle budget; initial gzip is **130.3 KiB**.
 
 ### What was completed in UI/UX Stage 8
 
@@ -148,17 +160,22 @@ The user-approved **eight-stage professional UI/UX transformation is complete**.
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stages 1 through 8 are complete. The current macOS development stack was restarted once to clear the intentional registration rate limit and is running the latest sources at `localhost:5173`. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. UI/UX Stages 1 through 8 and project rename/archive/member administration are complete. Transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
 1. Review real pilot feedback and choose the next coherent product increment; do not reopen the completed UI/UX checklist for unrelated capability work.
-2. Highest-value Jira-grade candidates remain project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, shared saved queries, bulk planning operations, watchers, automation and external synchronization.
+2. The next highest-value Jira-grade candidates are transition permissions plus workflow presets, followed by WIP limits/swimlanes, releases/iterations, shared saved queries, bulk planning operations, watchers, automation and external synchronization.
 3. Keep each increment end-to-end: server authority, discoverable UI, permission states, audit, bilingual labels, tests, documentation and production validation.
 4. Monitor the first Linux visual-regression CI run after intentional snapshot changes. If font rendering exceeds the two-percent budget, inspect the diff artifact before adjusting the threshold; never update references merely to make CI green.
 
 ### Pitfalls encountered in the latest task
 
+- Do not treat `ProjectMember` as a second, independent permission system. It records participation; authority comes from the existing scoped `MemberRole` assignments and `AccessService`.
+- Do not allow project code changes after creation. The code is the stable prefix for issued work-item keys; renaming is limited to the project name and description.
+- Project archive must remain reversible soft deletion. Never cascade-delete work items, workflows, plans or memberships from the user-facing archive action.
+- Project lifecycle mutations and their audit records belong in one database transaction. Do not add an audit event after the mutation in a separate best-effort call.
+- `pnpm verify` enforces ASCII-only TS/TSX, including tests. Localized test selectors must use test IDs or Unicode escapes; visible UI text belongs in locale JSON.
 - Do not render row detail solely from `selectedRowId`. The explicit `detailRowId` is the open/closed gate; the current selection is only the live context while that gate is open. Ignoring the gate makes the close button and Escape appear broken.
 - Do not reintroduce sticky ID or Content columns by default. Natural horizontal scrolling is the Stage 3 contract; freezing is an explicit zero-to-five leading-column preference and is part of saved-view state.
 - Virtual rows must be remeasured after density, font or column-layout changes. Otherwise wrapped content can overlap or leave incorrect gaps even when CSS looks correct in a non-virtualized test.

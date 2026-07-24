@@ -45,18 +45,14 @@ import {
   WorkUser,
 } from "../lib/api";
 import { ModalSurface } from "./TransientSurface";
+import { ManagedProject, ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { useWorkViewsStore, WorkViewTab } from "../stores/workViews";
 import {
   useAuthoringPreferencesStore,
   WorkspaceFocus,
 } from "../stores/authoringPreferences";
 
-interface Project {
-  id: string;
-  name: string;
-  code: string;
-  description: string | null;
-}
+type Project = Omit<ManagedProject, "access"> & { access?: { canManage: boolean } };
 type HubTab = "dashboard" | "items" | "board" | "plans";
 
 const statuses: WorkItemStatus[] = [
@@ -89,6 +85,7 @@ export function WorkManagementPage({
   const [planOpen, setPlanOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
@@ -101,10 +98,19 @@ export function WorkManagementPage({
     queryKey: ["projects", workspaceId],
     queryFn: () => api<Project[]>(`/workspaces/${workspaceId}/projects`),
   });
+  const projectAccess = useQuery({
+    queryKey: ["project-access", workspaceId],
+    queryFn: () => api<{ canManage: boolean }>(`/workspaces/${workspaceId}/project-access`),
+  });
   const activeProjectId =
     projects.data?.some((project) => project.id === selectedProjectId)
       ? selectedProjectId
       : projects.data?.[0]?.id ?? null;
+  const activeProject = projects.data?.find((project) => project.id === activeProjectId) ?? null;
+  const canManageActiveProject = activeProject?.access?.canManage ?? projectAccess.data?.canManage ?? false;
+  const managedActiveProject: ManagedProject | null = activeProject
+    ? { ...activeProject, access: { canManage: canManageActiveProject } }
+    : null;
   useEffect(() => {
     if (activeProjectId && activeProjectId !== selectedProjectId)
       setSelectedProjectId(activeProjectId);
@@ -246,12 +252,23 @@ export function WorkManagementPage({
               <FolderPlus size={15} className="mr-1.5 inline" />
               {t("workHub.newProject")}
             </button>
+            {projectAccess.data?.canManage && (
+              <button
+                type="button"
+                data-testid="open-project-settings"
+                className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
+                onClick={() => setProjectSettingsOpen(true)}
+              >
+                <Settings2 size={15} className="mr-1.5 inline" />
+                {t("workHub.projectSettings")}
+              </button>
+            )}
             <button
               type="button"
               data-testid="open-workflow-editor"
               className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
               onClick={() => setWorkflowOpen(true)}
-              disabled={!workflow.data}
+              disabled={!workflow.data || !canManageActiveProject}
             >
               <Settings2 size={15} className="mr-1.5 inline" />
               {t("workHub.workflow")}
@@ -503,6 +520,28 @@ export function WorkManagementPage({
           workspaceId={workspaceId}
           onCreated={(projectId) => setSelectedProjectId(projectId)}
           onClose={() => setCreateProjectOpen(false)}
+        />
+      )}
+      {projectSettingsOpen && (
+        <ProjectSettingsDialog
+          workspaceId={workspaceId}
+          project={managedActiveProject}
+          onProjectChanged={(project) => {
+            setSelectedProjectId(project.id);
+            queryClient.setQueryData<Project[]>(["projects", workspaceId], (current) => {
+              if (!current) return [project];
+              const exists = current.some((item) => item.id === project.id);
+              return exists
+                ? current.map((item) => item.id === project.id ? project : item)
+                : [...current, project];
+            });
+          }}
+          onProjectArchived={(projectId) => {
+            setSelectedProjectId((current) => current === projectId ? null : current);
+            setSelectedItemId(null);
+            setSelectedPlanId(null);
+          }}
+          onClose={() => setProjectSettingsOpen(false)}
         />
       )}
       {planOpen && activeProjectId && (

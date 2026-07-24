@@ -108,16 +108,225 @@ export class TenancyService {
     }
   }
 
-  async listProjects(actorId: string, workspaceId: string) {
+  async listProjects(actorId: string, workspaceId: string, includeArchived = false) {
     const workspace = await this.requireWorkspace(workspaceId);
     await this.access.assertPermission(actorId, "workspace.read", {
       organizationId: workspace.organizationId,
       workspaceId,
     });
-    return this.prisma.project.findMany({
-      where: { workspaceId, deletedAt: null },
+    if (includeArchived) {
+      await this.access.assertPermission(actorId, "project.manage", {
+        organizationId: workspace.organizationId,
+        workspaceId,
+      });
+    }
+    const projects = await this.prisma.project.findMany({
+      where: { workspaceId, ...(includeArchived ? {} : { deletedAt: null }) },
       orderBy: { createdAt: "asc" },
     });
+    return Promise.all(projects.map(async (project) => ({
+      ...project,
+      access: {
+        canManage: await this.access.hasPermission(actorId, "project.manage", {
+          organizationId: project.organizationId,
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+        }),
+      },
+    })));
+  }
+
+  async projectAccess(actorId: string, workspaceId: string) {
+    const workspace = await this.requireWorkspace(workspaceId);
+    await this.access.assertPermission(actorId, "workspace.read", {
+      organizationId: workspace.organizationId,
+      workspaceId,
+    });
+    return {
+      canManage: await this.access.hasPermission(actorId, "project.manage", {
+        organizationId: workspace.organizationId,
+        workspaceId,
+      }),
+    };
+  }
+
+  async updateProject(actorId: string, projectId: string, input: { name?: string; description?: string | null }) {
+    const project = await this.requireProject(projectId);
+    await this.assertProjectManagement(actorId, project);
+    const nextData = {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.description !== undefined ? { description: input.description || null } : {}),
+    };
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.project.update({ where: { id: projectId }, data: nextData });
+      await this.audit.record(tx, {
+        organizationId: project.organizationId,
+        workspaceId: project.workspaceId,
+        actorId,
+        action: "project.updated",
+        entityType: "project",
+        entityId: projectId,
+        previousData: { name: project.name, description: project.description },
+        nextData,
+      });
+      return { ...updated, access: { canManage: true } };
+    });
+  }
+
+  async archiveProject(actorId: string, projectId: string) {
+    const project = await this.requireProject(projectId);
+    await this.assertProjectManagement(actorId, project);
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.project.update({ where: { id: projectId }, data: { deletedAt: now, deletedById: actorId } });
+      await this.audit.record(tx, {
+        organizationId: project.organizationId,
+        workspaceId: project.workspaceId,
+        actorId,
+        action: "project.archived",
+        entityType: "project",
+        entityId: projectId,
+        previousData: { deletedAt: null },
+        nextData: { deletedAt: now },
+      });
+    });
+    return { ok: true };
+  }
+
+  async restoreProject(actorId: string, projectId: string) {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project || !project.deletedAt) throw new NotFoundException("Archived project not found");
+    await this.requireWorkspace(project.workspaceId);
+    await this.assertProjectManagement(actorId, project);
+    return this.prisma.$transaction(async (tx) => {
+      const restored = await tx.project.update({ where: { id: projectId }, data: { deletedAt: null, deletedById: null } });
+      await this.audit.record(tx, {
+        organizationId: project.organizationId,
+        workspaceId: project.workspaceId,
+        actorId,
+        action: "project.restored",
+        entityType: "project",
+        entityId: projectId,
+        previousData: { deletedAt: project.deletedAt },
+        nextData: { deletedAt: null },
+      });
+      return { ...restored, access: { canManage: true } };
+    });
+  }
+
+  async listProjectMembers(actorId: string, projectId: string) {
+    const project = await this.requireProject(projectId);
+    await this.access.assertPermission(actorId, "project.read", {
+      organizationId: project.organizationId,
+      workspaceId: project.workspaceId,
+      projectId,
+    });
+    const canManage = await this.access.hasPermission(actorId, "project.manage", {
+      organizationId: project.organizationId,
+      workspaceId: project.workspaceId,
+      projectId,
+    });
+    const [members, assignments, availableUsers] = await Promise.all([
+      this.prisma.projectMember.findMany({
+        where: { projectId, deletedAt: null, user: { deletedAt: null, isActive: true } },
+        include: { user: true },
+        orderBy: { user: { displayName: "asc" } },
+      }),
+      this.prisma.memberRole.findMany({
+        where: { projectId, scopeType: "project", deletedAt: null },
+        include: { role: true },
+      }),
+      canManage
+        ? this.prisma.organizationMember.findMany({
+            where: { organizationId: project.organizationId, deletedAt: null, user: { deletedAt: null, isActive: true } },
+            include: { user: true },
+            orderBy: { user: { displayName: "asc" } },
+          })
+        : Promise.resolve([]),
+    ]);
+    return {
+      access: { canManage },
+      members: members.map((member) => ({
+        id: member.userId,
+        displayName: member.user.displayName,
+        email: member.user.email,
+        roleKey: assignments.find((assignment) => assignment.userId === member.userId)?.role.key ?? null,
+      })),
+      availableUsers: availableUsers.map((member) => ({
+        id: member.userId,
+        displayName: member.user.displayName,
+        email: member.user.email,
+      })),
+    };
+  }
+
+  async putProjectMember(actorId: string, projectId: string, userId: string, roleKey: string) {
+    const project = await this.requireProject(projectId);
+    await this.assertProjectManagement(actorId, project);
+    const organizationMember = await this.prisma.organizationMember.findFirst({
+      where: { organizationId: project.organizationId, userId, deletedAt: null, user: { deletedAt: null, isActive: true } },
+    });
+    if (!organizationMember) throw new BadRequestException("User must be an active organization member");
+    await this.prisma.$transaction(async (tx) => {
+      const role = await tx.role.findFirst({ where: { key: roleKey, OR: [{ organizationId: null }, { organizationId: project.organizationId }] } });
+      if (!role) throw new BadRequestException("Unknown role");
+      await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId, userId } },
+        update: { deletedAt: null },
+        create: { projectId, userId },
+      });
+      await tx.memberRole.updateMany({
+        where: { projectId, userId, scopeType: "project", deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+      await tx.memberRole.create({
+        data: {
+          userId,
+          roleId: role.id,
+          organizationId: project.organizationId,
+          workspaceId: project.workspaceId,
+          projectId,
+          scopeType: "project",
+        },
+      });
+      await this.audit.record(tx, {
+        organizationId: project.organizationId,
+        workspaceId: project.workspaceId,
+        actorId,
+        action: "project.member_updated",
+        entityType: "project_member",
+        entityId: userId,
+        nextData: { projectId, roleKey },
+      });
+    });
+    return { ok: true };
+  }
+
+  async removeProjectMember(actorId: string, projectId: string, userId: string) {
+    const project = await this.requireProject(projectId);
+    await this.assertProjectManagement(actorId, project);
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const result = await tx.projectMember.updateMany({
+        where: { projectId, userId, deletedAt: null },
+        data: { deletedAt: now },
+      });
+      if (result.count === 0) throw new NotFoundException("Project member not found");
+      await tx.memberRole.updateMany({
+        where: { projectId, userId, scopeType: "project", deletedAt: null },
+        data: { deletedAt: now },
+      });
+      await this.audit.record(tx, {
+        organizationId: project.organizationId,
+        workspaceId: project.workspaceId,
+        actorId,
+        action: "project.member_removed",
+        entityType: "project_member",
+        entityId: userId,
+        previousData: { projectId },
+      });
+    });
+    return { ok: true };
   }
 
   async addOrganizationMember(actorId: string, organizationId: string, userId: string, roleKey: string) {
@@ -279,6 +488,23 @@ export class TenancyService {
     const workspace = await this.prisma.workspace.findFirst({ where: { id: workspaceId, deletedAt: null } });
     if (!workspace) throw new NotFoundException("Workspace not found");
     return workspace;
+  }
+
+  private async requireProject(projectId: string) {
+    const project = await this.prisma.project.findFirst({ where: { id: projectId, deletedAt: null } });
+    if (!project) throw new NotFoundException("Project not found");
+    return project;
+  }
+
+  private async assertProjectManagement(
+    actorId: string,
+    project: { id: string; organizationId: string; workspaceId: string },
+  ) {
+    await this.access.assertPermission(actorId, "project.manage", {
+      organizationId: project.organizationId,
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+    });
   }
 
   private async assertNotLastAdministrator(organizationId: string, userId: string) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from "@nestjs/common";
 import { z } from "zod";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionUser } from "../auth/auth.types";
@@ -17,6 +17,14 @@ const createProjectSchema = z.object({
   name: z.string().trim().min(1).max(200),
   code: z.string().trim().min(2).max(12).regex(/^[A-Za-z][A-Za-z0-9]*$/),
   description: z.string().trim().max(2000).optional(),
+});
+const updateProjectSchema = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+}).refine((value) => value.name !== undefined || value.description !== undefined);
+const projectMemberSchema = z.object({
+  userId: z.string().uuid(),
+  roleKey: z.enum(["project_manager", "editor", "reviewer", "viewer"]),
 });
 const addMemberSchema = z.object({
   userId: z.string().uuid(),
@@ -131,7 +139,58 @@ export class TenancyController {
   }
 
   @Get("workspaces/:workspaceId/projects")
-  listProjects(@CurrentUser() user: SessionUser, @Param("workspaceId", ParseUUIDPipe) workspaceId: string) {
-    return this.tenancy.listProjects(user.userId, workspaceId);
+  listProjects(
+    @CurrentUser() user: SessionUser,
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+    @Query("includeArchived") includeArchived?: string,
+  ) {
+    return this.tenancy.listProjects(user.userId, workspaceId, includeArchived === "true");
+  }
+
+  @Get("workspaces/:workspaceId/project-access")
+  projectAccess(@CurrentUser() user: SessionUser, @Param("workspaceId", ParseUUIDPipe) workspaceId: string) {
+    return this.tenancy.projectAccess(user.userId, workspaceId);
+  }
+
+  @Patch("projects/:projectId")
+  updateProject(
+    @CurrentUser() user: SessionUser,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
+    @Body(new ZodBodyPipe(updateProjectSchema)) body: z.infer<typeof updateProjectSchema>,
+  ) {
+    return this.tenancy.updateProject(user.userId, projectId, body);
+  }
+
+  @Delete("projects/:projectId")
+  archiveProject(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
+    return this.tenancy.archiveProject(user.userId, projectId);
+  }
+
+  @Post("projects/:projectId/restore")
+  restoreProject(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
+    return this.tenancy.restoreProject(user.userId, projectId);
+  }
+
+  @Get("projects/:projectId/members")
+  listProjectMembers(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
+    return this.tenancy.listProjectMembers(user.userId, projectId);
+  }
+
+  @Put("projects/:projectId/members")
+  putProjectMember(
+    @CurrentUser() user: SessionUser,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
+    @Body(new ZodBodyPipe(projectMemberSchema)) body: z.infer<typeof projectMemberSchema>,
+  ) {
+    return this.tenancy.putProjectMember(user.userId, projectId, body.userId, body.roleKey);
+  }
+
+  @Delete("projects/:projectId/members/:userId")
+  removeProjectMember(
+    @CurrentUser() user: SessionUser,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
+    @Param("userId", ParseUUIDPipe) userId: string,
+  ) {
+    return this.tenancy.removeProjectMember(user.userId, projectId, userId);
   }
 }

@@ -55,6 +55,100 @@ describe("tenancy and isolation", () => {
     expect(managerProject.statusCode).toBe(201);
   });
 
+  it("manages the project lifecycle and project-scoped members", async () => {
+    const owner = await registerActor(app, "project-lifecycle-owner");
+    const member = await registerActor(app, "project-lifecycle-member");
+    const { org, workspace } = await createOrgWorkspaceDocument(app, owner);
+    await app.inject({
+      method: "POST",
+      url: `/organizations/${org.id}/members`,
+      headers: { cookie: owner.cookie },
+      payload: { userId: member.userId, roleKey: "viewer" },
+    });
+    const createdResponse = await app.inject({
+      method: "POST",
+      url: `/workspaces/${workspace.id}/projects`,
+      headers: { cookie: owner.cookie },
+      payload: { name: "Lifecycle project", code: "LIFE", description: "Initial" },
+    });
+    const project = JSON.parse(createdResponse.body) as { id: string };
+    const assigned = await app.inject({
+      method: "PUT",
+      url: `/projects/${project.id}/members`,
+      headers: { cookie: owner.cookie },
+      payload: { userId: member.userId, roleKey: "project_manager" },
+    });
+    expect(assigned.statusCode).toBe(200);
+    const members = await app.inject({
+      method: "GET",
+      url: `/projects/${project.id}/members`,
+      headers: { cookie: member.cookie },
+    });
+    expect(JSON.parse(members.body)).toEqual(expect.objectContaining({
+      access: { canManage: true },
+      members: expect.arrayContaining([
+        expect.objectContaining({ id: member.userId, roleKey: "project_manager" }),
+      ]),
+    }));
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/projects/${project.id}`,
+      headers: { cookie: member.cookie },
+      payload: { name: "Renamed lifecycle project", description: "Updated" },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(JSON.parse(updated.body)).toEqual(expect.objectContaining({
+      name: "Renamed lifecycle project",
+      description: "Updated",
+      access: { canManage: true },
+    }));
+    const archived = await app.inject({
+      method: "DELETE",
+      url: `/projects/${project.id}`,
+      headers: { cookie: member.cookie },
+    });
+    expect(archived.statusCode).toBe(200);
+    const activeProjects = await app.inject({
+      method: "GET",
+      url: `/workspaces/${workspace.id}/projects`,
+      headers: { cookie: owner.cookie },
+    });
+    expect(JSON.parse(activeProjects.body)).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: project.id })]));
+    const archivedProjects = await app.inject({
+      method: "GET",
+      url: `/workspaces/${workspace.id}/projects?includeArchived=true`,
+      headers: { cookie: owner.cookie },
+    });
+    expect(JSON.parse(archivedProjects.body)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: project.id, deletedAt: expect.any(String) }),
+    ]));
+    const restored = await app.inject({
+      method: "POST",
+      url: `/projects/${project.id}/restore`,
+      headers: { cookie: owner.cookie },
+    });
+    expect(restored.statusCode).toBe(201);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/projects/${project.id}/members/${member.userId}`,
+      headers: { cookie: owner.cookie },
+    });
+    expect(removed.statusCode).toBe(200);
+    const deniedUpdate = await app.inject({
+      method: "PATCH",
+      url: `/projects/${project.id}`,
+      headers: { cookie: member.cookie },
+      payload: { name: "Denied" },
+    });
+    expect(deniedUpdate.statusCode).toBe(403);
+    expect(await prisma.auditEvent.findMany({
+      where: {
+        entityId: { in: [project.id, member.userId] },
+        action: { in: ["project.updated", "project.archived", "project.restored", "project.member_updated", "project.member_removed"] },
+      },
+    })).toHaveLength(5);
+  });
+
   it("prevents a non-member from reading another tenant's organization", async () => {
     const owner = await registerActor(app, "tenant-a");
     const outsider = await registerActor(app, "tenant-b");
