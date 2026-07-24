@@ -6,7 +6,19 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The user-approved **eight-stage professional UI/UX transformation is complete**. The first two post-transformation Jira-grade product increments, project lifecycle/member administration and governed workflow transitions/presets, are complete and pushed to `main`. The living UI/UX scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; all items are checked. Desktop packaging remains intentionally out of scope until the user changes that direction. The next coherent product increment should continue from the remaining planning/governance backlog or real pilot evidence.
+The original eight-stage professional UI/UX transformation and the first two post-transformation Jira-grade product increments are complete. Real pilot feedback then showed that some dense task forms still exposed too much at once, so a continuous simplification stage was added to `docs/UI-UX-DONUSUM-PLANI.md`. The work-item creation flow and the shared work-management dialog frame are now corrected and fully verified. Desktop packaging remains intentionally out of scope until the user changes that direction.
+
+### What was completed in the focused form simplification increment
+
+1. Replaced the single vertically unbounded work-item form with three task-focused sections: Essentials, QA Evidence for defects, and People and Links.
+2. Kept the title, section navigation, Cancel and Create actions outside the scroll region. Only the active section scrolls, so creation is always reachable without scrolling to the bottom.
+3. Sized the form with dynamic viewport units and a fixed safety margin. At a verified 1100 x 720 viewport the dialog occupies y=16 through y=704, its footer remains visible at y=642 through y=703, and its content owns the remaining bounded scroll region.
+4. Made two-column field groups collapse to one column on narrow screens and kept the section navigation horizontally scrollable instead of allowing labels to overlap.
+5. Reduced initial cognitive load: structured defect evidence and relationship fields no longer compete with the required Summary field. A contextual QA card directs defect reporters to the evidence section.
+6. Updated the shared work-management `DialogFrame` so headers stay outside the content scroller. Existing project, workflow, plan and detail dialogs inherit the safer bounded layout.
+7. Added bilingual labels and focused component coverage for section visibility, fixed creation actions and the viewport-bound modal contract.
+8. Added Stage 9, Continuous Simplification and Task Ergonomics, to the living UI/UX plan. It deliberately leaves further pilot-driven review items open instead of claiming that every dense workflow is permanently complete.
+9. Live browser verification passed at 1100 x 720, and the complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **128 web + 72 API + 13 worker = 213/213 tests**, production build and bundle budget; initial gzip is **131.6 KiB**.
 
 ### What was completed in the governed workflow increment
 
@@ -173,17 +185,22 @@ The user-approved **eight-stage professional UI/UX transformation is complete**.
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stages 1 through 8, project rename/archive/member administration, transition permissions and workflow presets are complete. WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. UI/UX Stages 1 through 8, project rename/archive/member administration and governed workflow transitions/presets are complete. The focused creation-form simplification is complete. Remaining UX work is intentionally pilot-driven: review test-plan, workflow and work-item detail surfaces against the same progressive-disclosure standard and reduce dashboard density by role. WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
-1. Review real pilot feedback and choose the next coherent product increment; do not reopen the completed UI/UX checklist for unrelated capability work.
-2. The next highest-value Jira-grade candidate is release/iteration planning with WIP limits and swimlanes, followed by shared saved queries, bulk planning operations, watchers, automation and external synchronization.
-3. Keep each increment end-to-end: server authority, discoverable UI, permission states, audit, bilingual labels, tests, documentation and production validation.
-4. Monitor the first Linux visual-regression CI run after intentional snapshot changes. If font rendering exceeds the two-percent budget, inspect the diff artifact before adjusting the threshold; never update references merely to make CI green.
+1. Continue real-pilot simplification with the test-plan creation, workflow editor and work-item detail surfaces; keep each correction grounded in a concrete task instead of applying a cosmetic redesign.
+2. Then reduce dashboard density according to the selected Author, Tester or Reviewer workspace focus.
+3. The next highest-value Jira-grade capability candidate remains release/iteration planning with WIP limits and swimlanes, followed by shared saved queries, bulk planning operations, watchers, automation and external synchronization.
+4. Keep each increment end-to-end: server authority, discoverable UI, permission states, audit, bilingual labels, tests, documentation and production validation.
+5. Monitor the first Linux visual-regression CI run after intentional snapshot changes. If font rendering exceeds the two-percent budget, inspect the diff artifact before adjusting the threshold; never update references merely to make CI green.
 
 ### Pitfalls encountered in the latest task
 
+- A dialog having `max-height` and `overflow: auto` does not make a long task usable. If the header and primary action live inside that scroller, both disappear at the exact moment the user needs orientation and completion. Keep dialog chrome fixed and scroll only the task content.
+- Do not show every optional field merely because the server accepts it. Work-item creation now uses progressive disclosure; keep Essentials focused and add type-specific evidence and relationships in their own sections.
+- Do not use desktop-oriented two-column form grids without a single-column breakpoint. The modal itself can fit while its fields become unreadably narrow.
+- The eight-stage checklist described system coverage, not permanent proof that every task was simple. Real pilot evidence overrides a checked planning box; record follow-up simplification honestly instead of claiming the UI is finished.
 - Transition-role rules narrow `work_item.write`; they must never grant it. Preserve the outer permission check before evaluating workflow roles.
 - Do not enforce workflow roles only in the client. Status selectors and board drag/drop hide unavailable targets for clarity, but `assertWorkflowTransition` is the authority against forged requests.
 - Old workflow JSON has no `transitionRoles`. `effectiveWorkflow` must continue normalizing absent/malformed role maps to unrestricted empty rules instead of rejecting existing projects.

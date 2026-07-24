@@ -21,6 +21,7 @@ import {
   Search,
   Settings2,
   ShieldAlert,
+  SlidersHorizontal,
   Trash2,
   UserRound,
   X,
@@ -1237,9 +1238,9 @@ function DialogFrame({
       onClose={onClose}
       label={title}
       testId="dialog-frame"
-      panelClassName={`max-h-[90vh] w-full overflow-auto bg-surface p-5 ${wide ? "max-w-5xl" : "max-w-lg"}`}
+      panelClassName={`flex max-h-[90vh] w-full flex-col bg-surface ${wide ? "max-w-5xl" : "max-w-lg"}`}
     >
-        <header className="flex items-center justify-between">
+        <header className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
           <h2 className="text-base font-semibold">{title}</h2>
           <button
             type="button"
@@ -1250,7 +1251,7 @@ function DialogFrame({
             <X size={17} />
           </button>
         </header>
-        {children}
+        <div className="min-h-0 overflow-y-auto p-5">{children}</div>
     </ModalSurface>
   );
 }
@@ -1567,6 +1568,7 @@ function CreateItemDialog({
   const [environment, setEnvironment] = useState("");
   const [affectedVersion, setAffectedVersion] = useState("");
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [section, setSection] = useState<"details" | "qa" | "relations">("details");
   const users = useQuery({
     queryKey: ["work-users", workspaceId],
     queryFn: () => api<WorkUser[]>(`/workspaces/${workspaceId}/work-users`),
@@ -1625,129 +1627,322 @@ function CreateItemDialog({
       onClose();
     },
   });
+  const sections = [
+    {
+      id: "details" as const,
+      label: t("workHub.createSections.details"),
+      icon: ClipboardList,
+    },
+    ...(type === "bug"
+      ? [
+          {
+            id: "qa" as const,
+            label: t("workHub.createSections.qa"),
+            icon: Bug,
+          },
+        ]
+      : []),
+    {
+      id: "relations" as const,
+      label: t("workHub.createSections.relations"),
+      icon: Link2,
+    },
+  ];
+
+  useEffect(() => {
+    if (type !== "bug" && section === "qa") setSection("details");
+  }, [section, type]);
+
   return (
-    <DialogFrame title={t("workHub.createItem")} onClose={onClose}>
+    <ModalSurface
+      onClose={onClose}
+      label={t("workHub.createItem")}
+      testId="create-work-item-dialog"
+      panelClassName="flex h-[min(760px,calc(100dvh-2rem))] w-full max-w-3xl flex-col bg-surface"
+    >
       <form
-        className="mt-5 space-y-4"
+        className="flex min-h-0 flex-1 flex-col"
         onSubmit={(event) => {
           event.preventDefault();
           create.mutate();
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={t("workHub.type")}>
-            <select
-              data-testid="work-item-type"
-              value={type}
-              onChange={(event) => setType(event.target.value as WorkItemType)}
-              className="input"
-            >
-              <option value="bug">{t("workHub.types.bug")}</option>
-              <option value="task">{t("workHub.types.task")}</option>
-              <option value="story">{t("workHub.types.story")}</option>
-              <option value="epic">{t("workHub.types.epic")}</option>
-              <option value="risk">{t("workHub.types.risk")}</option>
-            </select>
-          </Field>
-          <Field label={t("workHub.priority")}>
-            <select
-              value={priority}
-              onChange={(event) =>
-                setPriority(event.target.value as WorkItemPriority)
-              }
-              className="input"
-            >
-              {(
-                [
-                  "lowest",
-                  "low",
-                  "medium",
-                  "high",
-                  "highest",
-                  "critical",
-                ] as WorkItemPriority[]
-              ).map((value) => (
-                <option key={value} value={value}>
-                  {t(`workHub.priorities.${value}`)}
-                </option>
-              ))}
-            </select>
-          </Field>
+        <header className="flex shrink-0 items-start justify-between border-b border-border px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold">{t("workHub.createItem")}</h2>
+            <p className="mt-1 text-sm text-mutedForeground">
+              {t("workHub.createItemHelp")}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label={t("close")}
+            className="rounded-lg p-1.5 hover:bg-muted"
+            onClick={onClose}
+          >
+            <X size={17} />
+          </button>
+        </header>
+
+        <div
+          role="tablist"
+          aria-label={t("workHub.createSections.label")}
+          className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-4 py-2"
+        >
+          {sections.map((item) => {
+            const Icon = item.icon;
+            const selected = section === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                data-testid={`create-section-${item.id}`}
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  selected
+                    ? "bg-primary/10 text-primary"
+                    : "text-mutedForeground hover:bg-muted hover:text-foreground"
+                }`}
+                onClick={() => setSection(item.id)}
+              >
+                <Icon size={16} />
+                {item.label}
+              </button>
+            );
+          })}
         </div>
-        <Field label={t("workHub.summary")}>
-          <input
-            autoFocus
-            required
-            data-testid="work-item-summary"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            className="input"
-          />
-        </Field>
-        <Field label={t("workHub.descriptionLabel")}>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            className="input min-h-28 resize-y"
-          />
-        </Field>
-        {type === "bug" && (
-          <section className="space-y-3 rounded-xl border border-danger/25 bg-danger/5 p-4">
-            <div>
-              <h3 className="text-sm font-semibold text-danger">{t("workHub.qaDetails")}</h3>
-              <p className="mt-1 text-xs text-mutedForeground">{t("workHub.qaDetailsHelp")}</p>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {section === "details" && (
+            <div
+              role="tabpanel"
+              className="mx-auto max-w-2xl space-y-4"
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t("workHub.type")}>
+                  <select
+                    data-testid="work-item-type"
+                    value={type}
+                    onChange={(event) =>
+                      setType(event.target.value as WorkItemType)
+                    }
+                    className="input"
+                  >
+                    <option value="bug">{t("workHub.types.bug")}</option>
+                    <option value="task">{t("workHub.types.task")}</option>
+                    <option value="story">{t("workHub.types.story")}</option>
+                    <option value="epic">{t("workHub.types.epic")}</option>
+                    <option value="risk">{t("workHub.types.risk")}</option>
+                  </select>
+                </Field>
+                <Field label={t("workHub.priority")}>
+                  <select
+                    value={priority}
+                    onChange={(event) =>
+                      setPriority(event.target.value as WorkItemPriority)
+                    }
+                    className="input"
+                  >
+                    {(
+                      [
+                        "lowest",
+                        "low",
+                        "medium",
+                        "high",
+                        "highest",
+                        "critical",
+                      ] as WorkItemPriority[]
+                    ).map((value) => (
+                      <option key={value} value={value}>
+                        {t(`workHub.priorities.${value}`)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <Field label={t("workHub.summary")}>
+                <input
+                  autoFocus
+                  required
+                  data-testid="work-item-summary"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  className="input"
+                />
+              </Field>
+              <Field label={t("workHub.descriptionLabel")}>
+                <textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  className="input min-h-32 resize-y"
+                />
+              </Field>
+              {type === "bug" && (
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl border border-border bg-editorBackground p-4 text-left hover:border-primary/40 hover:bg-muted"
+                  onClick={() => setSection("qa")}
+                >
+                  <span>
+                    <span className="block text-sm font-semibold">
+                      {t("workHub.qaDetails")}
+                    </span>
+                    <span className="mt-1 block text-xs text-mutedForeground">
+                      {t("workHub.qaDetailsSummary")}
+                    </span>
+                  </span>
+                  <ArrowRight size={17} className="text-mutedForeground" />
+                </button>
+              )}
             </div>
-            <Field label={t("workHub.stepsToReproduce")}>
-              <textarea data-testid="work-item-steps" value={stepsToReproduce} onChange={(event) => setStepsToReproduce(event.target.value)} className="input min-h-28 resize-y" placeholder={t("workHub.stepsToReproducePlaceholder")} />
-            </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t("workHub.expectedResult")}>
-                <textarea data-testid="work-item-expected" value={expectedResult} onChange={(event) => setExpectedResult(event.target.value)} className="input min-h-24 resize-y" />
+          )}
+
+          {section === "qa" && type === "bug" && (
+            <section
+              role="tabpanel"
+              className="mx-auto max-w-2xl space-y-4"
+            >
+              <div className="rounded-xl border border-danger/25 bg-danger/5 p-4">
+                <h3 className="text-sm font-semibold text-danger">
+                  {t("workHub.qaDetails")}
+                </h3>
+                <p className="mt-1 text-xs leading-5 text-mutedForeground">
+                  {t("workHub.qaDetailsHelp")}
+                </p>
+              </div>
+              <Field label={t("workHub.stepsToReproduce")}>
+                <textarea
+                  data-testid="work-item-steps"
+                  value={stepsToReproduce}
+                  onChange={(event) => setStepsToReproduce(event.target.value)}
+                  className="input min-h-32 resize-y"
+                  placeholder={t("workHub.stepsToReproducePlaceholder")}
+                />
               </Field>
-              <Field label={t("workHub.actualResult")}>
-                <textarea data-testid="work-item-actual" value={actualResult} onChange={(event) => setActualResult(event.target.value)} className="input min-h-24 resize-y" />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t("workHub.expectedResult")}>
+                  <textarea
+                    data-testid="work-item-expected"
+                    value={expectedResult}
+                    onChange={(event) => setExpectedResult(event.target.value)}
+                    className="input min-h-24 resize-y"
+                  />
+                </Field>
+                <Field label={t("workHub.actualResult")}>
+                  <textarea
+                    data-testid="work-item-actual"
+                    value={actualResult}
+                    onChange={(event) => setActualResult(event.target.value)}
+                    className="input min-h-24 resize-y"
+                  />
+                </Field>
+                <Field label={t("workHub.testEnvironment")}>
+                  <input
+                    data-testid="work-item-environment"
+                    value={environment}
+                    onChange={(event) => setEnvironment(event.target.value)}
+                    className="input"
+                    placeholder={t("workHub.testEnvironmentPlaceholder")}
+                  />
+                </Field>
+                <Field label={t("workHub.affectedVersion")}>
+                  <input
+                    data-testid="work-item-version"
+                    value={affectedVersion}
+                    onChange={(event) => setAffectedVersion(event.target.value)}
+                    className="input"
+                    placeholder={t("workHub.affectedVersionPlaceholder")}
+                  />
+                </Field>
+              </div>
+            </section>
+          )}
+
+          {section === "relations" && (
+            <div role="tabpanel" className="mx-auto max-w-2xl space-y-4">
+              <div className="flex items-start gap-3 rounded-xl border border-border bg-editorBackground p-4">
+                <SlidersHorizontal
+                  size={18}
+                  className="mt-0.5 shrink-0 text-primary"
+                />
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    {t("workHub.createSections.relations")}
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-mutedForeground">
+                    {t("workHub.relationsHelp")}
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t("workHub.reporter")}>
+                  <select
+                    data-testid="work-item-reporter"
+                    value={reporterId}
+                    onChange={(event) => setReporterId(event.target.value)}
+                    className="input"
+                  >
+                    <option value="">{t("workHub.currentUser")}</option>
+                    {(users.data ?? []).map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label={t("workHub.assignee")}>
+                  <select
+                    value={assigneeId}
+                    onChange={(event) => setAssigneeId(event.target.value)}
+                    className="input"
+                  >
+                    <option value="">{t("workHub.unassigned")}</option>
+                    {(users.data ?? []).map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <Field label={t("workHub.labels")}>
+                <input
+                  data-testid="work-item-labels"
+                  value={labels}
+                  onChange={(event) => setLabels(event.target.value)}
+                  className="input"
+                  placeholder={t("workHub.labelsHelp")}
+                />
               </Field>
-              <Field label={t("workHub.testEnvironment")}>
-                <input data-testid="work-item-environment" value={environment} onChange={(event) => setEnvironment(event.target.value)} className="input" placeholder={t("workHub.testEnvironmentPlaceholder")} />
-              </Field>
-              <Field label={t("workHub.affectedVersion")}>
-                <input data-testid="work-item-version" value={affectedVersion} onChange={(event) => setAffectedVersion(event.target.value)} className="input" placeholder={t("workHub.affectedVersionPlaceholder")} />
-              </Field>
+              <DocumentPicker
+                documents={documents.data ?? []}
+                selectedIds={selectedDocumentIds}
+                onChange={setSelectedDocumentIds}
+              />
+              {(contextRowId || contextDocumentId) && (
+                <label className="flex items-center gap-2 rounded-lg border border-border bg-editorBackground p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={linkContext}
+                    onChange={(event) => setLinkContext(event.target.checked)}
+                  />
+                  {contextRowId
+                    ? t("workHub.linkSelectedRow")
+                    : t("workHub.linkCurrentDocument")}
+                </label>
+              )}
             </div>
-          </section>
-        )}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t("workHub.reporter")}>
-            <select data-testid="work-item-reporter" value={reporterId} onChange={(event) => setReporterId(event.target.value)} className="input">
-              <option value="">{t("workHub.currentUser")}</option>
-              {(users.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.displayName}</option>)}
-            </select>
-          </Field>
-          <Field label={t("workHub.assignee")}>
-            <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="input">
-              <option value="">{t("workHub.unassigned")}</option>
-              {(users.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.displayName}</option>)}
-            </select>
-          </Field>
+          )}
         </div>
-        <Field label={t("workHub.labels")}>
-          <input data-testid="work-item-labels" value={labels} onChange={(event) => setLabels(event.target.value)} className="input" placeholder={t("workHub.labelsHelp")} />
-        </Field>
-        <DocumentPicker documents={documents.data ?? []} selectedIds={selectedDocumentIds} onChange={setSelectedDocumentIds} />
-        {(contextRowId || contextDocumentId) && (
-          <label className="flex items-center gap-2 rounded-lg border border-border bg-editorBackground p-3 text-sm">
-            <input
-              type="checkbox"
-              checked={linkContext}
-              onChange={(event) => setLinkContext(event.target.checked)}
-            />
-            {contextRowId
-              ? t("workHub.linkSelectedRow")
-              : t("workHub.linkCurrentDocument")}
-          </label>
-        )}
-        {create.isError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{t("workHub.createItemError")}</p>}
-        <div className="flex justify-end gap-2">
+
+        <footer className="relative flex shrink-0 items-center justify-between gap-3 border-t border-border bg-surface px-5 py-3">
+          <p className="min-w-0 truncate text-xs text-mutedForeground">
+            {type === "bug"
+              ? t("workHub.createFooterBug")
+              : t("workHub.createFooterItem")}
+          </p>
+          <div className="flex shrink-0 justify-end gap-2">
           <button
             type="button"
             className="rounded-lg px-3 py-2 text-sm hover:bg-muted"
@@ -1763,9 +1958,18 @@ function CreateItemDialog({
           >
             {t("create")}
           </button>
-        </div>
+          </div>
+          {create.isError && (
+            <p
+              role="alert"
+              className="absolute bottom-16 left-5 right-5 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger shadow-lg"
+            >
+              {t("workHub.createItemError")}
+            </p>
+          )}
+        </footer>
       </form>
-    </DialogFrame>
+    </ModalSurface>
   );
 }
 

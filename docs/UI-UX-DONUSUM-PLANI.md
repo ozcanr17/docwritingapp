@@ -79,6 +79,15 @@ Bu belge, DocSys'in profesyonel ve kurumsal bir urun arayuzune donusumunu izleme
 - [x] Her asamada TypeScript, birim testleri, erisilebilirlik ve uretim derlemesini calistirmak.
 - [x] Tamamlanan her asamayi `HANDOFF.md` ve bu kontrol listesinde kaydetmek.
 
+## Asama 9 - Surekli sadelestirme ve gorev ergonomisi
+
+- [x] Is kaydi olusturmayi temel bilgiler, QA kaniti ve atama/baglantilar olarak odakli bolumlere ayirmak.
+- [x] Uzun formlarda baslik ve ana eylemleri sabit, yalnizca icerigi kaydirilabilir hale getirmek.
+- [x] Is kaydi formunu dar ve kisa pencerelerde guvenli bosluklarla ekrana sigdirmak.
+- [x] Ortak is yonetimi pencere cercevesinde basligi kaydirma alanindan ayirmak.
+- [ ] Test plani, is akisi ve kayit ayrintisi yuzeylerini gercek pilot geri bildirimiyle ayni progressive-disclosure standardinda gozden gecirmek.
+- [ ] Dashboard kartlarini role ve sik kullanima gore kisisellestirerek ilk bakistaki bilgi yukunu azaltmak.
+
 ## Asama tamamlanma olcutu
 
 Bir asama ancak ilgili maddeler isaretlendiginde, regresyon testleri gectiginde, Mac uzerinde `pnpm dev` ile gorsel olarak dogrulandiginda ve degisiklikler `main` dalina gonderildiginde tamamlanmis sayilir.

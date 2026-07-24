@@ -133,11 +133,13 @@ describe("WorkManagementPage projects", () => {
     await waitFor(() => expect(openCreateItem).toBeEnabled());
     fireEvent.click(openCreateItem);
     fireEvent.change(screen.getByTestId("work-item-summary"), { target: { value: "Payment confirmation fails" } });
+    fireEvent.click(screen.getByTestId("create-section-qa"));
     fireEvent.change(screen.getByTestId("work-item-steps"), { target: { value: "1. Submit a valid payment" } });
     fireEvent.change(screen.getByTestId("work-item-expected"), { target: { value: "Confirmation is displayed" } });
     fireEvent.change(screen.getByTestId("work-item-actual"), { target: { value: "An error page is displayed" } });
     fireEvent.change(screen.getByTestId("work-item-environment"), { target: { value: "Windows 11 / QA" } });
     fireEvent.change(screen.getByTestId("work-item-version"), { target: { value: "0.1.7" } });
+    fireEvent.click(screen.getByTestId("create-section-relations"));
     expect((await screen.findAllByRole("option", { name: "QA Reporter" })).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByTestId("work-item-reporter"), { target: { value: "reporter" } });
     fireEvent.change(screen.getByTestId("work-item-labels"), { target: { value: "payment, regression" } });
@@ -156,6 +158,64 @@ describe("WorkManagementPage projects", () => {
       affectedVersion: "0.1.7",
       artifacts: [{ documentId: "requirements", role: "affects" }],
     }));
+  });
+
+  it("keeps creation actions available while separating focused sections", async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === "/workspaces/workspace/projects")
+        return [{ id: "project", name: "System", code: "SYS", description: "Core" }];
+      if (path.startsWith("/workspaces/workspace/work-items")) return [];
+      if (path === "/workspaces/workspace/work-users") return [];
+      if (path === "/workspaces/workspace/work-documents") return [];
+      if (path === "/projects/project/test-plans") return [];
+      if (path === "/projects/project/work-dashboard") {
+        return {
+          projectId: "project",
+          myOpenBugs: [],
+          recentItems: [],
+          statusCounts: { backlog: 0, ready: 0, in_progress: 0, in_review: 0, done: 0, canceled: 0 },
+          metrics: { total: 0, open: 0, completed: 0, completionRate: 0, myOpenBugCount: 0, unassigned: 0, criticalOpen: 0, activePlans: 0, requirements: 0, testCases: 0, plannedTests: 0, executions: 0, passedExecutions: 0, failedExecutions: 0, executionPassRate: 0, openDefects: 0, linkedEvidence: 0 },
+        };
+      }
+      if (path === "/projects/project/workflow") {
+        return {
+          projectId: "project",
+          version: 1,
+          customized: false,
+          schemes: Object.fromEntries(["epic", "story", "task", "bug", "risk"].map((type) => [type, {
+            transitions: Object.fromEntries(["backlog", "ready", "in_progress", "in_review", "done", "canceled"].map((status) => [status, []])),
+            requiredFields: Object.fromEntries(["backlog", "ready", "in_progress", "in_review", "done", "canceled"].map((status) => [status, []])),
+          }])),
+        };
+      }
+      return [];
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkManagementPage workspaceId="workspace" />
+      </QueryClientProvider>,
+    );
+
+    const openCreateItem = await screen.findByTestId("open-create-item");
+    await waitFor(() => expect(openCreateItem).toBeEnabled());
+    fireEvent.click(openCreateItem);
+    const dialog = screen.getByTestId("create-work-item-dialog");
+    expect(dialog.className).toContain("100dvh");
+    expect(screen.getByTestId("create-work-item-submit")).toBeVisible();
+    expect(screen.getByTestId("create-section-details")).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByTestId("work-item-steps")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("create-section-qa"));
+    expect(screen.getByTestId("create-section-qa")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("work-item-steps")).toBeVisible();
+    expect(screen.getByTestId("create-work-item-submit")).toBeVisible();
+
+    fireEvent.click(screen.getByTestId("create-section-relations"));
+    expect(screen.getByTestId("work-item-labels")).toBeVisible();
+    expect(screen.queryByTestId("work-item-steps")).not.toBeInTheDocument();
   });
 
   it("saves and reapplies personal work filters", async () => {
