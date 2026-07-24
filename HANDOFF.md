@@ -6,11 +6,25 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 and 2 are complete. Stage 3 (document table and contextual detail panel) is next.
+The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1, 2 and 3 are complete. Stage 4 (window, menu and feedback system) is next.
 
 ### What was completed in the latest task
 
-1. Completed Stage 2 in `docs/UI-UX-DONUSUM-PLANI.md`; Stages 1 and 2 are checked and all later stages remain unchecked.
+1. Completed Stage 3 in `docs/UI-UX-DONUSUM-PLANI.md`; Stages 1, 2 and 3 are checked and all later stages remain unchecked.
+2. Made primary selection, secondary multi-selection and active editing visually distinct. Grid rows now expose explicit accessible selection and machine-testable row-state attributes; the active editor has a stronger inset accent and cell focus ring without hiding baseline/change indicators.
+3. Completed compact, standard and comfortable row-density behavior across virtualized requirement/test grids. Density, document font family, font size and column-layout changes force row remeasurement; long text keeps natural wrapping and content-driven height.
+4. Restored natural horizontal table scrolling as the default. No document column is sticky until the user explicitly chooses a non-zero leading-column count in Authoring settings. The preference is applied immediately, saved-view frozen columns are persisted/applied, and the default is now zero.
+5. Kept stored Description data intact but formalized it as hidden in the initial requirement and test views, avoiding the duplicate Content/Description presentation. Users can still restore the field through column visibility or a saved view.
+6. Strengthened the contextual right panel. When a selected row is opened it follows later row selection; when row detail is closed or the selection is cleared it shows document type, version, restricted-access state, object/headline/link totals, quality score, requirement coverage, quality findings, suspect links and incomplete tests. Coverage uses an accessible progressbar.
+7. Fixed a detail-context regression discovered during live validation: row detail must be gated by both the explicit detail-open state and current selection. This preserves close/Escape behavior while still updating the panel as selection moves.
+8. Added regression coverage for default and optional frozen columns, density and wrapped text, primary/secondary selection, active editing, default hidden columns and the document overview/coverage panel.
+9. Ran a live macOS browser walkthrough with split view, the details panel and the persisted settings surface. Both panes changed density immediately; zero frozen columns produced natural scrolling, one produced exactly one frozen leading column per pane, and closing row detail revealed the document overview.
+10. The complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **107 web + 71 API + 13 worker = 191/191 tests**, and the production build with bundle budgets (**124.4 KiB initial gzip**).
+11. Desktop code and packages were intentionally not changed or rebuilt, per the user's instruction for this transformation.
+
+### What was completed in UI/UX Stage 2
+
+1. Completed Stage 2 in `docs/UI-UX-DONUSUM-PLANI.md`; Stages 1 and 2 were checked and all later stages remained unchecked at that point.
 2. Unified document-tab focus, primary/secondary split participation, pinning and overflow presentation. Tabs retain useful width, auto-reveal the focused document, expose measured left/right scroll buttons only under real overflow, and support Arrow Left/Right, Home and End keyboard navigation.
 3. Added accessible primary/secondary view labels and quiet pane markers to split participants. The focused tab and pane use one primary accent while the non-focused split pane remains fully readable instead of being dimmed.
 4. Removed opacity-based portal switching from the focused document toolbar. Only the focused document toolbar is mounted visibly in the fixed-height header, eliminating the split-focus flicker and keeping the single save-status surface stable.
@@ -66,19 +80,24 @@ The active task is the user-approved **eight-stage professional UI/UX transforma
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stages 1 and 2 are complete and Stage 3 is ready to start. The in-app browser cannot reach the host's `localhost`, so live browser verification used the Mac LAN address with session-only `VITE_API_URL`, `VITE_COLLAB_URL`, `APP_BASE_URL` and CORS values. This is a test-harness networking constraint, not a product change. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. UI/UX Stages 1, 2 and 3 are complete and Stage 4 is ready to start. The in-app browser cannot reach the host's `localhost`, so live browser verification uses the Mac LAN address with session-only `VITE_API_URL`, `VITE_COLLAB_URL`, `APP_BASE_URL` and CORS values. This is a test-harness networking constraint, not a product change. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
-1. Implement Stage 3 from `docs/UI-UX-DONUSUM-PLANI.md`: make row selection, edit mode and change state immediately distinguishable.
-2. Complete compact, standard and comfortable density behavior; improve long-text wrapping and natural horizontal scrolling without default sticky columns.
-3. Make the contextual detail panel useful when no row is selected by showing document summary, coverage and quality information.
-4. Remove duplicated low-value default columns by document type without deleting stored fields or preventing users from restoring them in a saved view.
-5. Add regression tests and run wide, narrow, detail-panel and split-view live walkthroughs before checking Stage 3.
-6. Preserve the Jira-grade planning backlog, but do not mix unrelated capability expansion into the UI/UX stages unless it is required to eliminate a broken or undiscoverable user path.
+1. Implement Stage 4 from `docs/UI-UX-DONUSUM-PLANI.md`: inventory modal, popover, context-menu, selector and toast surfaces, then move them onto a small shared interaction standard.
+2. Centralize portal/layer ordering and eliminate any remaining surface that can open behind sticky document chrome.
+3. Verify Escape, outside-click and focus-return behavior for every transient surface without allowing several layers to close from one key press.
+4. Standardize destructive, move and bulk-operation confirmation outcomes; add a clear undo opportunity only where replay is actually safe.
+5. Standardize actionable API and validation errors without leaking server internals or replacing precise conflict/permission explanations with generic failures.
+6. Add regression tests and run wide, narrow, details-panel and split-view live walkthroughs before checking Stage 4.
+7. Preserve the Jira-grade planning backlog, but do not mix unrelated capability expansion into the UI/UX stages unless it is required to eliminate a broken or undiscoverable user path.
 
 ### Pitfalls encountered in the latest task
 
+- Do not render row detail solely from `selectedRowId`. The explicit `detailRowId` is the open/closed gate; the current selection is only the live context while that gate is open. Ignoring the gate makes the close button and Escape appear broken.
+- Do not reintroduce sticky ID or Content columns by default. Natural horizontal scrolling is the Stage 3 contract; freezing is an explicit zero-to-five leading-column preference and is part of saved-view state.
+- Virtual rows must be remeasured after density, font or column-layout changes. Otherwise wrapped content can overlap or leave incorrect gaps even when CSS looks correct in a non-virtualized test.
+- Hiding Description in the initial view is presentation-only. Never delete or migrate the stored value; column controls and saved views must remain able to expose it.
 - A narrow sidebar must not become a dead icon strip. Every icon retains an accessible name and tooltip, and profile/logout remain reachable in collapsed mode. Preserve this when adding more navigation.
 - Do not hide high-frequency authoring actions behind a permanent ellipsis. The Stage 2 overflow triggers are container-driven and appear only when their own toolbar lacks room; wide layouts must continue to show direct controls.
 - Do not switch split-view toolbars with opacity/invisibility transitions. Hidden focused-document portals caused visible flicker and transient duplicate chrome; keep the fixed header height and render only the focused portal visibly.

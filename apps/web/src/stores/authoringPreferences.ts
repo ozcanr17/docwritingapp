@@ -32,7 +32,7 @@ const defaults = {
   showHierarchyGuides: true,
   showChangeIndicators: true,
   spellCheck: true,
-  defaultFrozenColumns: 1,
+  defaultFrozenColumns: 0,
   documentFontSize: 14,
   documentFontFamily: "system" as DocumentFontFamily,
   highContrast: false,

@@ -32,12 +32,12 @@ Bu belge, DocSys'in profesyonel ve kurumsal bir urun arayuzune donusumunu izleme
 
 ## Asama 3 - Dokuman tablosu ve ayrinti paneli
 
-- [ ] Satir secimi, duzenleme modu ve degisiklik durumunu daha belirgin gostermek.
-- [ ] Kompakt, standart ve rahat satir yogunlugu seceneklerini tamamlamak.
-- [ ] Uzun metinlerin taranabilirligini, satir sarimini ve yatay kaydirmayi iyilestirmek.
-- [ ] Sabit sutunlari yalnizca kullanici tercihiyle etkinlestirmek.
-- [ ] Sag paneli secim yokken dokuman ozeti, kapsam ve kalite bilgileriyle doldurmak.
-- [ ] Dokuman turune gore tekrar eden dusuk degerli sutunlari varsayilan gorunumden cikarmak.
+- [x] Satir secimi, duzenleme modu ve degisiklik durumunu daha belirgin gostermek.
+- [x] Kompakt, standart ve rahat satir yogunlugu seceneklerini tamamlamak.
+- [x] Uzun metinlerin taranabilirligini, satir sarimini ve yatay kaydirmayi iyilestirmek.
+- [x] Sabit sutunlari yalnizca kullanici tercihiyle etkinlestirmek.
+- [x] Sag paneli secim yokken dokuman ozeti, kapsam ve kalite bilgileriyle doldurmak.
+- [x] Dokuman turune gore tekrar eden dusuk degerli sutunlari varsayilan gorunumden cikarmak.
 
 ## Asama 4 - Pencere, menu ve geri bildirim sistemi
 

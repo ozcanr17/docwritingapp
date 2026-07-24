@@ -2,15 +2,20 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, FileText, Link2, ListTree, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, DashboardSummary, DocumentSummary, OutlineRow } from "../lib/api";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export function DocumentOverviewPanel({ documentId, onClose }: { documentId: string; onClose: () => void }) {
   const { t } = useTranslation();
+  useEscapeClose(onClose);
   const document = useQuery({ queryKey: ["document", documentId], queryFn: () => api<DocumentSummary>(`/documents/${documentId}`) });
   const outline = useQuery({ queryKey: ["outline", documentId], queryFn: () => api<OutlineRow[]>(`/documents/${documentId}/outline`) });
   const dashboard = useQuery({ queryKey: ["dashboard", documentId], queryFn: () => api<DashboardSummary>(`/documents/${documentId}/dashboard`) });
   const rows = outline.data ?? [];
   const linkedRows = rows.filter((row) => row.linkCount > 0).length;
   const headings = rows.filter((row) => row.rowType === "heading").length;
+  const coverage = dashboard.data && dashboard.data.requirements > 0
+    ? Math.round((dashboard.data.coveredRequirements / dashboard.data.requirements) * 100)
+    : 0;
   return <div data-testid="document-overview-panel" className="flex min-h-0 flex-1 flex-col">
     <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
       <div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-wider text-mutedForeground">{t("documentOverview")}</div><h2 className="mt-1 truncate font-semibold">{document.data?.title ?? t("loading")}</h2></div>
@@ -18,6 +23,11 @@ export function DocumentOverviewPanel({ documentId, onClose }: { documentId: str
     </header>
     <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
       <p className="text-sm leading-6 text-mutedForeground">{t("documentOverviewHelp")}</p>
+      {document.data && <div className="flex flex-wrap items-center gap-2 text-xs text-mutedForeground">
+        <span className="rounded-full border border-border bg-editorBackground px-2.5 py-1">{t(`documentTypes.${document.data.documentType}`)}</span>
+        <span data-testid="document-overview-version" className="rounded-full border border-border bg-editorBackground px-2.5 py-1">{t("documentVersion", { version: document.data.version })}</span>
+        {document.data.access?.restricted && <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-warning">{t("restrictedDocument")}</span>}
+      </div>}
       <div className="grid grid-cols-2 gap-2">
         <OverviewStat icon={<ListTree size={15} />} label={t("totalObjects")} value={rows.length} />
         <OverviewStat icon={<FileText size={15} />} label={t("headings")} value={headings} />
@@ -26,6 +36,20 @@ export function DocumentOverviewPanel({ documentId, onClose }: { documentId: str
       </div>
       {dashboard.data && <section className="rounded-xl border border-border bg-editorBackground p-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-mutedForeground">{t("coverageAndQuality")}</h3>
+        <div className="mt-3">
+          <div className="mb-1 flex items-center justify-between text-xs"><span className="text-mutedForeground">{t("coverageRate")}</span><span className="font-semibold tabular-nums">{coverage}%</span></div>
+          <div
+            data-testid="document-overview-coverage"
+            role="progressbar"
+            aria-label={t("coverageRate")}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={coverage}
+            className="h-1.5 overflow-hidden rounded-full bg-muted"
+          >
+            <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${coverage}%` }} />
+          </div>
+        </div>
         <dl className="mt-3 space-y-2 text-sm">
           <OverviewLine label={t("coveredRequirements")} value={`${dashboard.data.coveredRequirements}/${dashboard.data.requirements}`} />
           <OverviewLine label={t("qualityIssues")} value={dashboard.data.qualityIssues} />

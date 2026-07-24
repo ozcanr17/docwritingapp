@@ -658,8 +658,8 @@ export function ShellPage() {
             <Suspense fallback={<PanelLoading />}>
               {linkedRowId ? (
                 <RowDetailPanel rowId={linkedRowId} documentId={selectedDocumentId} variant="linked" />
-              ) : detailRowId ? (
-                <RowDetailPanel rowId={detailRowId} documentId={selectedDocumentId} variant="primary" />
+              ) : detailRowId && selectedRowId ? (
+                <RowDetailPanel rowId={selectedRowId} documentId={selectedDocumentId} variant="primary" />
               ) : <DocumentOverviewPanel documentId={selectedDocumentId} onClose={() => setDetailPanelOpen(false)} />}
             </Suspense>
           </aside>

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tanstack/react-virtual", () => ({
   useVirtualizer: (options: { count: number }) => ({
@@ -8,11 +8,14 @@ vi.mock("@tanstack/react-virtual", () => ({
     getVirtualItems: () =>
       Array.from({ length: options.count }, (_, index) => ({ index, start: index * 36, size: 36, key: index })),
     measureElement: vi.fn(),
+    measure: vi.fn(),
     scrollToIndex: vi.fn(),
   }),
 }));
 import { OutlineRow } from "../lib/api";
 import { useAuthoringPreferencesStore } from "../stores/authoringPreferences";
+import { useColumnStore } from "../stores/columns";
+import { useSelectionStore } from "../stores/selection";
 import { DocumentGrid } from "./DocumentGrid";
 
 function makeRow(partial: Partial<OutlineRow> & Pick<OutlineRow, "id" | "parentId" | "depth" | "rowType" | "title" | "displayNumber">): OutlineRow {
@@ -61,6 +64,19 @@ function renderGrid(seed: OutlineRow[], documentType: "requirement" | "test" = "
 }
 
 describe("DocumentGrid", () => {
+  beforeEach(() => {
+    useAuthoringPreferencesStore.getState().reset();
+    useColumnStore.setState({ hidden: {}, widths: {}, order: {} });
+    useSelectionStore.setState({
+      selectedDocumentId: null,
+      selectedRowId: null,
+      selectedRowIds: [],
+      selectionAnchorId: null,
+      detailRowId: null,
+      linkedRowId: null,
+    });
+  });
+
   it("renders hierarchical rows with derived display numbers", () => {
     renderGrid(rows);
     expect(screen.getByText("1 Giris")).toBeInTheDocument();
@@ -72,6 +88,15 @@ describe("DocumentGrid", () => {
     renderGrid(rows);
     expect(screen.getByRole("columnheader", { name: "ID" })).not.toHaveClass("sticky");
     expect(screen.getByRole("columnheader", { name: "Gereksinim No" })).not.toHaveClass("sticky");
+    expect(screen.getByRole("columnheader", { name: "ID" })).toHaveAttribute("data-frozen", "false");
+  });
+
+  it("freezes the requested leading columns only when explicitly configured", () => {
+    act(() => useAuthoringPreferencesStore.getState().setDefaultFrozenColumns(2));
+    renderGrid(rows);
+    expect(screen.getByRole("columnheader", { name: "ID" })).toHaveAttribute("data-frozen", "true");
+    expect(screen.getByRole("columnheader", { name: "Gereksinim No" })).toHaveAttribute("data-frozen", "true");
+    expect(screen.getByRole("columnheader", { name: "\u0130\u00e7erik" })).toHaveAttribute("data-frozen", "false");
   });
 
   it("applies the preferred document typeface and text size", () => {
@@ -81,7 +106,14 @@ describe("DocumentGrid", () => {
     });
     renderGrid(rows);
     expect(screen.getByTestId("grid-row-1")).toHaveStyle({ fontSize: "18px", fontFamily: "Georgia, 'Times New Roman', serif" });
-    act(() => useAuthoringPreferencesStore.getState().reset());
+  });
+
+  it("applies the selected row density without truncating wrapped content", () => {
+    act(() => useAuthoringPreferencesStore.getState().setRowDensity("comfortable"));
+    renderGrid(rows);
+    expect(screen.getByTestId("document-grid-scroll")).toHaveAttribute("data-density", "comfortable");
+    expect(screen.getByTestId("grid-row-1.1")).toHaveClass("min-h-16");
+    expect(screen.getByText("Gereksinim A")).toHaveClass("whitespace-pre-wrap", "break-words");
   });
 
   it("shows the empty state for a document without rows", () => {
@@ -92,9 +124,19 @@ describe("DocumentGrid", () => {
   it("supports selecting multiple rows with modifier keys", () => {
     renderGrid(rows);
     fireEvent.click(screen.getByTestId("grid-row-1"));
+    expect(screen.getByTestId("grid-row-1")).toHaveAttribute("data-row-state", "primary-selected");
     fireEvent.click(screen.getByTestId("grid-row-1.1"), { ctrlKey: true });
+    expect(screen.getByTestId("grid-row-1")).toHaveAttribute("data-row-state", "selected");
+    expect(screen.getByTestId("grid-row-1.1")).toHaveAttribute("data-row-state", "primary-selected");
     expect(screen.getByTestId("bulk-delete")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /select/i })).not.toBeInTheDocument();
+  });
+
+  it("distinguishes the active editor from selection", () => {
+    renderGrid(rows);
+    fireEvent.doubleClick(screen.getByText("Gereksinim A"));
+    expect(screen.getByTestId("grid-row-1.1")).toHaveAttribute("data-row-state", "editing");
+    expect(screen.getByTestId("cell-input-title").closest("[role='gridcell']")).toHaveAttribute("data-editing", "true");
   });
 
   it("shows a saved change indicator on the row edge", () => {

@@ -29,6 +29,10 @@ export const MIN_COLUMN_WIDTH = 64;
 const NUMBER_COLUMN: GridColumn = { key: "number", labelKey: "rowId", kind: "number", width: 96, editable: false };
 const DESCRIPTION_COLUMN: GridColumn = { key: "description", labelKey: "description", kind: "description", width: 320, editable: true };
 
+export function defaultHiddenColumnKeys(documentType: Exclude<DocumentType, "general_document">): string[] {
+  return documentType === "requirement" || documentType === "test" ? ["description"] : [];
+}
+
 export function builtInColumns(documentType: Exclude<DocumentType, "general_document">): GridColumn[] {
   if (documentType === "requirement") {
     return [

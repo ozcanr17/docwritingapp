@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { api, ApiError, CustomFieldType, DashboardSummary, DocumentTemplateSummary, DocumentType, FieldDefinition, OutlineRow, SavedView } from "../lib/api";
 import { AdvancedFilterConfig, applyAdvancedFilter, EMPTY_ADVANCED_FILTER, parseAdvancedFilter } from "../lib/advancedFilters";
 import { matchesQuickTypeFilter } from "../lib/outline";
-import { cellValue, columnsForDocument, GridColumn, isCellEditable, totalWidth } from "../lib/columns";
+import { cellValue, columnsForDocument, defaultHiddenColumnKeys, GridColumn, isCellEditable, totalWidth } from "../lib/columns";
 import { TextReplacement } from "../lib/findReplace";
 import { resolveAppLanguage } from "../lib/i18n";
 import { useColumnStore } from "../stores/columns";
@@ -14,6 +14,7 @@ import { useEditHistoryStore } from "../stores/editHistory";
 import { useSelectionStore } from "../stores/selection";
 import { useToastStore } from "../stores/toasts";
 import { documentFontFamilies, useAuthoringPreferencesStore } from "../stores/authoringPreferences";
+import type { RowDensity } from "../stores/authoringPreferences";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import { BulkActionInput, BulkActionsDialog } from "./BulkActionsDialog";
 import { ProductivityBar } from "./ProductivityBar";
@@ -143,6 +144,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const spellCheck = useAuthoringPreferencesStore((s) => s.spellCheck);
   const documentFontSize = useAuthoringPreferencesStore((s) => s.documentFontSize);
   const documentFontFamily = useAuthoringPreferencesStore((s) => s.documentFontFamily);
+  const defaultFrozenColumns = useAuthoringPreferencesStore((s) => s.defaultFrozenColumns);
   const setSelectedRow = useSelectionStore((s) => s.setRow);
   const selectOnly = useSelectionStore((s) => s.selectOnly);
   const toggleRow = useSelectionStore((s) => s.toggleRow);
@@ -154,7 +156,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const selectedRowIds = useSelectionStore((s) => s.selectedRowIds);
   const hiddenByDocument = useColumnStore((s) => s.hidden);
   const hasStoredVisibility = Object.prototype.hasOwnProperty.call(hiddenByDocument, documentId);
-  const storedHidden = hasStoredVisibility ? hiddenByDocument[documentId] ?? [] : ["description"];
+  const storedHidden = hasStoredVisibility ? hiddenByDocument[documentId] ?? [] : defaultHiddenColumnKeys(documentType);
   const widthOf = useColumnStore((s) => s.widthOf);
   const setWidth = useColumnStore((s) => s.setWidth);
   const hideColumn = useColumnStore((s) => s.hide);
@@ -182,6 +184,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const [sortKey, setSortKey] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [viewVisibleColumns, setViewVisibleColumns] = useState<string[] | null>(null);
+  const [viewFrozenColumns, setViewFrozenColumns] = useState<string[] | null>(null);
   const [linkProjection, setLinkProjection] = useState({
     fields: ["requirementNo"],
     separator: " : ",
@@ -238,6 +241,19 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
     [documentType, fields, storedHidden, storedWidths, storedOrder, viewVisibleColumns],
   );
   const allColumnKeys = useMemo(() => columnsForDocument(documentType, fields).map((column) => column.key), [documentType, fields]);
+  const frozenColumnCount = viewFrozenColumns === null
+    ? Math.min(defaultFrozenColumns, columns.length)
+    : Math.min(viewFrozenColumns.filter((key) => columns.some((column) => column.key === key)).length, columns.length);
+  const frozenColumnKeys = useMemo(() => columns.slice(0, frozenColumnCount).map((column) => column.key), [columns, frozenColumnCount]);
+  const frozenOffsets = useMemo(() => {
+    const offsets = new Map<string, number>();
+    let left = 16;
+    for (const column of columns.slice(0, frozenColumnCount)) {
+      offsets.set(column.key, left);
+      left += column.width + 8;
+    }
+    return offsets;
+  }, [columns, frozenColumnCount]);
   const collapsedRows = useMemo(() => new Set(collapsedRowIds), [collapsedRowIds]);
   const advancedFilterResult = useMemo(() => applyAdvancedFilter(rows, columns, advancedFilter), [advancedFilter, columns, rows]);
   const displayedRows = useMemo(() => {
@@ -320,6 +336,10 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
     initialRect: { width: 1000, height: 600 },
   });
 
+  useEffect(() => {
+    virtualizer.measure();
+  }, [documentFontFamily, documentFontSize, gridTemplate, rowDensity, virtualizer]);
+
   const invalidate = () => queryClient.invalidateQueries({ queryKey: outlineKey });
 
   const handleMutationError = (error: unknown) => {
@@ -342,7 +362,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           ],
           sorting: sortKey ? [{ field: sortKey, direction: sortDirection }] : [],
           visibleColumns: columns.map((column) => column.key),
-          frozenColumns: [],
+          frozenColumns: frozenColumnKeys,
           linkProjection,
           isDefault: input.isDefault,
         }),
@@ -372,6 +392,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
     setSortKey(typeof sorting?.field === "string" ? sorting.field : "");
     setSortDirection(sorting?.direction === "desc" ? "desc" : "asc");
     setViewVisibleColumns(view.visibleColumns.length > 0 ? view.visibleColumns : null);
+    setViewFrozenColumns(view.frozenColumns);
     setLinkProjection({
       fields: view.linkProjection.fields ?? ["requirementNo"],
       separator: view.linkProjection.separator ?? " : ",
@@ -1074,6 +1095,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
       <div
         ref={scrollRef}
         data-testid="document-grid-scroll"
+        data-density={rowDensity}
         role="grid"
         aria-rowcount={displayedRows.length + 1}
         aria-colcount={columns.length}
@@ -1111,12 +1133,15 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           className="sticky top-0 z-10 grid gap-2 border-b border-border bg-surface/95 px-4 text-xs font-medium uppercase tracking-wide text-mutedForeground backdrop-blur-xl"
           style={{ gridTemplateColumns: gridTemplate, width: gridWidth }}
         >
-          {columns.map((column) => (
-            <div
+          {columns.map((column) => {
+            const frozenLeft = frozenOffsets.get(column.key);
+            return <div
               role="columnheader"
               data-testid={`column-header-${column.key}`}
               key={column.key}
-              className="relative flex cursor-context-menu items-center gap-1 overflow-hidden py-2 pr-2"
+              data-frozen={frozenLeft === undefined ? "false" : "true"}
+              className={`relative flex cursor-context-menu items-center gap-1 overflow-hidden py-2 pr-2 ${frozenLeft === undefined ? "" : "sticky z-20 [background:inherit] shadow-[1px_0_0_hsl(var(--border))]"}`}
+              style={frozenLeft === undefined ? undefined : { left: frozenLeft }}
               onContextMenu={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -1147,8 +1172,8 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                   window.addEventListener("pointerup", up);
                 }}
               />
-            </div>
-          ))}
+            </div>;
+          })}
         </div>
         {displayedRows.length === 0 ? (
           <div data-testid="grid-empty" className="p-6 text-sm text-mutedForeground">
@@ -1167,6 +1192,10 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
               );
               const visibleChangeState = hasUnsavedChange ? "unsaved" : row.changeState ?? "saved_other";
               const hasChildren = rows.some((candidate) => candidate.parentId === row.id);
+              const isPrimarySelection = selectedRowId === row.id;
+              const isSelected = selectedRowIds.includes(row.id);
+              const isEditingRow = editing?.rowId === row.id;
+              const rowState = isEditingRow ? "editing" : isPrimarySelection ? "primary-selected" : isSelected ? "selected" : "idle";
               return (
                 <div
                   ref={virtualizer.measureElement}
@@ -1174,18 +1203,20 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                   key={row.id}
                   data-testid={`grid-row-${row.displayNumber}`}
                   role="row"
-                  aria-selected={selectedRowIds.includes(row.id)}
+                  aria-selected={isSelected}
                   aria-label={`${t("rowId")} ${row.objectNumber}: ${row.title || row.rowType}`}
+                  data-row-state={rowState}
                   draggable={!readOnly && editing?.rowId !== row.id}
-                  className={`absolute left-0 top-0 grid items-stretch gap-2 border-b border-border px-4 transition-colors hover:bg-muted/70 ${rowDensity === "compact" ? "min-h-10 py-0.5" : rowDensity === "comfortable" ? "min-h-16 py-2.5" : "min-h-[52px] py-1.5"} ${
-                    selectedRowIds.includes(row.id) ? "z-[1] bg-selection shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.55)]" : ""
-                  } ${editing?.rowId === row.id ? "bg-primary/10 shadow-[inset_3px_0_0_hsl(var(--primary)),inset_0_0_0_1px_hsl(var(--primary)/0.7)]" : ""
+                  className={`group absolute left-0 top-0 grid items-stretch gap-2 border-b border-border bg-editorBackground px-4 transition-colors hover:bg-muted/70 ${rowDensity === "compact" ? "min-h-10 py-0.5" : rowDensity === "comfortable" ? "min-h-16 py-2.5" : "min-h-[52px] py-1.5"} ${
+                    isSelected && !isPrimarySelection ? "z-[1] bg-primary/5 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3)]" : ""
+                  } ${isPrimarySelection ? "z-[2] bg-selection shadow-[inset_0_0_0_2px_hsl(var(--primary)/0.62)]" : ""
+                  } ${isEditingRow ? "bg-primary/15 shadow-[inset_4px_0_0_hsl(var(--primary)),inset_0_0_0_2px_hsl(var(--primary)/0.78)]" : ""
                   } ${advancedFilter.highlightMatches && advancedFilterResult.matchedIds.has(row.id) ? "ring-1 ring-inset ring-primary/40" : ""}`}
                   style={{
                     transform: `translateY(${virtualRow.start}px)`,
                     gridTemplateColumns: gridTemplate,
                     width: gridWidth,
-                    zIndex: editing?.rowId === row.id ? 20 : 0,
+                    zIndex: isEditingRow ? 20 : isPrimarySelection ? 2 : isSelected ? 1 : 0,
                     fontSize: documentFontSize,
                     fontFamily: documentFontFamilies[documentFontFamily],
                   }}
@@ -1228,11 +1259,17 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                             : "bg-primary"
                     }`}
                   />}
-                  {columns.map((column) => (
+                  {columns.map((column) => {
+                    const frozenLeft = frozenOffsets.get(column.key);
+                    const cellEditing = editing?.rowId === row.id && editing.columnKey === column.key;
+                    return (
                     <div
                       key={column.key}
                       role="gridcell"
-                      className="relative"
+                      data-frozen={frozenLeft === undefined ? "false" : "true"}
+                      data-editing={cellEditing ? "true" : "false"}
+                      className={`relative ${frozenLeft === undefined ? "" : "sticky z-10 [background:inherit] shadow-[1px_0_0_hsl(var(--border))]"} ${cellEditing ? "z-20 rounded-md ring-2 ring-primary/70" : ""}`}
+                      style={frozenLeft === undefined ? undefined : { left: frozenLeft }}
                     >
                       {column.kind === "title" && hasChildren && (
                         <button
@@ -1253,12 +1290,13 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                       <GridCell
                         column={column}
                         row={row}
-                        editing={editing?.rowId === row.id && editing.columnKey === column.key ? editing : null}
+                        editing={cellEditing ? editing : null}
                         linkProjection={linkProjection}
                         selected={selectedRowIds.includes(row.id)}
                         titleLeadingOffset={hasChildren ? 18 : 0}
                         showHierarchyGuides={showHierarchyGuides}
                         spellCheck={spellCheck}
+                        rowDensity={rowDensity}
                         onOpenLinks={(event) => {
                           event.stopPropagation();
                           const rect = event.currentTarget.getBoundingClientRect();
@@ -1282,7 +1320,8 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                         onCancel={() => setEditing(null)}
                       />
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               );
             })}
@@ -1534,6 +1573,7 @@ function GridCell({
   titleLeadingOffset,
   showHierarchyGuides,
   spellCheck,
+  rowDensity,
   onOpenLinks,
   onStartEdit,
   onChange,
@@ -1549,6 +1589,7 @@ function GridCell({
   titleLeadingOffset: number;
   showHierarchyGuides: boolean;
   spellCheck: boolean;
+  rowDensity: RowDensity;
   onOpenLinks: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onStartEdit: () => void;
   onChange: (value: string) => void;
@@ -1719,7 +1760,9 @@ function GridCell({
       data-testid={`cell-value-${column.key}`}
       title={editable ? cellHelp : columnLabel}
       aria-label={!display && editable ? cellHelp : undefined}
-      className={`relative block min-h-10 w-full whitespace-pre-wrap break-words py-2 text-left leading-5 ${
+      className={`relative block w-full whitespace-pre-wrap break-words text-left [overflow-wrap:anywhere] ${
+        rowDensity === "compact" ? "min-h-8 py-1 leading-5" : rowDensity === "comfortable" ? "min-h-12 py-3 leading-7" : "min-h-10 py-2 leading-6"
+      } ${
         numberedTitle ? "font-semibold text-foreground" : ""
       } ${editable ? "rounded px-1 transition-colors hover:bg-primary/5 hover:ring-1 hover:ring-primary/20" : "cursor-default text-mutedForeground"}`}
       style={column.kind === "title" ? { paddingLeft: row.depth * 18 + 4 + titleLeadingOffset } : undefined}

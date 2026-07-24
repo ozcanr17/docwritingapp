@@ -34,6 +34,6 @@ describe("authoring preferences", () => {
     expect(useAuthoringPreferencesStore.getState().defaultFrozenColumns).toBe(5);
     expect(useAuthoringPreferencesStore.getState().documentFontSize).toBe(20);
     useAuthoringPreferencesStore.getState().reset();
-    expect(useAuthoringPreferencesStore.getState()).toEqual(expect.objectContaining({ rowDensity: "standard", defaultFrozenColumns: 1, documentFontSize: 14, documentFontFamily: "system", highContrast: false, workspaceFocus: "author" }));
+    expect(useAuthoringPreferencesStore.getState()).toEqual(expect.objectContaining({ rowDensity: "standard", defaultFrozenColumns: 0, documentFontSize: 14, documentFontFamily: "system", highContrast: false, workspaceFocus: "author" }));
   });
 });

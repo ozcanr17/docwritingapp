@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnsForDocument } from "./columns";
+import { columnsForDocument, defaultHiddenColumnKeys } from "./columns";
 
 describe("document columns", () => {
   it("uses requirement-specific columns with an attribute column", () => {
@@ -33,5 +33,10 @@ describe("document columns", () => {
       "testResult",
       "description",
     ]);
+  });
+
+  it("hides the duplicate description field from both default document views", () => {
+    expect(defaultHiddenColumnKeys("requirement")).toEqual(["description"]);
+    expect(defaultHiddenColumnKeys("test")).toEqual(["description"]);
   });
 });
