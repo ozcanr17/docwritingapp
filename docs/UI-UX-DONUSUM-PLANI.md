@@ -49,11 +49,11 @@ Bu belge, DocSys'in profesyonel ve kurumsal bir urun arayuzune donusumunu izleme
 
 ## Asama 5 - Is, hata, test plani ve kosum deneyimi
 
-- [ ] Is ve test merkezini Jira benzeri fakat dokuman baglamini kaybetmeyen bir bilgi mimarisine tasimak.
-- [ ] Hata, gorev, test plani, test seti, kosum ve kanit arasindaki gecisleri sadelestirmek.
-- [ ] Liste, pano ve ayrinti gorunumlerinde ortak filtre ve kayitli gorunum davranisi sunmak.
-- [ ] Gereksinim-test-kosum-hata zincirini tek bir gorsel akisla okunabilir kilmak.
-- [ ] Rol odakli baslangic ekranlarinda yazar, testci ve inceleyici icin ilgili metrikleri gostermek.
+- [x] Is ve test merkezini Jira benzeri fakat dokuman baglamini kaybetmeyen bir bilgi mimarisine tasimak.
+- [x] Hata, gorev, test plani, test seti, kosum ve kanit arasindaki gecisleri sadelestirmek.
+- [x] Liste, pano ve ayrinti gorunumlerinde ortak filtre ve kayitli gorunum davranisi sunmak.
+- [x] Gereksinim-test-kosum-hata zincirini tek bir gorsel akisla okunabilir kilmak.
+- [x] Rol odakli baslangic ekranlarinda yazar, testci ve inceleyici icin ilgili metrikleri gostermek.
 
 ## Asama 6 - Ayarlar, yonetim ve rol tabanli calisma alanlari
 

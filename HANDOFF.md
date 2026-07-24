@@ -6,7 +6,25 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 through 4 are complete. Stage 5 (work, defect, test-plan and execution experience) is next.
+The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 through 5 are complete. Stage 6 (settings, administration and role-based workspaces) is next.
+
+### What was completed in UI/UX Stage 5
+
+1. Reworked the existing Work and Test center into a document-aware engineering hub while retaining Dashboard, List, Board and Test Plan navigation, project context, configurable workflow and document/row evidence links.
+2. Added one readable engineering verification chain from workspace requirements through test cases, planned tests and real executions to open defects. The API now calculates requirement/test inventory, planned tests, executions, passed/failed execution totals, pass rate, open defects and linked evidence rather than presenting decorative client-only values.
+3. Added role-focused landing summaries. The persisted Author, Tester or Reviewer workspace focus changes the leading metrics without changing authorization: authors see requirement/test/evidence inventory, testers see active plans/executions/failures, and reviewers see critical/unassigned/defect queues.
+4. Added personal saved work views for List and Board. A view stores the current project, layout, text query, assignment filter and defect-only filter locally, can be reapplied in one selection and can be deleted without browser-native prompts.
+5. Strengthened test-plan comprehension with planned/completed/passed/failed progress, and added an evidence-chain summary to work-item detail so document, requirement/test and execution context remains visible around a defect or task.
+6. Fixed the concrete reason backend changes could appear missing during local development. `dev-up.sh` and `dev-up.ps1` previously hot-reloaded only Vite; API, collaboration and worker code was started once. Collaboration/worker now use `tsx watch`, while the Nest API uses `watch-compiled-service.mjs` to run a real TypeScript compiler and restart `dist/main.js` only after a successful build. This preserves Nest decorator metadata, unlike running the API directly through `tsx watch`.
+7. Windows shutdown now terminates complete launcher process trees, preventing watched child services from surviving a restart. The same compiled API watcher is used by macOS/Linux and Windows launchers.
+8. Focused tests cover lifecycle metrics, failed execution-step counting, role summaries, personal view persistence/reapplication, project creation and structured QA defect creation. The complete verification gate passes with **114 web + 71 API + 13 worker = 198/198 tests** and an initial bundle of **127.6 KiB gzip**.
+9. Local watcher validation touched an API source file, observed a successful rebuild/restart in `.dev-logs/api.log`, and confirmed `/health/live` remained healthy. A launcher restart is required once after pulling this change; subsequent source changes are watched automatically.
+
+### Critical development launcher pitfall
+
+- Do **not** replace the Nest API watcher with `tsx watch src/main.ts`. That execution path does not emit the decorator metadata required by Nest dependency injection and the API fails at startup.
+- Keep `infra/scripts/watch-compiled-service.mjs`: it compiles with the package `tsconfig.json`, leaves the last failure visible, and restarts the Node runtime only after a successful compilation.
+- After changing launcher scripts, stop old processes with `bash infra/scripts/dev-down.sh` (or the PowerShell equivalent) before starting again. An already-running old launcher cannot adopt the new watch behavior.
 
 ### What was completed in the latest task
 

@@ -157,7 +157,7 @@ export class WorkManagementService {
     await this.access.assertPermission(actorId, "work_item.read", this.projectScope(project));
     const activeWhere = { projectId, deletedAt: null } satisfies Prisma.WorkItemWhereInput;
     const openStatuses: WorkStatus[] = ["backlog", "ready", "in_progress", "in_review"];
-    const [statusGroups, myOpenBugs, myOpenBugCount, recentItems, unassigned, criticalOpen, activePlans] = await Promise.all([
+    const [statusGroups, myOpenBugs, myOpenBugCount, recentItems, unassigned, criticalOpen, activePlans, requirementCount, testCaseCount, plannedTests, executionGroups, failedExecutions, openDefects, linkedEvidence] = await Promise.all([
       this.prisma.workItem.groupBy({ by: ["status"], where: activeWhere, _count: { _all: true } }),
       this.prisma.workItem.findMany({
         where: { ...activeWhere, type: "bug", assigneeId: actorId, status: { in: openStatuses } },
@@ -175,10 +175,28 @@ export class WorkManagementService {
       this.prisma.workItem.count({ where: { ...activeWhere, assigneeId: null, status: { in: openStatuses } } }),
       this.prisma.workItem.count({ where: { ...activeWhere, type: "bug", priority: { in: ["critical", "highest"] }, status: { in: openStatuses } } }),
       this.prisma.testPlan.count({ where: { projectId, deletedAt: null, status: "active" } }),
+      this.prisma.documentRow.count({ where: { deletedAt: null, rowType: "requirement", document: { workspaceId: project.workspaceId, deletedAt: null } } }),
+      this.prisma.documentRow.count({ where: { deletedAt: null, rowType: "test_case", document: { workspaceId: project.workspaceId, deletedAt: null } } }),
+      this.prisma.testPlanItem.count({ where: { deletedAt: null, testPlan: { projectId, deletedAt: null } } }),
+      this.prisma.testExecution.groupBy({
+        by: ["status"],
+        where: { testPlanItem: { is: { deletedAt: null, testPlan: { projectId, deletedAt: null } } } },
+        _count: { _all: true },
+      }),
+      this.prisma.testExecution.count({
+        where: {
+          testPlanItem: { is: { deletedAt: null, testPlan: { projectId, deletedAt: null } } },
+          OR: [{ status: "failed" }, { steps: { some: { status: "failed" } } }],
+        },
+      }),
+      this.prisma.workItem.count({ where: { ...activeWhere, type: "bug", status: { in: openStatuses } } }),
+      this.prisma.workItemArtifactLink.count({ where: { workItem: { projectId, deletedAt: null } } }),
     ]);
     const statusCounts = Object.fromEntries(workStatuses.map((status) => [status, statusGroups.find((group) => group.status === status)?._count._all ?? 0])) as Record<WorkStatus, number>;
     const total = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
     const completed = statusCounts.done;
+    const executionCount = executionGroups.reduce((sum, group) => sum + group._count._all, 0);
+    const passedExecutions = executionGroups.find((group) => group.status === "passed")?._count._all ?? 0;
     return {
       projectId,
       myOpenBugs,
@@ -193,6 +211,15 @@ export class WorkManagementService {
         unassigned,
         criticalOpen,
         activePlans,
+        requirements: requirementCount,
+        testCases: testCaseCount,
+        plannedTests,
+        executions: executionCount,
+        passedExecutions,
+        failedExecutions,
+        executionPassRate: executionCount ? Math.round(passedExecutions / executionCount * 100) : 0,
+        openDefects,
+        linkedEvidence,
       },
     };
   }

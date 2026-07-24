@@ -2,7 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../lib/api";
+import i18n from "../lib/i18n";
 import { WorkManagementPage } from "./WorkManagementPage";
+import { useWorkViewsStore } from "../stores/workViews";
+import { useAuthoringPreferencesStore } from "../stores/authoringPreferences";
 
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
@@ -12,6 +15,8 @@ vi.mock("../lib/api", async () => {
 describe("WorkManagementPage projects", () => {
   beforeEach(() => {
     vi.mocked(api).mockReset();
+    useWorkViewsStore.getState().reset();
+    useAuthoringPreferencesStore.getState().reset();
   });
 
   it("creates the prerequisite project and selects it", async () => {
@@ -34,7 +39,7 @@ describe("WorkManagementPage projects", () => {
           myOpenBugs: [],
           recentItems: [],
           statusCounts: { backlog: 0, ready: 0, in_progress: 0, in_review: 0, done: 0, canceled: 0 },
-          metrics: { total: 0, open: 0, completed: 0, completionRate: 0, myOpenBugCount: 0, unassigned: 0, criticalOpen: 0, activePlans: 0 },
+          metrics: { total: 0, open: 0, completed: 0, completionRate: 0, myOpenBugCount: 0, unassigned: 0, criticalOpen: 0, activePlans: 0, requirements: 20, testCases: 4, plannedTests: 4, executions: 3, passedExecutions: 2, failedExecutions: 1, executionPassRate: 67, openDefects: 1, linkedEvidence: 24 },
         };
       }
       if (path === "/projects/project/workflow") {
@@ -74,6 +79,11 @@ describe("WorkManagementPage projects", () => {
       ),
     );
     expect(await screen.findByTestId("project-selector")).toHaveValue("project");
+    expect(await screen.findByTestId("engineering-lifecycle")).toHaveTextContent("20");
+    expect(screen.getByTestId("engineering-lifecycle")).toHaveTextContent("%67");
+    expect(screen.getByTestId("role-focus-summary")).toHaveTextContent(
+      i18n.t("workspaceFocus.author.title"),
+    );
   });
 
   it("creates a QA defect with reporter, labels, and document links", async () => {
@@ -90,7 +100,7 @@ describe("WorkManagementPage projects", () => {
           myOpenBugs: [],
           recentItems: [],
           statusCounts: { backlog: 0, ready: 0, in_progress: 0, in_review: 0, done: 0, canceled: 0 },
-          metrics: { total: 0, open: 0, completed: 0, completionRate: 0, myOpenBugCount: 0, unassigned: 0, criticalOpen: 0, activePlans: 0 },
+          metrics: { total: 0, open: 0, completed: 0, completionRate: 0, myOpenBugCount: 0, unassigned: 0, criticalOpen: 0, activePlans: 0, requirements: 1, testCases: 0, plannedTests: 0, executions: 0, passedExecutions: 0, failedExecutions: 0, executionPassRate: 0, openDefects: 0, linkedEvidence: 0 },
         };
       }
       if (path === "/projects/project/workflow") {
@@ -146,5 +156,67 @@ describe("WorkManagementPage projects", () => {
       affectedVersion: "0.1.7",
       artifacts: [{ documentId: "requirements", role: "affects" }],
     }));
+  });
+
+  it("saves and reapplies personal work filters", async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === "/workspaces/workspace/projects")
+        return [{ id: "project", name: "System", code: "SYS", description: "Core" }];
+      if (path.startsWith("/workspaces/workspace/work-items")) return [];
+      if (path === "/projects/project/test-plans") return [];
+      if (path === "/projects/project/work-dashboard") {
+        return {
+          projectId: "project",
+          myOpenBugs: [],
+          recentItems: [],
+          statusCounts: { backlog: 0, ready: 0, in_progress: 0, in_review: 0, done: 0, canceled: 0 },
+          metrics: { total: 0, open: 0, completed: 0, completionRate: 0, myOpenBugCount: 0, unassigned: 0, criticalOpen: 0, activePlans: 0, requirements: 0, testCases: 0, plannedTests: 0, executions: 0, passedExecutions: 0, failedExecutions: 0, executionPassRate: 0, openDefects: 0, linkedEvidence: 0 },
+        };
+      }
+      if (path === "/projects/project/workflow") {
+        return {
+          projectId: "project",
+          version: 1,
+          customized: false,
+          schemes: Object.fromEntries(["epic", "story", "task", "bug", "risk"].map((type) => [type, {
+            transitions: Object.fromEntries(["backlog", "ready", "in_progress", "in_review", "done", "canceled"].map((status) => [status, []])),
+            requiredFields: Object.fromEntries(["backlog", "ready", "in_progress", "in_review", "done", "canceled"].map((status) => [status, []])),
+          }])),
+        };
+      }
+      return [];
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkManagementPage workspaceId="workspace" />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: i18n.t("workHub.list") }));
+    fireEvent.change(screen.getByPlaceholderText(i18n.t("workHub.search")), {
+      target: { value: "release" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("workHub.assignedToMe") }));
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("workHub.bugs") }));
+    fireEvent.click(screen.getByTestId("save-work-view"));
+    fireEvent.change(screen.getByTestId("work-view-name"), {
+      target: { value: "Release defects" },
+    });
+    fireEvent.click(screen.getByTestId("confirm-save-work-view"));
+
+    expect(await screen.findByTestId("work-view-selector")).toHaveValue(
+      useWorkViewsStore.getState().views[0]?.id,
+    );
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("workHub.assignedToMe") }));
+    fireEvent.change(screen.getByTestId("work-view-selector"), {
+      target: { value: useWorkViewsStore.getState().views[0]?.id },
+    });
+
+    expect(screen.getByPlaceholderText(i18n.t("workHub.search"))).toHaveValue("release");
+    expect(screen.getByRole("button", { name: i18n.t("workHub.assignedToMe") })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: i18n.t("workHub.bugs") })).toHaveAttribute("aria-pressed", "true");
   });
 });

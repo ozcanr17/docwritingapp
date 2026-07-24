@@ -78,9 +78,9 @@ npx tsc -p tsconfig.json | Out-File (Join-Path $LogDir "api-build.log")
 Pop-Location
 
 Write-Host "==> Starting application services"
-Start-App "api" "apps\api" "node dist\main.js"
-Start-App "collaboration" "apps\collaboration" "npx tsx src\main.ts"
-Start-App "worker" "apps\worker" "npx tsx src\main.ts"
+Start-App "api" "apps\api" "node ..\..\infra\scripts\watch-compiled-service.mjs"
+Start-App "collaboration" "apps\collaboration" "npx tsx watch src\main.ts"
+Start-App "worker" "apps\worker" "npx tsx watch src\main.ts"
 Start-App "web" "apps\web" "npx vite --port 5173 --host"
 
 Write-Host "==> Waiting for API"

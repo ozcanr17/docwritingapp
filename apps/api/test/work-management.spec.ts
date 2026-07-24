@@ -66,7 +66,7 @@ describe("work management", () => {
     expect(dashboardResponse.statusCode).toBe(200);
     expect(JSON.parse(dashboardResponse.body)).toEqual(expect.objectContaining({
       myOpenBugs: [expect.objectContaining({ id: created.id })],
-      metrics: expect.objectContaining({ total: 1, open: 1, criticalOpen: 1 }),
+      metrics: expect.objectContaining({ total: 1, open: 1, criticalOpen: 1, requirements: 1, testCases: 0, executions: 0, openDefects: 1, linkedEvidence: 2 }),
     }));
     const designResponse = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/documents`, headers: { cookie: owner.cookie }, payload: { title: "Session Design", documentType: "general_document", folderId: null } });
     const design = JSON.parse(designResponse.body) as { id: string };
@@ -188,6 +188,16 @@ describe("work management", () => {
     const removedResponse = await app.inject({ method: "DELETE", url: `/test-plan-items/${removableItem.id}`, headers: { cookie: owner.cookie } });
     expect(removedResponse.statusCode).toBe(200);
     expect(await prisma.testPlanItem.findUniqueOrThrow({ where: { id: removableItem.id } })).toEqual(expect.objectContaining({ deletedById: owner.userId, deletedAt: expect.any(Date) }));
+    const dashboardResponse = await app.inject({ method: "GET", url: `/projects/${project.id}/work-dashboard`, headers: { cookie: owner.cookie } });
+    expect(JSON.parse(dashboardResponse.body).metrics).toEqual(expect.objectContaining({
+      testCases: 2,
+      plannedTests: 1,
+      executions: 1,
+      failedExecutions: 1,
+      executionPassRate: 0,
+      openDefects: 1,
+      linkedEvidence: 1,
+    }));
   });
 
   it("keeps viewer access read-only", async () => {

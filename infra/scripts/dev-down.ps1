@@ -8,7 +8,7 @@ $ComposeFile = Join-Path $Root "infra\docker\docker-compose.dev.yml"
 Write-Host "==> Stopping DocSys application services"
 if (Test-Path $PidFile) {
   Get-Content $PidFile | Where-Object { $_ } | ForEach-Object {
-    Stop-Process -Id ([int]$_) -Force -ErrorAction SilentlyContinue
+    taskkill /PID ([int]$_) /T /F 2>$null | Out-Null
   }
   Remove-Item $PidFile -Force
 }

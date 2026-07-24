@@ -168,6 +168,15 @@ export interface WorkDashboard {
     unassigned: number;
     criticalOpen: number;
     activePlans: number;
+    requirements: number;
+    testCases: number;
+    plannedTests: number;
+    executions: number;
+    passedExecutions: number;
+    failedExecutions: number;
+    executionPassRate: number;
+    openDefects: number;
+    linkedEvidence: number;
   };
 }
 

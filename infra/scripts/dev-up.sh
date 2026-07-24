@@ -101,9 +101,9 @@ pnpm --filter @docsys/database build >>"$LOG_DIR/prisma.log" 2>&1
 ( cd apps/api && npx tsc -p tsconfig.json >"$LOG_DIR/api-build.log" 2>&1 )
 
 echo "==> Starting application services"
-start_service api apps/api node dist/main.js
-start_service collaboration apps/collaboration npx tsx src/main.ts
-start_service worker apps/worker npx tsx src/main.ts
+start_service api apps/api node ../../infra/scripts/watch-compiled-service.mjs
+start_service collaboration apps/collaboration npx tsx watch src/main.ts
+start_service worker apps/worker npx tsx watch src/main.ts
 start_service web apps/web npx vite --port 5173 --host
 
 wait_for_url "http://localhost:3001/health/live" "API"

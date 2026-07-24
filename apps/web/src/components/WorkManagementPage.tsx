@@ -3,8 +3,11 @@ import {
   AlertCircle,
   Activity,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   Bug,
+  Bookmark,
+  BookmarkPlus,
   CheckCircle2,
   ClipboardList,
   Columns3,
@@ -42,6 +45,11 @@ import {
   WorkUser,
 } from "../lib/api";
 import { ModalSurface } from "./TransientSurface";
+import { useWorkViewsStore, WorkViewTab } from "../stores/workViews";
+import {
+  useAuthoringPreferencesStore,
+  WorkspaceFocus,
+} from "../stores/authoringPreferences";
 
 interface Project {
   id: string;
@@ -84,6 +92,11 @@ export function WorkManagementPage({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [activeViewId, setActiveViewId] = useState("");
+  const views = useWorkViewsStore((state) => state.views);
+  const saveView = useWorkViewsStore((state) => state.saveView);
+  const removeView = useWorkViewsStore((state) => state.removeView);
   const projects = useQuery({
     queryKey: ["projects", workspaceId],
     queryFn: () => api<Project[]>(`/workspaces/${workspaceId}/projects`),
@@ -176,6 +189,21 @@ export function WorkManagementPage({
     }),
     [dashboard.data],
   );
+  const projectViews = views.filter((view) => view.projectId === activeProjectId);
+  const applyView = (viewId: string) => {
+    setActiveViewId(viewId);
+    const view = projectViews.find((candidate) => candidate.id === viewId);
+    if (!view) {
+      setQuery("");
+      setMine(false);
+      setBugsOnly(false);
+      return;
+    }
+    setTab(view.tab);
+    setQuery(view.query);
+    setMine(view.mine);
+    setBugsOnly(view.bugsOnly);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-editorBackground">
@@ -281,25 +309,37 @@ export function WorkManagementPage({
         <div className="flex rounded-lg border border-border bg-editorBackground p-0.5">
           <TabButton
             active={tab === "dashboard"}
-            onClick={() => setTab("dashboard")}
+            onClick={() => {
+              setTab("dashboard");
+              setActiveViewId("");
+            }}
             icon={<Activity size={14} />}
             label={t("workHub.dashboard")}
           />
           <TabButton
             active={tab === "items"}
-            onClick={() => setTab("items")}
+            onClick={() => {
+              setTab("items");
+              setActiveViewId("");
+            }}
             icon={<LayoutList size={14} />}
             label={t("workHub.list")}
           />
           <TabButton
             active={tab === "board"}
-            onClick={() => setTab("board")}
+            onClick={() => {
+              setTab("board");
+              setActiveViewId("");
+            }}
             icon={<Columns3 size={14} />}
             label={t("workHub.board")}
           />
           <TabButton
             active={tab === "plans"}
-            onClick={() => setTab("plans")}
+            onClick={() => {
+              setTab("plans");
+              setActiveViewId("");
+            }}
             icon={<ClipboardList size={14} />}
             label={t("workHub.testPlans")}
           />
@@ -313,7 +353,10 @@ export function WorkManagementPage({
               />
               <input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setActiveViewId("");
+                }}
                 className="w-full rounded-lg border border-border bg-editorBackground py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
                 placeholder={t("workHub.search")}
               />
@@ -322,7 +365,10 @@ export function WorkManagementPage({
               type="button"
               aria-pressed={mine}
               className={`rounded-lg border px-3 py-2 text-sm ${mine ? "border-primary bg-primary/10 text-primary" : "border-border"}`}
-              onClick={() => setMine((value) => !value)}
+              onClick={() => {
+                setMine((value) => !value);
+                setActiveViewId("");
+              }}
             >
               <UserRound size={14} className="mr-1.5 inline" />
               {t("workHub.assignedToMe")}
@@ -331,11 +377,56 @@ export function WorkManagementPage({
               type="button"
               aria-pressed={bugsOnly}
               className={`rounded-lg border px-3 py-2 text-sm ${bugsOnly ? "border-danger bg-danger/10 text-danger" : "border-border"}`}
-              onClick={() => setBugsOnly((value) => !value)}
+              onClick={() => {
+                setBugsOnly((value) => !value);
+                setActiveViewId("");
+              }}
             >
               <Bug size={14} className="mr-1.5 inline" />
               {t("workHub.bugs")}
             </button>
+            <label className="flex min-w-44 items-center gap-2 rounded-lg border border-border bg-editorBackground px-2">
+              <Bookmark size={14} className="text-mutedForeground" />
+              <span className="sr-only">{t("workHub.savedViews")}</span>
+              <select
+                data-testid="work-view-selector"
+                className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none"
+                value={activeViewId}
+                onChange={(event) => applyView(event.target.value)}
+              >
+                <option value="">{t("workHub.currentView")}</option>
+                {projectViews.map((view) => (
+                  <option key={view.id} value={view.id}>
+                    {view.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              data-testid="save-work-view"
+              className="rounded-lg border border-border px-2.5 py-2 text-mutedForeground hover:bg-muted hover:text-foreground"
+              title={t("workHub.saveView")}
+              aria-label={t("workHub.saveView")}
+              onClick={() => setSaveViewOpen(true)}
+            >
+              <BookmarkPlus size={15} />
+            </button>
+            {activeViewId && (
+              <button
+                type="button"
+                data-testid="remove-work-view"
+                className="rounded-lg border border-border px-2.5 py-2 text-danger hover:bg-danger/10"
+                title={t("workHub.removeView")}
+                aria-label={t("workHub.removeView")}
+                onClick={() => {
+                  removeView(activeViewId);
+                  applyView("");
+                }}
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
           </>
         )}
       </div>
@@ -442,7 +533,92 @@ export function WorkManagementPage({
           onClose={() => setSelectedPlanId(null)}
         />
       )}
+      {saveViewOpen && activeProjectId && (tab === "items" || tab === "board") && (
+        <SaveWorkViewDialog
+          tab={tab}
+          projectId={activeProjectId}
+          query={query}
+          mine={mine}
+          bugsOnly={bugsOnly}
+          onSave={(name) => {
+            const id = saveView({
+              projectId: activeProjectId,
+              name,
+              tab,
+              query,
+              mine,
+              bugsOnly,
+            });
+            setActiveViewId(id);
+            setSaveViewOpen(false);
+          }}
+          onClose={() => setSaveViewOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+function SaveWorkViewDialog({
+  tab,
+  projectId,
+  query,
+  mine,
+  bugsOnly,
+  onSave,
+  onClose,
+}: {
+  tab: WorkViewTab;
+  projectId: string;
+  query: string;
+  mine: boolean;
+  bugsOnly: boolean;
+  onSave: (name: string) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState("");
+  return (
+    <DialogFrame title={t("workHub.saveView")} onClose={onClose}>
+      <form
+        className="mt-5 space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (name.trim()) onSave(name.trim());
+        }}
+      >
+        <Field label={t("workHub.viewName")}>
+          <input
+            autoFocus
+            required
+            maxLength={80}
+            data-testid="work-view-name"
+            className="input"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </Field>
+        <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-mutedForeground">
+          {t("workHub.viewSummary", {
+            layout: t(`workHub.${tab === "items" ? "list" : "board"}`),
+            query: query || t("workHub.noSearchFilter"),
+            assignment: mine
+              ? t("workHub.assignedToMe")
+              : t("workHub.allAssignees"),
+            type: bugsOnly ? t("workHub.bugs") : t("workHub.allTypes"),
+          })}
+        </div>
+        <input type="hidden" value={projectId} readOnly />
+        <div className="flex justify-end gap-2">
+          <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>
+            {t("cancel")}
+          </button>
+          <button type="submit" data-testid="confirm-save-work-view" disabled={!name.trim()} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primaryForeground disabled:opacity-50">
+            {t("save")}
+          </button>
+        </div>
+      </form>
+    </DialogFrame>
   );
 }
 
@@ -515,9 +691,13 @@ function WorkDashboardView({
   onMove: (item: WorkItemSummary, status: WorkItemStatus, anchorId: string | null, position: "before" | "after") => void;
 }) {
   const { t } = useTranslation();
+  const workspaceFocus = useAuthoringPreferencesStore(
+    (state) => state.workspaceFocus,
+  );
   if (!dashboard) return <Empty title={t("workHub.loadingDashboard")} detail={t("workHub.loadingDashboardHelp")} />;
   return (
     <div className="space-y-4">
+      <RoleFocusSummary focus={workspaceFocus} metrics={dashboard.metrics} />
       <div className="grid gap-4 xl:grid-cols-3">
         <DashboardCard title={t("workHub.myOpenBugs")} icon={<Bug size={17} className="text-danger" />}>
           <DashboardItemList items={dashboard.myOpenBugs} empty={t("workHub.noMyOpenBugs")} onOpen={onOpen} />
@@ -534,6 +714,7 @@ function WorkDashboardView({
           </div>
         </DashboardCard>
       </div>
+      <EngineeringLifecycle metrics={dashboard.metrics} />
       <section className="rounded-xl border border-border bg-surface p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -547,6 +728,93 @@ function WorkDashboardView({
         </div>
       </section>
     </div>
+  );
+}
+
+function RoleFocusSummary({
+  focus,
+  metrics,
+}: {
+  focus: WorkspaceFocus;
+  metrics: WorkDashboard["metrics"];
+}) {
+  const { t } = useTranslation();
+  const values =
+    focus === "tester"
+      ? [
+          [t("workHub.activePlans"), metrics.activePlans],
+          [t("workHub.lifecycleExecutions"), metrics.executions],
+          [t("workHub.failedExecutions"), metrics.failedExecutions],
+        ]
+      : focus === "reviewer"
+        ? [
+            [t("workHub.criticalOpen"), metrics.criticalOpen],
+            [t("workHub.unassignedOpen"), metrics.unassigned],
+            [t("workHub.lifecycleDefects"), metrics.openDefects],
+          ]
+        : [
+            [t("workHub.lifecycleRequirements"), metrics.requirements],
+            [t("workHub.lifecycleTests"), metrics.testCases],
+            [t("workHub.linkedEvidence"), metrics.linkedEvidence],
+          ];
+  return (
+    <section
+      data-testid="role-focus-summary"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3"
+    >
+      <div className="min-w-52">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+          {t("workspaceFocus.label")}
+        </div>
+        <h2 className="mt-1 text-sm font-semibold">
+          {t(`workspaceFocus.${focus}.title`)}
+        </h2>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {values.map(([label, value]) => (
+          <div
+            key={String(label)}
+            className="min-w-28 rounded-lg border border-border bg-surface px-3 py-2"
+          >
+            <div className="text-lg font-semibold tabular-nums">{value}</div>
+            <div className="text-[10px] text-mutedForeground">{label}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EngineeringLifecycle({ metrics }: { metrics: WorkDashboard["metrics"] }) {
+  const { t } = useTranslation();
+  const stages = [
+    { key: "requirements", label: t("workHub.lifecycleRequirements"), value: metrics.requirements ?? 0, icon: <ClipboardList size={16} /> },
+    { key: "tests", label: t("workHub.lifecycleTests"), value: metrics.testCases ?? 0, meta: t("workHub.lifecyclePlanned", { count: metrics.plannedTests ?? 0 }), icon: <CheckCircle2 size={16} /> },
+    { key: "executions", label: t("workHub.lifecycleExecutions"), value: metrics.executions ?? 0, meta: t("workHub.lifecyclePassRate", { rate: metrics.executionPassRate ?? 0 }), icon: <Play size={16} /> },
+    { key: "defects", label: t("workHub.lifecycleDefects"), value: metrics.openDefects ?? 0, meta: metrics.failedExecutions ? t("workHub.lifecycleFailed", { count: metrics.failedExecutions }) : t("workHub.lifecycleNoFailed"), icon: <Bug size={16} /> },
+  ];
+  return (
+    <section data-testid="engineering-lifecycle" className="rounded-xl border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="font-semibold">{t("workHub.engineeringLifecycle")}</h2>
+          <p className="mt-0.5 text-xs text-mutedForeground">{t("workHub.engineeringLifecycleHelp")}</p>
+        </div>
+        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary">{t("workHub.linkedEvidenceCount", { count: metrics.linkedEvidence ?? 0 })}</span>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
+        {stages.map((stage, index) => (
+          <div key={stage.key} className="contents">
+            <div className="rounded-xl border border-border bg-editorBackground p-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-mutedForeground">{stage.icon}{stage.label}</div>
+              <div className="mt-2 text-2xl font-semibold tabular-nums">{stage.value}</div>
+              {stage.meta && <div className="mt-1 text-[11px] text-mutedForeground">{stage.meta}</div>}
+            </div>
+            {index < stages.length - 1 && <ArrowRight aria-hidden="true" size={15} className="mx-auto self-center text-mutedForeground max-md:rotate-90" />}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1757,6 +2025,7 @@ function WorkItemDetailDialog({
             </section>
           </div>
           <aside className="space-y-4">
+            <WorkItemEngineeringChain item={item} />
             <section className="rounded-xl border border-border p-4">
               <h3 className="text-sm font-semibold">
                 {t("workHub.linkedEvidence")}
@@ -1860,6 +2129,34 @@ function WorkItemDetailDialog({
   );
 }
 
+function WorkItemEngineeringChain({ item }: { item: WorkItemDetail }) {
+  const { t } = useTranslation();
+  const requirementLinks = item.artifactLinks.filter((link) => link.document?.documentType === "requirement" || link.row?.document.documentType === "requirement").length;
+  const testLinks = item.artifactLinks.filter((link) => link.document?.documentType === "test" || link.row?.document.documentType === "test" || link.testExecution || link.testStepExecution).length;
+  const executionLinks = item.artifactLinks.filter((link) => link.testExecution || link.testStepExecution).length;
+  const stages = [
+    { label: t("workHub.lifecycleRequirements"), count: requirementLinks },
+    { label: t("workHub.lifecycleTests"), count: testLinks },
+    { label: t("workHub.lifecycleExecutions"), count: executionLinks },
+    { label: t("workHub.lifecycleDefects"), count: item.type === "bug" ? 1 : 0 },
+  ];
+  return (
+    <section data-testid="work-item-engineering-chain" className="rounded-xl border border-border p-4">
+      <h3 className="text-sm font-semibold">{t("workHub.evidenceChain")}</h3>
+      <p className="mt-1 text-xs leading-5 text-mutedForeground">{t("workHub.evidenceChainHelp")}</p>
+      <ol className="mt-3 space-y-1.5">
+        {stages.map((stage, index) => (
+          <li key={stage.label} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${stage.count ? "border-primary/30 bg-primary/5" : "border-border text-mutedForeground"}`}>
+            <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${stage.count ? "bg-primary text-primaryForeground" : "bg-muted"}`}>{index + 1}</span>
+            <span className="min-w-0 flex-1">{stage.label}</span>
+            <span className="font-semibold tabular-nums">{stage.count}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function artifactTarget(link: WorkItemDetail["artifactLinks"][number]) {
   if (link.row)
     return {
@@ -1943,6 +2240,10 @@ function TestPlanDetailDialog({
     onSuccess: refresh,
   });
   const plan = detail.data;
+  const latestExecutions = plan?.items.flatMap((item) => item.executions.slice(0, 1)) ?? [];
+  const completedExecutions = latestExecutions.filter((execution) => ["passed", "failed", "blocked", "skipped"].includes(execution.status)).length;
+  const passedExecutions = latestExecutions.filter((execution) => execution.status === "passed").length;
+  const failedExecutions = latestExecutions.filter((execution) => execution.status === "failed").length;
   return (
     <DialogFrame
       title={plan ? `${plan.key} - ${plan.name}` : t("workHub.loading")}
@@ -1950,6 +2251,12 @@ function TestPlanDetailDialog({
       wide
     >
       <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
+        <section data-testid="test-plan-progress" className="grid gap-2 rounded-xl border border-border bg-editorBackground p-3 sm:grid-cols-4 lg:col-span-2">
+          <DashboardMetric label={t("workHub.plannedTests")} value={plan?.items.length ?? 0} />
+          <DashboardMetric label={t("workHub.completedExecutions")} value={completedExecutions} />
+          <DashboardMetric label={t("workHub.passedExecutions")} value={passedExecutions} tone="success" />
+          <DashboardMetric label={t("workHub.failedExecutions")} value={failedExecutions} tone={failedExecutions ? "danger" : "success"} />
+        </section>
         <section className="rounded-xl border border-border p-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">{t("workHub.planTests")}</h3>
