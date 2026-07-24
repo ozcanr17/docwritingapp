@@ -15,6 +15,8 @@ import { NotificationCenter } from "./NotificationCenter";
 const MigrationWizard = lazy(() => import("./MigrationWizard").then((module) => ({ default: module.MigrationWizard })));
 
 interface MenuBarProps {
+  organizationName?: string;
+  workspaceName?: string;
   documentId: string | null;
   documentType: DocumentType | null;
   view: "documents" | "work" | "trash";
@@ -57,7 +59,7 @@ export function resolveEditMenuTrailing(current: boolean, leadingRight: number, 
   return current;
 }
 
-export function MenuBar({ documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen, onOpenCommandPalette = () => undefined, commandPaletteShortcut = "", searchShortcut = "", onOpenOnboarding = () => undefined, onOpenFeedback = () => undefined, onOpenPilotChecklist = () => undefined }: MenuBarProps) {
+export function MenuBar({ organizationName = "", workspaceName = "", documentId, documentType, view, setView, onOpenReport, onOpenHistory, onOpenSearch, onCloseSearch, searchQuery, onSearchQueryChange, searchOpen, onOpenCommandPalette = () => undefined, commandPaletteShortcut = "", searchShortcut = "", onOpenOnboarding = () => undefined, onOpenFeedback = () => undefined, onOpenPilotChecklist = () => undefined }: MenuBarProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((s) => s.push);
@@ -301,9 +303,16 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
 
   return (
     <>
-    <div ref={headerRef} className="relative z-50 flex min-h-11 items-center border-b border-border bg-surface/90 px-2 py-1 backdrop-blur-xl">
-      <div ref={leadingRef} data-testid="menubar-leading-actions" className="flex min-w-0 items-center gap-0.5">
-        <span className="shrink-0 px-2 text-sm font-semibold">{t("appName")}</span>
+    <div ref={headerRef} className="app-topbar relative z-50 flex min-h-12 items-center border-b border-border px-2.5 py-1.5">
+      <div ref={leadingRef} data-testid="menubar-leading-actions" className="flex min-w-0 items-center gap-1">
+        <span className="app-wordmark shrink-0 px-2 text-sm font-semibold">{t("appName")}</span>
+        {(organizationName || workspaceName) && (
+          <div className="workspace-crumb hidden min-w-0 items-center gap-1.5 border-l border-border pl-3 xl:flex">
+            {organizationName && <span className="max-w-32 truncate text-[11px] text-mutedForeground">{organizationName}</span>}
+            {organizationName && workspaceName && <span aria-hidden="true" className="text-mutedForeground/50">/</span>}
+            {workspaceName && <span className="max-w-36 truncate text-xs font-medium text-foreground">{workspaceName}</span>}
+          </div>
+        )}
         <Menu testId="menu-file" label={t("menuFile")} entries={fileEntries} />
         {!editMenuTrailing && editMenu}
       </div>
@@ -312,7 +321,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
         id="docsys-global-search"
         data-testid="global-search-trigger"
         title={t("globalSearchHelp")}
-        className={`absolute left-1/2 flex w-[clamp(14rem,36vw,34rem)] min-w-0 -translate-x-1/2 items-center gap-2 border border-border bg-editorBackground/80 px-3 py-1.5 text-xs text-mutedForeground shadow-sm transition-[border-color,background-color,width] focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/10 hover:border-primary/35 hover:bg-muted ${searchOpen ? "rounded-t-xl rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-lg"}`}
+        className={`global-search-trigger absolute left-1/2 flex w-[clamp(12rem,38vw,36rem)] min-w-0 -translate-x-1/2 items-center gap-2 border border-border bg-editorBackground/80 px-3 py-1.5 text-xs text-mutedForeground shadow-sm transition-[border-color,background-color,width] focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15 hover:border-primary/40 hover:bg-muted ${searchOpen ? "rounded-t-xl rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-lg"}`}
       >
         <Search size={14} className="shrink-0" />
         <input
@@ -335,7 +344,7 @@ export function MenuBar({ documentId, documentType, view, setView, onOpenReport,
         />
         {!searchQuery && <span className="shrink-0 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px]">{searchShortcut}</span>}
       </div>
-      <div data-testid="menubar-trailing-actions" className="ml-auto flex min-w-0 items-center justify-end gap-0.5">
+      <div data-testid="menubar-trailing-actions" className="ml-auto flex min-w-0 items-center justify-end gap-1">
         {editMenuTrailing && editMenu}
         <span className="ml-auto shrink-0"><NotificationCenter /></span>
       </div>

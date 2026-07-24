@@ -6,9 +6,21 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The most recent task was **complete the Jira-inspired issue-management experience, repair unreadable native form controls in both themes and publish a self-contained Windows `0.2.0` release**. The Work and tests hub now opens on an operational dashboard, supports complete Task, Story and Defect authoring, stores QA-specific defect evidence, links multiple controlled documents, exposes dynamic workflow status everywhere and provides a drag-and-drop Kanban. The portable two-EXE deployment model remains installation-free and preserves the locked-down profile fallback delivered in `0.1.7`.
+The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stage 1, covering the design system and application shell, is complete. Stage 2 (document tabs and toolbars) is next.
 
 ### What was completed in the latest task
+
+1. Added `docs/UI-UX-DONUSUM-PLANI.md` with every approved goal grouped into eight independently verifiable stages and an explicit definition of done. Stage 1 is checked; all later stages remain unchecked.
+2. Expanded the light/dark design tokens with subtle/hover surfaces, stronger borders and theme-aware shadow color. Added shared application-shell, panel, section-label, icon-button, navigation-item and global-search primitives.
+3. Rebuilt the global top bar as a calmer three-zone surface: application/workspace context on the left, geometrically centered global search, and system actions on the right. The existing measured collision algorithm moves Edit to the right when necessary.
+4. Reorganized the sidebar into workspace identity, primary navigation, Explorer, workspace tools and account sections. The current view has a strong accent state; the profile shows avatar, name and email.
+5. Added a persisted collapsed-sidebar preference with accessible labels/tooltips. Collapsed mode retains Documents, Work and tests, recent, administration, trash, settings, profile and logout access while returning document width to the editor.
+6. Replaced the plain shell loading text with an accessible application-shell skeleton and strengthened main/side surface hierarchy without changing document data or permissions.
+7. Added layout-store tests and a MenuBar workspace-context test. All 99 web tests, web typecheck, root lint, forbidden-character scan and production web build pass.
+8. Ran the current services locally and completed a live browser walkthrough against the seeded admin account. At 760 px and 520 px viewport widths the page has no root horizontal overflow; search remains centered, File stays left and Edit moves right. Expanded/collapsed sidebar and a real requirements document were visually verified.
+9. Desktop code and packages were intentionally not changed or rebuilt, per the user's instruction for this phase.
+
+### What was completed in the preceding work-management task
 
 1. Task, Story and Defect creation now includes Type, Summary, Detailed description, Assignee, Reporter, Critical/High/Medium/Low-compatible priority, comma-separated labels and a searchable multi-document picker. Existing Epic and Risk types remain available for compatibility.
 2. Defects store structured Steps to reproduce, Expected result, Actual result, Test environment and Affected version values. Creating a Defect from a failed execution step copies the exact action, expectation, actual result, environment and build reference.
@@ -41,20 +53,22 @@ The most recent task was **complete the Jira-inspired issue-management experienc
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. The requested issue authoring, QA evidence, Dashboard and Kanban scope is complete. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work. External pilot evidence and production signing/operations dependencies remain unchanged.
+There is **no active code blocker**. UI/UX Stage 1 is complete and Stage 2 is ready to start. The in-app browser cannot reach the host's `localhost`, so live browser verification used the Mac LAN address with session-only `VITE_API_URL`, `VITE_COLLAB_URL`, `APP_BASE_URL` and CORS values. This is a test-harness networking constraint, not a product change. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
-1. Add a stable Playwright journey for Dashboard creation, QA Defect persistence, multi-document linking and pointer-driven Kanban movement.
-2. Add iterations, milestones, releases and fix versions, including release assignment, dates, progress and unresolved-defect visibility.
-3. Add transition permissions by project role, reusable workflow presets, WIP limits and optional board swimlanes.
-4. Add plan-level assignment, environment, product variant and data-set configuration. Show aggregate execution progress and direct run-history navigation.
-5. Add saved personal/team work queries and bulk assign/transition/link/release operations before automation or external synchronization.
-6. Complete the bidirectional requirement -> test -> plan -> execution -> Defect -> verification explorer, including unresolved-defect readiness widgets.
-7. Run the controlled pilot in parallel; broad Jira parity must not postpone migration, recovery and real user-evidence validation.
+1. Implement Stage 2 from `docs/UI-UX-DONUSUM-PLANI.md`: unify document-tab focus, pinning, split-view and overflow behavior.
+2. Separate the document toolbar into primary authoring and secondary view actions; use a priority-based overflow only when width requires it.
+3. Keep save/offline/conflict status in one stable location and remove toolbar flicker when split-view focus changes.
+4. Add regression tests for wide, narrow, detail-panel and both split orientations, then run a live macOS `pnpm dev` walkthrough.
+5. Update the checklist and this handoff, commit Stage 2 independently and push it to `origin/main`.
+6. Preserve the Jira-grade planning backlog, but do not mix unrelated capability expansion into the UI/UX stages unless it is required to eliminate a broken or undiscoverable user path.
 
 ### Pitfalls encountered in the latest task
 
+- A narrow sidebar must not become a dead icon strip. Every icon retains an accessible name and tooltip, and profile/logout remain reachable in collapsed mode. Preserve this when adding more navigation.
+- Do not solve top-bar collisions by moving the search box away from the geometric center. The measured File/Edit relocation and root `scrollWidth === clientWidth` checks are the current contract at 760 px and 520 px.
+- The in-app browser test surface cannot access the Mac host through its own `localhost`. For live visual checks, run Vite on `--host` and use the Mac LAN address for the browser plus session-only API/collaboration/CORS environment values. Do not commit a private LAN address or replace production defaults.
 - A prerequisite API is not a complete product feature. Project creation existed on the server but had no ordinary-user entry point; Work and tests therefore presented a dead-end empty state. Every future prerequisite must include discovery, creation/selection, permission feedback, loading/error states and a direct recovery path.
 - Work and tests previously selected the first project for workflow/test plans while listing work items across the whole workspace. Always drive every project-scoped query from the same explicit active-project identifier.
 - Project codes become permanent work/test key prefixes. Normalize them on the server, constrain the allowed shape and translate database uniqueness conflicts to HTTP 409 instead of leaking a generic database failure.

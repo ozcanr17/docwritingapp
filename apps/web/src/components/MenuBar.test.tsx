@@ -21,6 +21,18 @@ describe("MenuBar", () => {
     expect(onOpenSearch).toHaveBeenCalledOnce();
   });
 
+  it("shows the organization and workspace context without displacing global search", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MenuBar organizationName="DocSys Demo" workspaceName="Main Workspace" documentId={null} documentType={null} view="documents" setView={vi.fn()} onOpenReport={vi.fn()} onOpenHistory={vi.fn()} onOpenSearch={vi.fn()} onCloseSearch={vi.fn()} searchQuery="" onSearchQueryChange={vi.fn()} searchOpen={false} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText("DocSys Demo")).toBeInTheDocument();
+    expect(screen.getByText("Main Workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("global-search-trigger")).toHaveClass("left-1/2", "-translate-x-1/2");
+  });
+
   it("keeps search geometrically centered and relocates menus after a measured collision", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(

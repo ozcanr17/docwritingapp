@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, Clock3, FileKey2, FileText, FlaskConical, LogOut, PenLine, Settings, ShieldCheck, Star, Trash2, Users } from "lucide-react";
+import { Building2, ClipboardCheck, Clock3, FileKey2, FileText, FlaskConical, LogOut, PanelLeftClose, PanelLeftOpen, PenLine, Settings, ShieldCheck, Star, Trash2, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -105,8 +105,10 @@ export function ShellPage() {
   const detailRowId = useSelectionStore((s) => s.detailRowId);
   const linkedRowId = useSelectionStore((s) => s.linkedRowId);
   const treeWidth = useLayoutStore((s) => s.treeWidth);
+  const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const detailWidth = useLayoutStore((s) => s.detailWidth);
   const setTreeWidth = useLayoutStore((s) => s.setTreeWidth);
+  const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
   const setDetailWidth = useLayoutStore((s) => s.setDetailWidth);
   const splitDirection = useLayoutStore((s) => s.splitDirection);
   const splitRatio = useLayoutStore((s) => s.splitRatio);
@@ -336,7 +338,7 @@ export function ShellPage() {
     return null;
   }
   if (!profile.data || organizations.isLoading) {
-    return <div className="p-8 text-sm text-mutedForeground">{t("loading")}</div>;
+    return <ShellLoading label={t("loading")} />;
   }
 
   if (organizations.data && organizations.data.length === 0) {
@@ -344,8 +346,10 @@ export function ShellPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
+    <div className="app-shell flex h-screen flex-col overflow-hidden bg-background">
       <MenuBar
+        organizationName={organizations.data?.[0]?.name}
+        workspaceName={workspaces.data?.[0]?.name}
         documentId={view === "documents" ? selectedDocumentId : null}
         documentType={view === "documents" ? selectedDocument.data?.documentType ?? null : null}
         view={view}
@@ -398,22 +402,45 @@ export function ShellPage() {
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
         {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
       </Suspense>
-      <div className="flex flex-1 gap-1.5 overflow-hidden p-2 pt-1.5">
+      <div className="flex flex-1 gap-2 overflow-hidden p-2">
       <aside
         aria-label={t("primaryNavigation")}
-        className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-sidebarBackground text-sidebarForeground shadow-sm"
-        style={{ width: treeWidth }}
+        data-collapsed={sidebarCollapsed}
+        className="app-sidebar flex shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-sidebarBackground text-sidebarForeground"
+        style={{ width: sidebarCollapsed ? 64 : treeWidth }}
       >
-        <div className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-sidebarForeground">
-          {workspaces.data?.[0]?.name ?? "—"}
+        <div className={`flex min-h-16 items-center border-b border-border/70 ${sidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"}`}>
+          {!sidebarCollapsed && (
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+              <Building2 size={17} />
+            </span>
+          )}
+          {!sidebarCollapsed && (
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-mutedForeground">{t("workspaceArea")}</div>
+              <div className="truncate text-sm font-semibold">{workspaces.data?.[0]?.name ?? "—"}</div>
+            </div>
+          )}
+          <button
+            type="button"
+            data-testid="toggle-sidebar"
+            className="icon-button shrink-0"
+            aria-label={sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
+            title={sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
+            onClick={toggleSidebar}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
         </div>
-        <nav aria-label={t("primaryNavigation")} className="px-2 pb-2 text-sm">
+        <nav aria-label={t("primaryNavigation")} className="px-2 py-2 text-sm">
+          {!sidebarCollapsed && <div className="section-label px-2 pb-1.5">{t("primaryNavigation")}</div>}
           <SidebarItem
             icon={<FileText size={15} />}
             label={t("documents")}
             active={view === "documents"}
             onClick={() => setView("documents")}
             testId="nav-documents"
+            collapsed={sidebarCollapsed}
           />
           <SidebarItem
             icon={<ClipboardCheck size={15} />}
@@ -421,9 +448,11 @@ export function ShellPage() {
             active={view === "work"}
             onClick={() => setView("work")}
             testId="nav-work"
+            collapsed={sidebarCollapsed}
           />
         </nav>
-        <section data-testid="tree-section" aria-label={t("documentTree")} className="min-h-0 flex-1 overflow-hidden border-t border-white/10 bg-surface text-foreground">
+        <section data-testid="tree-section" aria-label={t("documentTree")} className={`min-h-0 flex-1 overflow-hidden border-y border-border/70 bg-surface text-foreground ${sidebarCollapsed ? "hidden" : ""}`}>
+          <div className="section-label border-b border-border/60 px-3 py-2">{t("explorer")}</div>
           {workspaceId &&
             (view === "trash" ? (
               <TrashPanel workspaceId={workspaceId} />
@@ -437,21 +466,31 @@ export function ShellPage() {
               />
             ))}
         </section>
-        <div className="border-t border-white/10 p-2 text-sm">
-          <SidebarItem icon={<Clock3 size={15} />} label={t("recentDocuments")} onClick={() => setRecentDocumentsOpen(true)} testId="nav-recent-documents" />
-          {organizationAccess.data?.canManage && <SidebarItem icon={<ShieldCheck size={15} />} label={t("adminPanel")} onClick={() => setAdminOpen(true)} testId="nav-admin" />}
-          {selectedDocumentId && <SidebarItem icon={<FileKey2 size={15} />} label={t("documentPermissions")} onClick={() => setDocumentAccessOpen(true)} testId="nav-document-access" />}
-          <SidebarItem icon={<Trash2 size={15} />} label={t("trash")} active={view === "trash"} onClick={() => setView("trash")} testId="nav-trash" />
-          <SidebarItem icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} testId="nav-settings" />
+        <div className={`p-2 text-sm ${sidebarCollapsed ? "mt-auto" : ""}`}>
+          {!sidebarCollapsed && <div className="section-label px-2 pb-1.5">{t("workspaceTools")}</div>}
+          <SidebarItem collapsed={sidebarCollapsed} icon={<Clock3 size={15} />} label={t("recentDocuments")} onClick={() => setRecentDocumentsOpen(true)} testId="nav-recent-documents" />
+          {organizationAccess.data?.canManage && <SidebarItem collapsed={sidebarCollapsed} icon={<ShieldCheck size={15} />} label={t("adminPanel")} onClick={() => setAdminOpen(true)} testId="nav-admin" />}
+          {selectedDocumentId && <SidebarItem collapsed={sidebarCollapsed} icon={<FileKey2 size={15} />} label={t("documentPermissions")} onClick={() => setDocumentAccessOpen(true)} testId="nav-document-access" />}
+          <SidebarItem collapsed={sidebarCollapsed} icon={<Trash2 size={15} />} label={t("trash")} active={view === "trash"} onClick={() => setView("trash")} testId="nav-trash" />
+          <SidebarItem collapsed={sidebarCollapsed} icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} testId="nav-settings" />
         </div>
-        <div className="border-t border-white/10 p-3 text-sm">
-          <div className="flex items-center gap-1">
-            <button data-testid="open-profile" className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left hover:bg-white/10" onClick={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}>{profile.data.displayName}</button>
+        <div className={`border-t border-border/70 p-2 text-sm ${sidebarCollapsed ? "" : "px-3 py-2.5"}`}>
+          <div className={`flex items-center gap-1 ${sidebarCollapsed ? "flex-col" : ""}`}>
+            <button
+              data-testid="open-profile"
+              title={profile.data.displayName}
+              aria-label={profile.data.displayName}
+              className={`group min-w-0 flex-1 items-center rounded-xl text-left transition-colors hover:bg-muted ${sidebarCollapsed ? "flex justify-center p-1.5" : "flex gap-2.5 px-2 py-1.5"}`}
+              onClick={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primaryForeground">{initials(profile.data.displayName)}</span>
+              {!sidebarCollapsed && <span className="min-w-0"><span className="block truncate text-sm font-medium">{profile.data.displayName}</span><span className="block truncate text-[10px] text-mutedForeground">{profile.data.email}</span></span>}
+            </button>
           <button
             data-testid="logout"
             aria-label={t("logout")}
             title={t("logout")}
-            className="rounded-lg p-2 hover:bg-white/10"
+            className="icon-button shrink-0"
             onClick={async () => {
               await api("/auth/logout", { method: "POST" });
               setSessionToken(null);
@@ -466,8 +505,8 @@ export function ShellPage() {
           </div>
         </div>
       </aside>
-      <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />
-      <main id="main-content" tabIndex={-1} className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+      {!sidebarCollapsed && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
+      <main id="main-content" tabIndex={-1} className="app-main-surface flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-surface">
         {tabs.length > 0 && view === "documents" && <DocumentTabsBar
           tabs={tabs}
           activeId={selectedDocumentId}
@@ -736,29 +775,64 @@ function PanelLoading() {
   return <div className="p-6 text-sm text-mutedForeground">{t("loading")}</div>;
 }
 
+function ShellLoading({ label }: { label: string }) {
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-background" role="status" aria-label={label}>
+      <div className="h-12 border-b border-border bg-surface" />
+      <div className="flex min-h-0 flex-1 gap-2 p-2">
+        <div className="w-72 animate-pulse rounded-2xl border border-border bg-sidebarBackground p-3">
+          <div className="mb-5 h-10 rounded-xl bg-muted" />
+          <div className="mb-2 h-8 rounded-lg bg-muted" />
+          <div className="mb-5 h-8 rounded-lg bg-muted" />
+          <div className="space-y-2 border-t border-border pt-4">
+            <div className="h-6 rounded bg-muted" />
+            <div className="h-6 rounded bg-muted" />
+            <div className="h-6 rounded bg-muted" />
+          </div>
+        </div>
+        <div className="flex-1 animate-pulse rounded-2xl border border-border bg-surface p-4">
+          <div className="mb-4 h-10 rounded-xl bg-muted" />
+          <div className="space-y-2">
+            <div className="h-12 rounded-lg bg-muted" />
+            <div className="h-12 rounded-lg bg-muted" />
+            <div className="h-12 rounded-lg bg-muted" />
+          </div>
+        </div>
+      </div>
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}
+
 function SidebarItem({
   icon,
   label,
   active,
   onClick,
   testId,
+  collapsed = false,
 }: {
   icon: React.ReactNode;
   label: string;
   active?: boolean;
   onClick?: () => void;
   testId?: string;
+  collapsed?: boolean;
 }) {
   return (
     <button
       data-testid={testId}
       onClick={onClick}
-      className={`mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-white/10 ${
-        active ? "bg-white/10" : ""
+      title={collapsed ? label : undefined}
+      aria-label={collapsed ? label : undefined}
+      className={`sidebar-item mb-0.5 flex w-full items-center rounded-lg text-left ${
+        collapsed ? "justify-center px-2 py-2.5" : "gap-2.5 px-2.5 py-2"
+      } ${
+        active ? "is-active" : ""
       }`}
     >
       {icon}
-      {label}
+      {!collapsed && <span className="truncate">{label}</span>}
     </button>
   );
 }

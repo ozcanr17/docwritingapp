@@ -8,7 +8,10 @@
   --foreground: 224 20% 12%;
   --surface: 0 0% 100%;
   --surface-elevated: 0 0% 100%;
+  --surface-subtle: 220 17% 98%;
+  --surface-hover: 220 16% 93%;
   --border: 220 13% 86%;
+  --border-strong: 220 12% 77%;
   --muted: 220 14% 94%;
   --muted-foreground: 222 10% 42%;
   --primary: 222 72% 48%;
@@ -22,6 +25,7 @@
   --sidebar-background: 220 16% 97%;
   --sidebar-foreground: 224 18% 18%;
   --editor-background: 0 0% 100%;
+  --shadow-color: 222 28% 15%;
 }
 
 .dark {
@@ -30,7 +34,10 @@
   --foreground: 220 12% 91%;
   --surface: 224 10% 11%;
   --surface-elevated: 224 10% 15%;
+  --surface-subtle: 224 10% 12%;
+  --surface-hover: 223 9% 18%;
   --border: 223 9% 22%;
+  --border-strong: 222 9% 31%;
   --muted: 223 9% 17%;
   --muted-foreground: 222 8% 62%;
   --primary: 218 80% 62%;
@@ -44,6 +51,7 @@
   --sidebar-background: 225 9% 10%;
   --sidebar-foreground: 220 12% 88%;
   --editor-background: 224 9% 10%;
+  --shadow-color: 225 30% 2%;
 }
 
 body {
@@ -87,6 +95,42 @@ body {
 @layer components {
   .input {
     @apply block w-full rounded-lg border border-border bg-editorBackground px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-mutedForeground hover:border-mutedForeground/60 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-muted disabled:text-mutedForeground disabled:opacity-70;
+  }
+
+  .app-topbar {
+    background: hsl(var(--surface) / 0.88);
+    box-shadow: 0 1px 0 hsl(var(--border) / 0.55);
+    backdrop-filter: saturate(1.25) blur(18px);
+  }
+
+  .app-sidebar,
+  .app-main-surface {
+    box-shadow:
+      0 1px 2px hsl(var(--shadow-color) / 0.05),
+      0 10px 28px hsl(var(--shadow-color) / 0.045);
+  }
+
+  .section-label {
+    @apply text-[10px] font-semibold uppercase tracking-[0.13em] text-mutedForeground;
+  }
+
+  .icon-button {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-mutedForeground outline-none transition-colors hover:border-border hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .sidebar-item {
+    @apply relative text-[13px] font-medium text-sidebarForeground/80 outline-none transition-colors hover:bg-muted hover:text-sidebarForeground;
+  }
+
+  .sidebar-item.is-active {
+    @apply bg-primary/10 text-primary;
+    box-shadow: inset 3px 0 0 hsl(var(--primary));
+  }
+
+  .global-search-trigger {
+    box-shadow:
+      0 1px 2px hsl(var(--shadow-color) / 0.04),
+      0 4px 16px hsl(var(--shadow-color) / 0.035);
   }
 }
 
@@ -147,5 +191,20 @@ body {
   * {
     transition: none !important;
     animation: none !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-wordmark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .global-search-trigger {
+    width: clamp(10rem, 42vw, 15rem);
   }
 }
