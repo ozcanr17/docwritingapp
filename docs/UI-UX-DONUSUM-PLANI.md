@@ -57,11 +57,11 @@ Bu belge, DocSys'in profesyonel ve kurumsal bir urun arayuzune donusumunu izleme
 
 ## Asama 6 - Ayarlar, yonetim ve rol tabanli calisma alanlari
 
-- [ ] Ayarlari gorunum, yazim, klavye, erisilebilirlik, bildirim ve entegrasyon olarak yeniden gruplamak.
-- [ ] Yonetim ekranlarini kullanici, rol, kapsam, proje ve denetim kaydi ekseninde duzenlemek.
-- [ ] Yazar icin yazim/kalite, testci icin kosum, inceleyici icin degisiklik/onay odagini guclendirmek.
-- [ ] Yetki yok, salt okunur ve yonetici durumlarini arayuzde acikca gostermek.
-- [ ] Kullaniciya gorunen yetkiler ile sunucunun uyguladigi yetkilerin tutarli oldugunu test etmek.
+- [x] Ayarlari gorunum, yazim, klavye, erisilebilirlik, bildirim ve entegrasyon olarak yeniden gruplamak.
+- [x] Yonetim ekranlarini kullanici, rol, kapsam, proje ve denetim kaydi ekseninde duzenlemek.
+- [x] Yazar icin yazim/kalite, testci icin kosum, inceleyici icin degisiklik/onay odagini guclendirmek.
+- [x] Yetki yok, salt okunur ve yonetici durumlarini arayuzde acikca gostermek.
+- [x] Kullaniciya gorunen yetkiler ile sunucunun uyguladigi yetkilerin tutarli oldugunu test etmek.
 
 ## Asama 7 - Duyarli tasarim ve erisilebilirlik
 

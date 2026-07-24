@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Boxes, FileCog, Keyboard, Plug, RotateCcw, ShieldCheck, SlidersHorizontal, Users, X } from "lucide-react";
+import { Accessibility, Bell, FileCog, Keyboard, Palette, PenLine, Plug, RotateCcw, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentSummary } from "../lib/api";
@@ -19,7 +19,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
   const toast = useToastStore((state) => state.push);
   const themeMode = useThemeStore((state) => state.mode);
   const setThemeMode = useThemeStore((state) => state.setMode);
-  const [tab, setTab] = useState<"document" | "authoring" | "keyboard" | "roles" | "privacy" | "configurations" | "integrations" | "sso">("authoring");
+  const [tab, setTab] = useState<"document" | "appearance" | "authoring" | "keyboard" | "accessibility" | "notifications" | "roles" | "integrations">("appearance");
   const [pilotTelemetry, setPilotTelemetry] = useState(pilotTelemetryEnabled());
   const [name, setName] = useState("");
   const [kind, setKind] = useState("variant");
@@ -62,26 +62,27 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
     onError: (error) => toast("error", userFacingError(error, t)),
   });
   return (
-    <ModalSurface onClose={onClose} labelledBy="workspace-settings-title" testId="workspace-settings-dialog" panelClassName="flex max-h-[82vh] w-[46rem] max-w-full flex-col p-5">
-        <div className="mb-4 flex items-center justify-between"><h2 id="workspace-settings-title" className="font-semibold">{t("workspaceSettings")}</h2><button data-testid="close-workspace-settings" aria-label={t("close")} onClick={onClose}><X size={17} /></button></div>
-        <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-muted p-1">
-          {document.data?.documentType === "requirement" && <Tab active={tab === "document"} onClick={() => setTab("document")} icon={<FileCog size={14} />} label={t("documentSettings")} />}
-          <Tab active={tab === "authoring"} onClick={() => setTab("authoring")} icon={<SlidersHorizontal size={14} />} label={t("authoringSettings")} />
-          <Tab active={tab === "keyboard"} onClick={() => setTab("keyboard")} icon={<Keyboard size={14} />} label={t("keyboardShortcuts")} />
-          <Tab active={tab === "roles"} onClick={() => setTab("roles")} icon={<Users size={14} />} label={t("rolesAndAccess")} />
-          <Tab active={tab === "privacy"} onClick={() => setTab("privacy")} icon={<Activity size={14} />} label={t("privacyAndDiagnostics")} />
-          <Tab active={tab === "configurations"} onClick={() => setTab("configurations")} icon={<Boxes size={14} />} label={t("configurations")} />
-          <Tab active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<Plug size={14} />} label={t("integrations")} />
-          <Tab active={tab === "sso"} onClick={() => setTab("sso")} icon={<ShieldCheck size={14} />} label={t("sso")} />
-        </div>
-        <div className="min-h-0 overflow-auto">
+    <ModalSurface onClose={onClose} labelledBy="workspace-settings-title" testId="workspace-settings-dialog" panelClassName="flex max-h-[86vh] w-[60rem] max-w-full flex-col">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 id="workspace-settings-title" className="font-semibold">{t("workspaceSettings")}</h2><p className="mt-0.5 text-xs text-mutedForeground">{t("workspaceSettingsDescription")}</p></div><button data-testid="close-workspace-settings" aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></div>
+        <div className="grid min-h-0 flex-1 md:grid-cols-[13rem_minmax(0,1fr)]">
+        <nav aria-label={t("workspaceSettings")} className="flex gap-1 overflow-x-auto border-b border-border bg-muted/25 p-3 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r">
+          {document.data?.documentType === "requirement" && <Tab active={tab === "document"} onClick={() => setTab("document")} icon={<FileCog size={15} />} label={t("documentSettings")} />}
+          <Tab active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette size={15} />} label={t("appearanceSettings")} />
+          <Tab active={tab === "authoring"} onClick={() => setTab("authoring")} icon={<PenLine size={15} />} label={t("authoringSettings")} />
+          <Tab active={tab === "keyboard"} onClick={() => setTab("keyboard")} icon={<Keyboard size={15} />} label={t("keyboardShortcuts")} />
+          <Tab active={tab === "accessibility"} onClick={() => setTab("accessibility")} icon={<Accessibility size={15} />} label={t("accessibilitySettings")} />
+          <Tab active={tab === "notifications"} onClick={() => setTab("notifications")} icon={<Bell size={15} />} label={t("notifications")} />
+          <Tab active={tab === "roles"} onClick={() => setTab("roles")} icon={<Users size={15} />} label={t("rolesAndAccess")} />
+          <Tab active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<Plug size={15} />} label={t("integrations")} />
+        </nav>
+        <div className="min-h-0 overflow-auto p-5">
         {tab === "document" && document.data?.documentType === "requirement" && <SettingsSection title={t("requirementNumberingSettings")} description={t("requirementNumberingSettingsHelp")}>
           <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); if (/^[A-Za-z][A-Za-z0-9]{0,19}$/.test(requirementPrefix)) updateDocument.mutate(); }}>
             <label className="block text-sm"><span className="font-medium">{t("requirementPrefix")}</span><span className="mt-0.5 block text-xs text-mutedForeground">{t("requirementPrefixHelp")}</span><div className="mt-2 flex items-center gap-2"><input data-testid="requirement-prefix" className="w-40 rounded-lg border border-border bg-editorBackground px-3 py-2 uppercase" maxLength={20} value={requirementPrefix} onChange={(event) => setRequirementPrefix(event.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase())} /><span className="font-mono text-sm text-mutedForeground">{`${requirementPrefix || "REQ"}-001`}</span></div></label>
             <button data-testid="save-requirement-prefix" className="rounded-lg bg-primary px-3 py-2 text-sm text-primaryForeground disabled:opacity-50" disabled={!/^[A-Za-z][A-Za-z0-9]{0,19}$/.test(requirementPrefix) || updateDocument.isPending}>{t("save")}</button>
           </form>
         </SettingsSection>}
-        {tab === "authoring" && <div className="space-y-4">
+        {tab === "appearance" && <div className="space-y-4">
           <SettingsSection title={t("documentAppearanceSettings")} description={t("documentAppearanceSettingsHelp")}>
             <div className="grid grid-cols-3 gap-2">
               <ChoiceButton active={themeMode === "light"} label={t("themeLight")} onClick={() => setThemeMode("light")} />
@@ -102,28 +103,46 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
               <label className="rounded-lg border border-border bg-editorBackground p-3 text-sm"><span className="block font-medium">{t("documentFontFamily")}</span><span className="mt-0.5 block text-xs text-mutedForeground">{t("documentFontFamilyHelp")}</span><select data-testid="document-font-family" className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-1.5" value={preferences.documentFontFamily} onChange={(event) => preferences.setDocumentFontFamily(event.target.value as DocumentFontFamily)}><option value="system">{t("fontSystem")}</option><option value="sans">{t("fontSans")}</option><option value="serif">{t("fontSerif")}</option><option value="mono">{t("fontMono")}</option></select></label>
             </div>
             <div data-testid="document-font-preview" className="rounded-lg border border-dashed border-border bg-surface px-4 py-3" style={{ fontFamily: documentFontFamilies[preferences.documentFontFamily], fontSize: preferences.documentFontSize }}>{t("documentFontPreview")}</div>
-            <ToggleRow label={t("showHierarchyGuides")} description={t("showHierarchyGuidesHelp")} checked={preferences.showHierarchyGuides} onChange={preferences.setShowHierarchyGuides} />
-            <ToggleRow label={t("showChangeIndicators")} description={t("showChangeIndicatorsHelp")} checked={preferences.showChangeIndicators} onChange={preferences.setShowChangeIndicators} />
-            <ToggleRow label={t("highContrast")} description={t("highContrastHelp")} checked={preferences.highContrast} onChange={preferences.setHighContrast} />
           </SettingsSection>
+        </div>}
+        {tab === "authoring" && <div className="space-y-4">
           <SettingsSection title={t("authoringBehaviorSettings")} description={t("authoringBehaviorSettingsHelp")}>
             <ToggleRow label={t("enableSpellCheck")} description={t("enableSpellCheckHelp")} checked={preferences.spellCheck} onChange={preferences.setSpellCheck} />
+            <ToggleRow label={t("showHierarchyGuides")} description={t("showHierarchyGuidesHelp")} checked={preferences.showHierarchyGuides} onChange={preferences.setShowHierarchyGuides} />
+            <ToggleRow label={t("showChangeIndicators")} description={t("showChangeIndicatorsHelp")} checked={preferences.showChangeIndicators} onChange={preferences.setShowChangeIndicators} />
             <label className="flex items-center justify-between gap-4 rounded-lg border border-border bg-editorBackground p-3 text-sm"><span><span className="block font-medium">{t("defaultFrozenColumns")}</span><span className="mt-0.5 block text-xs text-mutedForeground">{t("defaultFrozenColumnsHelp")}</span></span><select className="rounded-lg border border-border bg-surface px-3 py-1.5" value={preferences.defaultFrozenColumns} onChange={(event) => preferences.setDefaultFrozenColumns(Number(event.target.value))}>{[0, 1, 2, 3, 4, 5].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
           </SettingsSection>
           <div className="flex justify-end"><button className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={preferences.reset}><RotateCcw size={14} />{t("restoreDefaults")}</button></div>
         </div>}
         {tab === "keyboard" && <SettingsSection title={t("keyboardShortcuts")} description={t("keyboardShortcutsHelp")}><KeyboardShortcutsSettings /></SettingsSection>}
+        {tab === "accessibility" && <SettingsSection title={t("accessibilitySettings")} description={t("accessibilitySettingsHelp")}>
+          <ToggleRow label={t("highContrast")} description={t("highContrastHelp")} checked={preferences.highContrast} onChange={preferences.setHighContrast} />
+          <ToggleRow label={t("reduceMotion")} description={t("reduceMotionHelp")} checked={preferences.reduceMotion} onChange={preferences.setReduceMotion} />
+          <p className="rounded-lg border border-info/25 bg-info/10 p-3 text-xs leading-5 text-info">{t("accessibilityKeyboardNotice")}</p>
+        </SettingsSection>}
+        {tab === "notifications" && <div className="space-y-4">
+          <SettingsSection title={t("notificationPreferences")} description={t("notificationPreferencesHelp")}>
+            <ToggleRow label={t("notifyMentions")} description={t("notifyMentionsHelp")} checked={preferences.notifyMentions} onChange={preferences.setNotifyMentions} />
+            <ToggleRow label={t("notifyAssignments")} description={t("notifyAssignmentsHelp")} checked={preferences.notifyAssignments} onChange={preferences.setNotifyAssignments} />
+            <ToggleRow label={t("notifyReviewRequests")} description={t("notifyReviewRequestsHelp")} checked={preferences.notifyReviewRequests} onChange={preferences.setNotifyReviewRequests} />
+          </SettingsSection>
+          <SettingsSection title={t("privacyAndDiagnostics")} description={t("privacyAndDiagnosticsHelp")}><ToggleRow label={t("pilotTelemetry")} description={t("pilotTelemetryHelp")} checked={pilotTelemetry} onChange={(checked) => { setPilotTelemetry(checked); setPilotTelemetryEnabled(checked); }} /><p className="rounded-lg border border-border bg-editorBackground p-3 text-xs text-mutedForeground">{t("pilotTelemetryDataNotice")}</p></SettingsSection>
+        </div>}
         {tab === "roles" && <SettingsSection title={t("rolesAndAccess")} description={t("rolesAndAccessHelp")}><RoleGuide /></SettingsSection>}
-        {tab === "privacy" && <SettingsSection title={t("privacyAndDiagnostics")} description={t("privacyAndDiagnosticsHelp")}><ToggleRow label={t("pilotTelemetry")} description={t("pilotTelemetryHelp")} checked={pilotTelemetry} onChange={(checked) => { setPilotTelemetry(checked); setPilotTelemetryEnabled(checked); }} /><p className="rounded-lg border border-border bg-editorBackground p-3 text-xs text-mutedForeground">{t("pilotTelemetryDataNotice")}</p></SettingsSection>}
-        {tab === "configurations" && <div className="space-y-3">
-          <div className="grid max-h-56 grid-cols-2 gap-2 overflow-auto">{configurations.data?.map((item) => <div key={item.id} className="rounded-xl border border-border bg-editorBackground p-3"><div className="font-medium">{item.name}</div><div className="text-xs text-mutedForeground">{item.kind}</div></div>)}</div>
-          <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (name.trim()) createConfiguration.mutate(); }}><input className="min-w-0 flex-1 rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder={t("configurationName")} value={name} onChange={(event) => setName(event.target.value)} /><select className="rounded-lg border border-border bg-editorBackground px-2" value={kind} onChange={(event) => setKind(event.target.value)}><option value="stream">Stream</option><option value="baseline">Baseline</option><option value="variant">Variant</option></select><button className="rounded-lg bg-primary px-3 text-primaryForeground">{t("create")}</button></form>
+        {tab === "integrations" && <div className="space-y-4">
+          <SettingsSection title={t("configurations")} description={t("configurationSettingsHelp")}>
+            <div className="grid max-h-40 gap-2 sm:grid-cols-2 overflow-auto">{configurations.data?.map((item) => <div key={item.id} className="rounded-xl border border-border bg-editorBackground p-3"><div className="font-medium">{item.name}</div><div className="text-xs text-mutedForeground">{item.kind}</div></div>)}</div>
+            <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); if (name.trim()) createConfiguration.mutate(); }}><input className="min-w-48 flex-1 rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder={t("configurationName")} value={name} onChange={(event) => setName(event.target.value)} /><select className="rounded-lg border border-border bg-editorBackground px-2" value={kind} onChange={(event) => setKind(event.target.value)}><option value="stream">Stream</option><option value="baseline">Baseline</option><option value="variant">Variant</option></select><button className="rounded-lg bg-primary px-3 text-primaryForeground">{t("create")}</button></form>
+          </SettingsSection>
+          <SettingsSection title={t("integrations")} description={t("integrationSettingsHelp")}>
+            {integrations.data?.map((item) => <div key={item.id} className="flex justify-between rounded-xl border border-border bg-editorBackground p-3"><span>{item.name}</span><span className="text-xs text-mutedForeground">{item.integrationType}</span></div>)}
+            <form className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]" onSubmit={(event) => { event.preventDefault(); if (integrationUrl.trim()) createIntegration.mutate(); }}><input className="rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder={t("name")} value={name} onChange={(event) => setName(event.target.value)} /><input type="url" className="rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder="https://..." value={integrationUrl} onChange={(event) => setIntegrationUrl(event.target.value)} /><button className="rounded-lg bg-primary px-3 text-primaryForeground">{t("add")}</button></form>
+          </SettingsSection>
+          <SettingsSection title={t("sso")} description={t("ssoHint")}>
+            <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); configureSso.mutate(); }}><input type="url" className="w-full rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder="https://identity.example.com" value={issuer} onChange={(event) => setIssuer(event.target.value)} /><input className="w-full rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder={t("clientId")} value={clientId} onChange={(event) => setClientId(event.target.value)} /><button className="rounded-lg bg-primary px-3 py-2 text-primaryForeground" disabled={!issuer || !clientId}>{t("save")}</button></form>
+          </SettingsSection>
         </div>}
-        {tab === "integrations" && <div className="space-y-3">
-          {integrations.data?.map((item) => <div key={item.id} className="flex justify-between rounded-xl border border-border bg-editorBackground p-3"><span>{item.name}</span><span className="text-xs text-mutedForeground">{item.integrationType}</span></div>)}
-          <form className="grid grid-cols-[1fr_2fr_auto] gap-2" onSubmit={(event) => { event.preventDefault(); if (integrationUrl.trim()) createIntegration.mutate(); }}><input className="rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder={t("name")} value={name} onChange={(event) => setName(event.target.value)} /><input type="url" className="rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder="https://..." value={integrationUrl} onChange={(event) => setIntegrationUrl(event.target.value)} /><button className="rounded-lg bg-primary px-3 text-primaryForeground">{t("add")}</button></form>
-        </div>}
-        {tab === "sso" && <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); configureSso.mutate(); }}><p className="text-sm text-mutedForeground">{t("ssoHint")}</p><input type="url" className="w-full rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder="https://identity.example.com" value={issuer} onChange={(event) => setIssuer(event.target.value)} /><input className="w-full rounded-lg border border-border bg-editorBackground px-3 py-2" placeholder={t("clientId")} value={clientId} onChange={(event) => setClientId(event.target.value)} /><button className="rounded-lg bg-primary px-3 py-2 text-primaryForeground" disabled={!issuer || !clientId}>{t("save")}</button></form>}
+        </div>
         </div>
     </ModalSurface>
   );
@@ -142,5 +161,5 @@ function ChoiceButton({ active, label, onClick, testId }: { active: boolean; lab
 }
 
 function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return <button className={`flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm ${active ? "bg-surface shadow-sm" : "text-mutedForeground"}`} onClick={onClick}>{icon}{label}</button>;
+  return <button type="button" aria-current={active ? "page" : undefined} className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm ${active ? "bg-surface text-primary shadow-sm" : "text-mutedForeground hover:bg-muted hover:text-foreground"}`} onClick={onClick}>{icon}{label}</button>;
 }

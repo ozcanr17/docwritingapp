@@ -484,7 +484,7 @@ export function ShellPage() {
               onClick={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primaryForeground">{initials(profile.data.displayName)}</span>
-              {!sidebarCollapsed && <span className="min-w-0"><span className="block truncate text-sm font-medium">{profile.data.displayName}</span><span className="block truncate text-[10px] text-mutedForeground">{profile.data.email}</span></span>}
+              {!sidebarCollapsed && <span className="min-w-0"><span className="flex items-center gap-1.5 truncate text-sm font-medium">{profile.data.displayName}{organizationAccess.data?.canManage && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">{t("administratorBadge")}</span>}</span><span className="block truncate text-[10px] text-mutedForeground">{profile.data.email}</span></span>}
             </button>
           <button
             data-testid="logout"
@@ -638,7 +638,19 @@ export function ShellPage() {
         ) : view === "documents" ? (
           <div data-testid="workspace-empty-state" className="flex min-h-0 flex-1 items-center justify-center p-8">
               <div className="w-full max-w-3xl rounded-2xl border border-border bg-surfaceElevated p-6 shadow-sm">
-              <RoleWorkspaceHeader focus={workspaceFocus} onChange={setWorkspaceFocus} />
+              <RoleWorkspaceHeader
+                focus={workspaceFocus}
+                onChange={setWorkspaceFocus}
+                actionDisabled={workspaceFocus !== "tester" && recentDocuments.length === 0}
+                onAction={() => {
+                  if (workspaceFocus === "tester") {
+                    setView("work");
+                    return;
+                  }
+                  const recent = recentDocuments[0];
+                  if (recent) openDocument(recent);
+                }}
+              />
               {(favoriteDocuments.length > 0 || recentDocuments.length > 0) && (
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
                   {favoriteDocuments.length > 0 && <WorkspaceDocumentList title={t("favorites")} icon="favorite" documents={favoriteDocuments.slice(0, 5)} onOpen={openDocument} />}
@@ -683,7 +695,7 @@ function WorkspaceDocumentList({ title, icon, documents, onOpen }: { title: stri
   </section>;
 }
 
-function RoleWorkspaceHeader({ focus, onChange }: { focus: WorkspaceFocus; onChange: (focus: WorkspaceFocus) => void }) {
+function RoleWorkspaceHeader({ focus, onChange, onAction, actionDisabled }: { focus: WorkspaceFocus; onChange: (focus: WorkspaceFocus) => void; onAction: () => void; actionDisabled: boolean }) {
   const { t } = useTranslation();
   const options: Array<{ value: WorkspaceFocus; icon: React.ReactNode }> = [
     { value: "author", icon: <PenLine size={15} /> },
@@ -692,7 +704,7 @@ function RoleWorkspaceHeader({ focus, onChange }: { focus: WorkspaceFocus; onCha
   ];
   return <section aria-labelledby="workspace-focus-title">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><div id="workspace-focus-title" className="text-base font-semibold text-foreground">{t(`workspaceFocus.${focus}.title`)}</div><p className="mt-1 max-w-2xl text-sm leading-6 text-mutedForeground">{t(`workspaceFocus.${focus}.description`)}</p></div>
+      <div><div id="workspace-focus-title" className="text-base font-semibold text-foreground">{t(`workspaceFocus.${focus}.title`)}</div><p className="mt-1 max-w-2xl text-sm leading-6 text-mutedForeground">{t(`workspaceFocus.${focus}.description`)}</p><button type="button" data-testid="workspace-focus-action" disabled={actionDisabled} className="mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primaryForeground disabled:opacity-40" onClick={onAction}>{t(`workspaceFocus.${focus}.action`)}</button></div>
       <div className="flex rounded-xl border border-border bg-editorBackground p-1" role="tablist" aria-label={t("workspaceFocus.label")}>
         {options.map((option) => <button key={option.value} type="button" role="tab" aria-selected={focus === option.value} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium ${focus === option.value ? "bg-surface text-primary shadow-sm" : "text-mutedForeground hover:text-foreground"}`} onClick={() => onChange(option.value)}>{option.icon}{t(`workspaceFocus.${option.value}.label`)}</button>)}
       </div>
@@ -714,14 +726,20 @@ function DocumentPane({ tab, displayName, focused, split, position, onFocus }: {
   if (!tab || document.isLoading) return <PanelLoading />;
   if (document.error instanceof ApiError && document.error.status === 403) return <section data-testid={`document-pane-${position}`} className="flex min-w-0 flex-1 items-center justify-center rounded-lg bg-surface p-8"><div className="max-w-md text-center"><LockAccessIcon /><h2 className="mt-4 font-semibold">{t("fileAccessDenied")}</h2><p className="mt-2 text-sm text-mutedForeground">{t("fileAccessDeniedDescription")}</p></div></section>;
   const readOnly = !document.data?.access?.canWrite;
+  const canManageAccess = Boolean(document.data?.access?.canManage);
   return (
     <section data-testid={`document-pane-${position}`} data-document-id={tab.id} data-focused={focused ? "true" : "false"} aria-label={`${tab.title}${split ? ` · ${focused ? t("focusedPane") : t("secondaryPane")}` : ""}`} className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-surface transition-shadow ${focused && split ? "ring-2 ring-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.18)]" : split ? "ring-1 ring-border" : ""}`} onMouseDownCapture={onFocus}>
-      {split && <div className={`flex h-9 shrink-0 items-center justify-between border-b px-3 text-xs ${focused ? "border-primary bg-primary/10 text-foreground" : "border-border bg-editorBackground text-mutedForeground"}`}><span className="truncate font-semibold">{tab.title}</span><div className="flex items-center gap-2">{readOnly && <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">{t("readOnly")}</span>}<span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${focused ? "bg-primary text-primaryForeground" : "bg-muted"}`}>{focused ? t("focusedPane") : t("secondaryPane")}</span></div></div>}
+      {(split || readOnly) && <DocumentAccessBanner title={tab.title} split={split} focused={focused} readOnly={readOnly} canManageAccess={canManageAccess} />}
       <Suspense fallback={<PanelLoading />}>
         {tab.documentType === "general_document" ? <RichTextEditor documentId={tab.id} displayName={displayName} readOnly={readOnly} /> : <DocumentGrid documentId={tab.id} documentType={tab.documentType === "test" ? "test" : "requirement"} advancedTargetId={`docsys-toolbar-${tab.id}`} showAdvancedControls readOnly={readOnly} />}
       </Suspense>
     </section>
   );
+}
+
+export function DocumentAccessBanner({ title, split, focused, readOnly, canManageAccess }: { title: string; split: boolean; focused: boolean; readOnly: boolean; canManageAccess: boolean }) {
+  const { t } = useTranslation();
+  return <div role="status" className={`flex min-h-9 shrink-0 items-center justify-between gap-3 border-b px-3 py-1.5 text-xs ${focused && split ? "border-primary bg-primary/10 text-foreground" : "border-border bg-editorBackground text-mutedForeground"}`}><span className="min-w-0 truncate font-semibold">{split ? title : t("readOnlyDocumentNotice")}</span><div className="flex shrink-0 items-center gap-2">{readOnly && <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">{t("readOnly")}</span>}{canManageAccess && split && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">{t("accessManager")}</span>}{split && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${focused ? "bg-primary text-primaryForeground" : "bg-muted"}`}>{focused ? t("focusedPane") : t("secondaryPane")}</span>}</div></div>;
 }
 
 function LockAccessIcon() {

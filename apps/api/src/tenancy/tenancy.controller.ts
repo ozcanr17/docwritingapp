@@ -88,6 +88,11 @@ export class TenancyController {
     return this.tenancy.listMembers(user.userId, orgId);
   }
 
+  @Get("organizations/:orgId/administration-summary")
+  administrationSummary(@CurrentUser() user: SessionUser, @Param("orgId", ParseUUIDPipe) orgId: string) {
+    return this.tenancy.administrationSummary(user.userId, orgId);
+  }
+
   @Post("organizations/:orgId/users")
   createUser(
     @CurrentUser() user: SessionUser,

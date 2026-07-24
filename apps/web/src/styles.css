@@ -219,6 +219,15 @@ body {
   }
 }
 
+.docsys-reduce-motion *,
+.docsys-reduce-motion *::before,
+.docsys-reduce-motion *::after {
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+}
+
 @media (max-width: 720px) {
   .app-wordmark {
     position: absolute;

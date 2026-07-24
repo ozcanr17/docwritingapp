@@ -6,7 +6,19 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 through 5 are complete. Stage 6 (settings, administration and role-based workspaces) is next.
+The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 through 6 are complete. Stage 7 (responsive design and accessibility) is next.
+
+### What was completed in UI/UX Stage 6
+
+1. Reorganized Workspace Settings into a responsive category navigation: Document, Appearance, Authoring, Keyboard, Accessibility, Notifications, Roles and Access, and Integrations. Configuration, webhook and SSO administration now share one integrations area instead of competing for top-level space.
+2. Added persisted reduced-motion and notification preferences for mentions, assignments and review requests. Reduced motion is applied at the application root, while high contrast, density, document font, authoring and keyboard preferences retain their existing immediate behavior.
+3. Rebuilt the administrator surface around Overview, Users and Roles, Audit Log, and Pilot Feedback. The overview exposes workspace, project, document and restricted-document scope; role distribution; active-user/admin counts; and governance guidance.
+4. Added the server-authoritative `administration-summary` endpoint. It requires `org.manage`, derives scope counts from tenant data and returns the latest 25 audit events. API tests prove that a viewer receives HTTP 403 while an organization administrator receives the scoped summary.
+5. Strengthened role-oriented entry points: Author and Reviewer focus opens the latest document, Tester focus opens Work and Tests, and administrators receive a visible account badge without changing server authorization.
+6. Made permission state explicit in the document surface. Read-only documents show a persistent explanatory banner, split panes identify the focused/secondary document and access managers, and existing access-denied handling still prevents unauthorized document opening.
+7. Added focused UI regression tests for settings grouping and preferences, administrator navigation and scope, and read-only/split permission banners. Live macOS validation confirmed settings, administrator overview, organization metrics and populated audit history against the running services.
+8. The complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **118 web + 71 API + 13 worker = 202/202 tests**, production build and bundle budget; initial gzip is **129.4 KiB**.
+9. Desktop code and packages remain intentionally unchanged, per the user's instruction for this transformation.
 
 ### What was completed in UI/UX Stage 5
 
@@ -112,12 +124,13 @@ The active task is the user-approved **eight-stage professional UI/UX transforma
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stages 1 through 4 are complete and Stage 5 is ready to start. The current in-app browser can reach the user's host `localhost:5173`; do not stop or replace the user's correctly running dev services without a concrete need. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. UI/UX Stages 1 through 6 are complete and Stage 7 is ready to start. The current in-app browser can reach the user's host `localhost:5173`; do not stop or replace the user's correctly running dev services without a concrete need. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
-1. Implement Stage 5 from `docs/UI-UX-DONUSUM-PLANI.md`: reorganize Work and tests into a Jira-grade but document-aware information architecture.
-2. Simplify transitions among defects, tasks, test plans, test sets, executions and evidence while retaining requirement/document context.
+1. Implement Stage 7 from `docs/UI-UX-DONUSUM-PLANI.md`: define and test minimum-width behavior for the main panel, Explorer, details panel and both split orientations.
+2. Audit keyboard order, focus rings, skip links and screen-reader names; then close WCAG 2.2 AA gaps found by automated and manual checks.
+3. Exercise high contrast, reduced motion and enlarged text together, and ensure every state currently carried by color also has an icon or readable label.
 3. Unify saved views and filters across work list, board and detail surfaces.
 4. Add one readable requirement-test-execution-defect flow and role-relevant author/test/review landing metrics.
 5. Standardize actionable API and validation errors without leaking server internals or replacing precise conflict/permission explanations with generic failures.

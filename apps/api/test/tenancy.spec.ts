@@ -208,11 +208,19 @@ describe("tenancy and isolation", () => {
     }));
     const deniedMemberAdministration = await app.inject({ method: "GET", url: `/organizations/${org.id}/members`, headers: { cookie: viewer.cookie } });
     expect(deniedMemberAdministration.statusCode).toBe(403);
+    const deniedAdministrationSummary = await app.inject({ method: "GET", url: `/organizations/${org.id}/administration-summary`, headers: { cookie: viewer.cookie } });
+    expect(deniedAdministrationSummary.statusCode).toBe(403);
     const selfDemotion = await app.inject({ method: "PATCH", url: `/organizations/${org.id}/members/${owner.userId}`, headers: { cookie: owner.cookie }, payload: { roleKey: "viewer" } });
     expect(selfDemotion.statusCode).toBe(400);
     const createdUser = await app.inject({ method: "POST", url: `/organizations/${org.id}/users`, headers: { cookie: owner.cookie }, payload: { email: "managed-user@example.com", displayName: "Managed User", password: "SafePassword-123", roleKey: "reviewer" } });
     expect(createdUser.statusCode).toBe(201);
     const members = await app.inject({ method: "GET", url: `/organizations/${org.id}/members`, headers: { cookie: owner.cookie } });
     expect((JSON.parse(members.body) as Array<{ email: string; roleKey: string }>)).toContainEqual(expect.objectContaining({ email: "managed-user@example.com", roleKey: "reviewer" }));
+    const administrationSummary = await app.inject({ method: "GET", url: `/organizations/${org.id}/administration-summary`, headers: { cookie: owner.cookie } });
+    expect(administrationSummary.statusCode).toBe(200);
+    expect(JSON.parse(administrationSummary.body)).toEqual(expect.objectContaining({
+      scope: expect.objectContaining({ workspaces: 1, documents: 2, restrictedDocuments: 2 }),
+      recentAudit: expect.arrayContaining([expect.objectContaining({ action: "organization.user_created" })]),
+    }));
   });
 });

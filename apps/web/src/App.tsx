@@ -16,9 +16,11 @@ const queryClient = new QueryClient({
 
 export function App() {
   const highContrast = useAuthoringPreferencesStore((state) => state.highContrast);
+  const reduceMotion = useAuthoringPreferencesStore((state) => state.reduceMotion);
   useEffect(() => {
     document.documentElement.classList.toggle("docsys-high-contrast", highContrast);
-  }, [highContrast]);
+    document.documentElement.classList.toggle("docsys-reduce-motion", reduceMotion);
+  }, [highContrast, reduceMotion]);
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>

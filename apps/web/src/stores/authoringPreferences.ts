@@ -14,6 +14,10 @@ interface AuthoringPreferencesState {
   documentFontSize: number;
   documentFontFamily: DocumentFontFamily;
   highContrast: boolean;
+  reduceMotion: boolean;
+  notifyMentions: boolean;
+  notifyAssignments: boolean;
+  notifyReviewRequests: boolean;
   workspaceFocus: WorkspaceFocus;
   setRowDensity: (rowDensity: RowDensity) => void;
   setShowHierarchyGuides: (showHierarchyGuides: boolean) => void;
@@ -23,6 +27,10 @@ interface AuthoringPreferencesState {
   setDocumentFontSize: (documentFontSize: number) => void;
   setDocumentFontFamily: (documentFontFamily: DocumentFontFamily) => void;
   setHighContrast: (highContrast: boolean) => void;
+  setReduceMotion: (reduceMotion: boolean) => void;
+  setNotifyMentions: (notifyMentions: boolean) => void;
+  setNotifyAssignments: (notifyAssignments: boolean) => void;
+  setNotifyReviewRequests: (notifyReviewRequests: boolean) => void;
   setWorkspaceFocus: (workspaceFocus: WorkspaceFocus) => void;
   reset: () => void;
 }
@@ -36,6 +44,10 @@ const defaults = {
   documentFontSize: 14,
   documentFontFamily: "system" as DocumentFontFamily,
   highContrast: false,
+  reduceMotion: false,
+  notifyMentions: true,
+  notifyAssignments: true,
+  notifyReviewRequests: true,
   workspaceFocus: "author" as WorkspaceFocus,
 };
 
@@ -51,6 +63,10 @@ export const useAuthoringPreferencesStore = create<AuthoringPreferencesState>()(
       setDocumentFontSize: (documentFontSize) => set({ documentFontSize: Math.max(12, Math.min(20, documentFontSize)) }),
       setDocumentFontFamily: (documentFontFamily) => set({ documentFontFamily }),
       setHighContrast: (highContrast) => set({ highContrast }),
+      setReduceMotion: (reduceMotion) => set({ reduceMotion }),
+      setNotifyMentions: (notifyMentions) => set({ notifyMentions }),
+      setNotifyAssignments: (notifyAssignments) => set({ notifyAssignments }),
+      setNotifyReviewRequests: (notifyReviewRequests) => set({ notifyReviewRequests }),
       setWorkspaceFocus: (workspaceFocus) => set({ workspaceFocus }),
       reset: () => set(defaults),
     }),

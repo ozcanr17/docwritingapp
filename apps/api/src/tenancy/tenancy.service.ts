@@ -164,6 +164,40 @@ export class TenancyService {
     }));
   }
 
+  async administrationSummary(actorId: string, organizationId: string) {
+    await this.access.assertPermission(actorId, "org.manage", { organizationId });
+    const [workspaceCount, projectCount, documentCount, restrictedDocumentCount, recentAudit] = await Promise.all([
+      this.prisma.workspace.count({ where: { organizationId, deletedAt: null } }),
+      this.prisma.project.count({ where: { organizationId, deletedAt: null } }),
+      this.prisma.document.count({ where: { organizationId, deletedAt: null } }),
+      this.prisma.document.count({ where: { organizationId, deletedAt: null, accessGrants: { some: {} } } }),
+      this.prisma.auditEvent.findMany({
+        where: { organizationId },
+        orderBy: { createdAt: "desc" },
+        take: 25,
+        select: {
+          id: true,
+          action: true,
+          entityType: true,
+          entityId: true,
+          actorId: true,
+          workspaceId: true,
+          documentId: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+    return {
+      scope: {
+        workspaces: workspaceCount,
+        projects: projectCount,
+        documents: documentCount,
+        restrictedDocuments: restrictedDocumentCount,
+      },
+      recentAudit,
+    };
+  }
+
   async createUser(actorId: string, organizationId: string, input: { email: string; displayName: string; password: string; roleKey: string }) {
     await this.access.assertPermission(actorId, "org.manage", { organizationId });
     const email = input.email.trim().toLocaleLowerCase();
