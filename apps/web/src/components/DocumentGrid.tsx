@@ -333,7 +333,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
     count: displayedRows.length,
     getScrollElement: () => scrollRef.current,
     getItemKey: (index) => displayedRows[index]?.id ?? index,
-    estimateSize: () => rowDensity === "compact" ? 40 : rowDensity === "comfortable" ? 64 : 52,
+    estimateSize: () => rowDensity === "compact" ? 32 : rowDensity === "comfortable" ? 48 : 40,
     overscan: 20,
     initialRect: { width: 1000, height: 600 },
   });
@@ -1218,7 +1218,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                   aria-label={`${t("rowId")} ${row.objectNumber}: ${row.title || row.rowType}`}
                   data-row-state={rowState}
                   draggable={!readOnly && editing?.rowId !== row.id}
-                  className={`group absolute left-0 top-0 grid items-stretch gap-2 border-b border-border bg-editorBackground px-4 transition-colors hover:bg-muted/70 ${rowDensity === "compact" ? "min-h-10 py-0.5" : rowDensity === "comfortable" ? "min-h-16 py-2.5" : "min-h-[52px] py-1.5"} ${
+                  className={`group absolute left-0 top-0 grid items-stretch gap-2 border-b border-border bg-editorBackground px-3 transition-colors hover:bg-muted/70 ${rowDensity === "compact" ? "min-h-8 py-0.5" : rowDensity === "comfortable" ? "min-h-12 py-1.5" : "min-h-10 py-1"} ${
                     isSelected && !isPrimarySelection ? "z-[1] bg-primary/5 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3)]" : ""
                   } ${isPrimarySelection ? "z-[2] bg-selection shadow-[inset_0_0_0_2px_hsl(var(--primary)/0.62)]" : ""
                   } ${isEditingRow ? "bg-primary/15 shadow-[inset_4px_0_0_hsl(var(--primary)),inset_0_0_0_2px_hsl(var(--primary)/0.78)]" : ""
@@ -1764,7 +1764,7 @@ function GridCell({
       title={editable ? cellHelp : columnLabel}
       aria-label={!display && editable ? cellHelp : undefined}
       className={`relative block w-full whitespace-pre-wrap break-words text-left [overflow-wrap:anywhere] ${
-        rowDensity === "compact" ? "min-h-8 py-1 leading-5" : rowDensity === "comfortable" ? "min-h-12 py-3 leading-7" : "min-h-10 py-2 leading-6"
+        rowDensity === "compact" ? "min-h-6 py-0.5 leading-5" : rowDensity === "comfortable" ? "min-h-10 py-2 leading-6" : "min-h-8 py-1 leading-6"
       } ${
         numberedTitle ? "font-semibold text-foreground" : ""
       } ${editable ? "rounded px-1 transition-colors hover:bg-primary/5 hover:ring-1 hover:ring-primary/20" : "cursor-default text-mutedForeground"}`}

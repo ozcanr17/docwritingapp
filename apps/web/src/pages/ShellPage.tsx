@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, ClipboardCheck, Clock3, FileKey2, FileText, FlaskConical, LogOut, PanelLeftClose, PanelLeftOpen, PenLine, Settings, ShieldCheck, Star, Trash2, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { MenuBar } from "../components/MenuBar";
 import { DocumentTabsBar } from "../components/DocumentTabsBar";
@@ -20,6 +20,7 @@ import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
 import { useOnboardingStore } from "../stores/onboarding";
 import { SaveStatusIndicator } from "../components/SaveStatusIndicator";
+import { Avatar, AvatarGroup } from "../components/ui";
 import { useAuthoringPreferencesStore, WorkspaceFocus } from "../stores/authoringPreferences";
 import { recordPilotEvent } from "../lib/pilotTelemetry";
 import { resolveResponsiveLayout } from "../lib/responsiveLayout";
@@ -52,16 +53,36 @@ interface Workspace {
   name: string;
 }
 
-function initials(displayName: string): string {
-  const parts = displayName.trim().split(/\s+/).filter(Boolean);
-  return `${parts[0]?.charAt(0) ?? "?"}${parts.length > 1 ? parts.at(-1)?.charAt(0) ?? "" : ""}`.toLocaleUpperCase();
+type ShellView = "documents" | "work" | "trash";
+
+function viewForPath(pathname: string): ShellView {
+  if (pathname.startsWith("/work")) return "work";
+  if (pathname.startsWith("/trash")) return "trash";
+  return "documents";
 }
 
 export function ShellPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<"documents" | "work" | "trash">("documents");
+  const view = viewForPath(location.pathname);
+  const routeDocumentId = useMemo(
+    () => /^\/docs\/([0-9a-fA-F-]{36})(?:\/|$)/.exec(location.pathname)?.[1] ?? null,
+    [location.pathname],
+  );
+  const setView = useCallback((next: ShellView) => {
+    if (next === "work") {
+      navigate("/work");
+      return;
+    }
+    if (next === "trash") {
+      navigate("/trash");
+      return;
+    }
+    const currentId = useSelectionStore.getState().selectedDocumentId;
+    navigate(currentId ? `/docs/${currentId}` : "/docs");
+  }, [navigate]);
   const [report, setReport] = useState<"readiness" | "baselines" | "coverage" | "matrix" | "reviews" | "runs" | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -132,27 +153,42 @@ export function ShellPage() {
     if (detailRowId || linkedRowId) setDetailPanelOpen(true);
   }, [detailRowId, linkedRowId]);
 
+  const goToDocument = useCallback((id: string, replace = false) => {
+    if (!location.pathname.startsWith(`/docs/${id}`)) navigate(`/docs/${id}`, { replace });
+  }, [location.pathname, navigate]);
+
   const activateDocument = useCallback((id: string) => {
     activateDocumentTab(id);
     setSelectedDocumentId(id);
-    setView("documents");
-  }, [activateDocumentTab, setSelectedDocumentId]);
+    goToDocument(id);
+  }, [activateDocumentTab, goToDocument, setSelectedDocumentId]);
 
   const openDocument = useCallback((document: DocumentTab) => {
     openDocumentTab(document);
     setSelectedDocumentId(document.id);
-    setView("documents");
-  }, [openDocumentTab, setSelectedDocumentId]);
+    goToDocument(document.id);
+  }, [goToDocument, openDocumentTab, setSelectedDocumentId]);
 
   const closeDocument = useCallback((id: string) => {
     clearEditHistory(id);
     closeDocumentTab(id);
-    setSelectedDocumentId(useDocumentTabsStore.getState().focusedId);
-  }, [clearEditHistory, closeDocumentTab, setSelectedDocumentId]);
+    const nextId = useDocumentTabsStore.getState().focusedId;
+    setSelectedDocumentId(nextId);
+    navigate(nextId ? `/docs/${nextId}` : "/docs", { replace: true });
+  }, [clearEditHistory, closeDocumentTab, navigate, setSelectedDocumentId]);
 
   useEffect(() => {
     if (focusedDocumentId !== selectedDocumentId) setSelectedDocumentId(focusedDocumentId);
   }, [focusedDocumentId, selectedDocumentId, setSelectedDocumentId]);
+
+  useEffect(() => {
+    if (location.pathname === "/") navigate("/docs", { replace: true });
+  }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    if (view !== "documents" || routeDocumentId || !selectedDocumentId) return;
+    if (location.pathname === "/docs") goToDocument(selectedDocumentId, true);
+  }, [goToDocument, location.pathname, routeDocumentId, selectedDocumentId, view]);
 
   const executeCommand = useCallback((commandId: ShortcutCommandId) => {
     if (commandId === "commandPalette") {
@@ -250,6 +286,26 @@ export function ShellPage() {
     queryFn: () => api<UserProfile>("/auth/me"),
     retry: false,
   });
+
+  useEffect(() => {
+    if (!profile.isSuccess || !routeDocumentId) return;
+    const tabsState = useDocumentTabsStore.getState();
+    if (tabsState.focusedId === routeDocumentId) {
+      if (useSelectionStore.getState().selectedDocumentId !== routeDocumentId) setSelectedDocumentId(routeDocumentId);
+      return;
+    }
+    if (tabsState.tabs.some((tab) => tab.id === routeDocumentId)) {
+      activateDocumentTab(routeDocumentId);
+      setSelectedDocumentId(routeDocumentId);
+      return;
+    }
+    void api<DocumentSummary>(`/documents/${routeDocumentId}`)
+      .then((doc) => {
+        openDocumentTab({ id: doc.id, title: doc.title, documentType: doc.documentType });
+        setSelectedDocumentId(doc.id);
+      })
+      .catch(() => undefined);
+  }, [activateDocumentTab, openDocumentTab, profile.isSuccess, routeDocumentId, setSelectedDocumentId]);
 
   const organizations = useQuery({
     queryKey: ["organizations"],
@@ -413,12 +469,12 @@ export function ShellPage() {
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
         {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
       </Suspense>
-      <div className="relative flex flex-1 gap-2 overflow-hidden p-2">
+      <div className="relative flex flex-1 overflow-hidden">
       <aside
         aria-label={t("primaryNavigation")}
         data-collapsed={effectiveSidebarCollapsed}
         data-responsive-collapsed={responsiveLayout.compactSidebar}
-        className="app-sidebar flex shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-sidebarBackground text-sidebarForeground"
+        className="app-sidebar flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebarBackground text-sidebarForeground"
         style={{ width: effectiveSidebarCollapsed ? 64 : treeWidth }}
       >
         <div className={`flex min-h-16 items-center border-b border-border/70 ${effectiveSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"}`}>
@@ -495,7 +551,7 @@ export function ShellPage() {
               className={`group min-w-0 flex-1 items-center rounded-xl text-left transition-colors hover:bg-muted ${effectiveSidebarCollapsed ? "flex justify-center p-1.5" : "flex gap-2.5 px-2 py-1.5"}`}
               onClick={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primaryForeground">{initials(profile.data.displayName)}</span>
+              <Avatar name={profile.data.displayName} size="md" />
               {!effectiveSidebarCollapsed && <span className="min-w-0"><span className="flex items-center gap-1.5 truncate text-sm font-medium">{profile.data.displayName}{organizationAccess.data?.canManage && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">{t("administratorBadge")}</span>}</span><span className="block truncate text-[10px] text-mutedForeground">{profile.data.email}</span></span>}
             </button>
           <button
@@ -518,7 +574,7 @@ export function ShellPage() {
         </div>
       </aside>
       {!effectiveSidebarCollapsed && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
-      <main id="main-content" tabIndex={-1} className="app-main-surface flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+      <main id="main-content" tabIndex={-1} className="app-main-surface flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
         {tabs.length > 0 && view === "documents" && <DocumentTabsBar
           tabs={tabs}
           activeId={selectedDocumentId}
@@ -564,18 +620,8 @@ export function ShellPage() {
               >
                 <span data-testid="presence-count" title={t("showOnlineUsers")} className="block rounded-md px-1.5 py-1">{t("onlineUsers")}: {presence.length}</span>
               </div>
-              <span className="flex -space-x-2 pl-2" aria-label={t("onlineEditors")}>
-                {presence.slice(0, 4).map((p, index) => (
-                  <span
-                    key={p.userId}
-                    title={p.displayName}
-                    className="relative flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface bg-surface p-0.5 shadow-sm transition-transform hover:z-20 hover:-translate-y-0.5"
-                    style={{ zIndex: 10 - index }}
-                  >
-                    <span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primaryForeground">{initials(p.displayName)}</span>
-                  </span>
-                ))}
-                {presence.length > 4 && <span className="relative z-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface bg-muted text-[10px] font-semibold">+{presence.length - 4}</span>}
+              <span className="flex pl-2" aria-label={t("onlineEditors")}>
+                <AvatarGroup names={presence.map((p) => p.displayName)} max={4} size="sm" />
               </span>
             </div>
           )}
@@ -591,7 +637,7 @@ export function ShellPage() {
             <div className="px-2 pb-1.5 pt-1 text-xs font-medium text-mutedForeground">{t("onlineEditors")}</div>
             {presence.map((person) => (
               <div key={person.userId} className={`flex items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-muted ${presenceProfileUserId === person.userId ? "bg-muted" : ""}`} title={t("hoverProfilePreview")} onMouseEnter={() => setPresenceProfileUserId(person.userId)}>
-                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/30 bg-surface p-0.5"><span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primaryForeground">{initials(person.displayName)}</span></span>
+                <Avatar name={person.displayName} size="md" />
                 <span className="min-w-0 flex-1 truncate font-medium text-foreground">{person.displayName}</span>
               </div>
             ))}
@@ -625,6 +671,7 @@ export function ShellPage() {
                 if (!activeDocumentId || selectedDocumentId === activeDocumentId) return;
                 focusDocumentPane(activeDocumentId);
                 setSelectedDocumentId(activeDocumentId);
+                goToDocument(activeDocumentId, true);
               }}
               />
             </div>
@@ -642,6 +689,7 @@ export function ShellPage() {
                       if (selectedDocumentId === secondaryDocumentId) return;
                       focusDocumentPane(secondaryDocumentId);
                       setSelectedDocumentId(secondaryDocumentId);
+                      goToDocument(secondaryDocumentId, true);
                     }}
                   />
                 </div>
@@ -683,7 +731,7 @@ export function ShellPage() {
             data-testid="detail-panel"
             data-overlay={responsiveLayout.overlayDetails}
             aria-label={t("details")}
-            className={`flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm ${responsiveLayout.overlayDetails ? "absolute inset-y-2 right-2 z-40" : ""}`}
+            className={`flex shrink-0 flex-col overflow-hidden bg-surface ${responsiveLayout.overlayDetails ? "absolute inset-y-2 right-2 z-40 rounded-lg border border-border shadow-2xl" : "border-l border-border"}`}
             style={{ width: responsiveLayout.overlayDetails ? `min(${detailWidth}px, calc(100% - 5rem))` : detailWidth }}
           >
             <Suspense fallback={<PanelLoading />}>
@@ -824,23 +872,23 @@ function ShellLoading({ label }: { label: string }) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background" role="status" aria-label={label}>
       <div className="h-12 border-b border-border bg-surface" />
-      <div className="flex min-h-0 flex-1 gap-2 p-2">
-        <div className="w-72 animate-pulse rounded-2xl border border-border bg-sidebarBackground p-3">
-          <div className="mb-5 h-10 rounded-xl bg-muted" />
-          <div className="mb-2 h-8 rounded-lg bg-muted" />
-          <div className="mb-5 h-8 rounded-lg bg-muted" />
+      <div className="flex min-h-0 flex-1">
+        <div className="w-72 animate-pulse border-r border-border bg-sidebarBackground p-3">
+          <div className="mb-5 h-10 rounded-lg bg-muted" />
+          <div className="mb-2 h-8 rounded-md bg-muted" />
+          <div className="mb-5 h-8 rounded-md bg-muted" />
           <div className="space-y-2 border-t border-border pt-4">
             <div className="h-6 rounded bg-muted" />
             <div className="h-6 rounded bg-muted" />
             <div className="h-6 rounded bg-muted" />
           </div>
         </div>
-        <div className="flex-1 animate-pulse rounded-2xl border border-border bg-surface p-4">
-          <div className="mb-4 h-10 rounded-xl bg-muted" />
+        <div className="flex-1 animate-pulse bg-surface p-4">
+          <div className="mb-4 h-10 rounded-lg bg-muted" />
           <div className="space-y-2">
-            <div className="h-12 rounded-lg bg-muted" />
-            <div className="h-12 rounded-lg bg-muted" />
-            <div className="h-12 rounded-lg bg-muted" />
+            <div className="h-10 rounded-md bg-muted" />
+            <div className="h-10 rounded-md bg-muted" />
+            <div className="h-10 rounded-md bg-muted" />
           </div>
         </div>
       </div>

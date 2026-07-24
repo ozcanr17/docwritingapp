@@ -2,11 +2,23 @@
 
 Written for a brand-new session with zero prior context. Read this top to bottom before touching anything.
 
-## 0. Session handover snapshot (2026-07-24)
+## 0. Session handover snapshot (2026-07-25)
 
 ### Current task
 
-The original eight-stage professional UI/UX transformation and the first two post-transformation Jira-grade product increments are complete. Real pilot feedback then showed that some dense task forms still exposed too much at once, so a continuous simplification stage was added to `docs/UI-UX-DONUSUM-PLANI.md`. The work-item creation flow and the shared work-management dialog frame are now corrected and fully verified. Desktop packaging remains intentionally out of scope until the user changes that direction.
+The user judged the existing interface not commercial-grade against Jira and DOORS and approved a five-phase redesign program, recorded as Stage 10 in `docs/UI-UX-DONUSUM-PLANI.md`. The phases are: 0 foundations (routing, component library, density), 1 shell/navigation, 2 Jira-grade work area, 3 DOORS-grade document area, 4 routed settings/admin/reports plus polish. Each phase must end with a full verification, documentation updates and a push to `origin/main`. Phase 0 is complete and pushed; Phases 1-4 remain. Desktop packaging remains intentionally out of scope until the user changes that direction.
+
+### What was completed in redesign Phase 0 (foundations)
+
+1. Real URL routing replaced the state-only shell. `/docs` is the documents area, `/docs/:documentId` deep-links a document, `/work` is the work hub and `/trash` is the recycle area; `/` redirects to `/docs`. Opening or activating a document pushes its URL, closing replaces it, pane-focus changes update the URL with `replace`, and the browser back button restores the previous document. A fresh authenticated session at `/docs/:id` opens that document directly. The legacy `?document=` query used by separate windows still works.
+2. The URL is the single driver: user actions navigate, and one deep-link effect reconciles URL to tab state (focused pane first, then existing tab activation, then fetch-and-open). This avoids two-way sync fights during back/forward navigation and split-pane focus changes.
+3. Added the first shared component library at `apps/web/src/components/ui`: Button (primary/secondary/subtle/danger, sm/md), IconButton, Lozenge (semantic subtle/bold status colors), Tag, Avatar and AvatarGroup (deterministic per-name color swatches), Tabs (accessible underline tablist with arrow-key navigation), PageHeader and EmptyState, exported through a barrel with focused component tests.
+4. Avatar swatches are contrast-safe: each of the eight hues carries a per-hue lightness verified >= 4.5:1 against white text (the first pass at uniform 46% lightness failed the WCAG audit on hue 190 with 2.97:1 and was corrected by computation, not by weakening the audit).
+5. The floating rounded-card shell was replaced by a full-bleed pane layout: sidebar, main surface and detail panel are flat panes separated by 1px borders; the responsive detail overlay keeps its elevated rounded treatment. Heavy pane shadows were removed and the global radius scale was tightened (default 6px, 2xl now 12px).
+6. Grid density now targets commercial-tool values: rows are compact 32 / standard 40 / comfortable 48 pixels (previously 40/52/64) with correspondingly tighter cell padding; the virtualizer estimates and the wrapped-text regression test were updated together.
+7. Shell avatars (profile, presence stack, presence popover) now use the shared Avatar/AvatarGroup primitives.
+8. The complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **134 web + 72 API + 13 worker = 219/219 tests**, production build and bundle budget; initial gzip is **131.6 KiB**. The full browser suite passes 12/12 after the avatar contrast fix, and the three intentionally changed visual baselines (detail overlay, split horizontal, narrow stacked) were regenerated and reviewed; `workspace-wide` stayed within budget.
+9. Live verification against the running dev stack confirmed: login lands on `/docs`, document selection produces `/docs/:id`, work hub is `/work`, back button restores the grid and a cookie-carrying fresh page deep-links into the document.
 
 ### What was completed in the focused form simplification increment
 
@@ -185,18 +197,23 @@ The original eight-stage professional UI/UX transformation and the first two pos
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stages 1 through 8, project rename/archive/member administration and governed workflow transitions/presets are complete. The focused creation-form simplification is complete. Remaining UX work is intentionally pilot-driven: review test-plan, workflow and work-item detail surfaces against the same progressive-disclosure standard and reduce dashboard density by role. WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. Redesign Phase 0 (routing, component library, density/shape) is complete and verified. The approved program continues with Phase 1 (shell/navigation: product top bar with global Create, removal of the File/Edit menu bar, icon rail plus contextual sidebar), Phase 2 (Jira-grade work area with routed project pages, work-item visual language and `/work/item/:key`), Phase 3 (DOORS-grade document area with module outline and rebuilt detail panel) and Phase 4 (routed settings/admin/reports, dark theme audit, brand polish). WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work after the redesign.
 
 ### Next plan
 
-1. Continue real-pilot simplification with the test-plan creation, workflow editor and work-item detail surfaces; keep each correction grounded in a concrete task instead of applying a cosmetic redesign.
-2. Then reduce dashboard density according to the selected Author, Tester or Reviewer workspace focus.
-3. The next highest-value Jira-grade capability candidate remains release/iteration planning with WIP limits and swimlanes, followed by shared saved queries, bulk planning operations, watchers, automation and external synchronization.
-4. Keep each increment end-to-end: server authority, discoverable UI, permission states, audit, bilingual labels, tests, documentation and production validation.
-5. Monitor the first Linux visual-regression CI run after intentional snapshot changes. If font rendering exceeds the two-percent budget, inspect the diff artifact before adjusting the threshold; never update references merely to make CI green.
+1. Execute redesign Phase 1: rebuild the top bar as a product bar (logo/workspace context, centered search, one global Create button, notifications, help, avatar top-right), remove the Dosya/Duzen menu paradigm by relocating every menu action to the document toolbar, a per-document ellipsis menu, sidebar tools or the command palette, and introduce the two-level area navigation (slim icon rail plus contextual sidebar).
+2. Then Phase 2: routed project pages (Summary, Board, List, Test plans, Settings) under `/work`, work-item type/priority/status/avatar/key visual language, full-height board and the two-column work-item view at `/work/item/:key`.
+3. Then Phase 3: stronger sticky grid header, column width management, module outline TOC beside the grid and the fields-plus-activity detail panel.
+4. Then Phase 4: convert settings, administration and analysis reports to routed pages, audit dark theme and polish login/branding.
+5. After each phase: run the complete `pnpm verify` gate and the browser suite, regenerate intentionally changed visual baselines, verify Turkish and English locale coverage, update `HANDOFF.md` and `docs/UI-UX-DONUSUM-PLANI.md`, then commit and push to `origin/main` with a Conventional Commit message.
+6. Keep every increment server-authoritative: the redesign is presentation and information architecture only; permissions, audit, soft-delete and concurrency rules must not change.
 
 ### Pitfalls encountered in the latest task
 
+- Do not synchronize URL and tab state bidirectionally with two competing effects. User actions must navigate and a single deep-link effect must reconcile URL to state (focused pane, then existing tab, then fetch); a reverse state-to-URL effect fights the back button and loops.
+- Pane focus changes in split view must update the URL with `replace`, not `push`, or every pane click pollutes browser history.
+- White text needs a per-hue lightness ceiling: a uniform 46% lightness avatar palette failed WCAG AA on hue 190 at 2.97:1 while passing on blue/purple hues. Compute contrast per swatch; never silence the axe audit.
+- Playwright `--update-snapshots` only rewrites baselines that actually differ; re-run the visual spec after any late styling fix because an earlier update run does not cover it.
 - A dialog having `max-height` and `overflow: auto` does not make a long task usable. If the header and primary action live inside that scroller, both disappear at the exact moment the user needs orientation and completion. Keep dialog chrome fixed and scroll only the task content.
 - Do not show every optional field merely because the server accepts it. Work-item creation now uses progressive disclosure; keep Essentials focused and add type-specific evidence and relationships in their own sections.
 - Do not use desktop-oriented two-column form grids without a single-column breakpoint. The modal itself can fit while its fields become unreadably narrow.

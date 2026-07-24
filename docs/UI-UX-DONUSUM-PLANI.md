@@ -88,6 +88,41 @@ Bu belge, DocSys'in profesyonel ve kurumsal bir urun arayuzune donusumunu izleme
 - [ ] Test plani, is akisi ve kayit ayrintisi yuzeylerini gercek pilot geri bildirimiyle ayni progressive-disclosure standardinda gozden gecirmek.
 - [ ] Dashboard kartlarini role ve sik kullanima gore kisisellestirerek ilk bakistaki bilgi yukunu azaltmak.
 
+## Asama 10 - Ticari urun bilgi mimarisi ve gorsel sistem yenilemesi
+
+Gercek pilot degerlendirmesi, mevcut arayuzun Jira ve DOORS sinifi ticari urun beklentisini karsilamadigini gosterdi. Bu asama bes fazli kapsamli bir yeniden tasarim programidir.
+
+### Faz 0 - Temeller: rota, bilesen kutuphanesi, yogunluk
+
+- [x] Gercek URL rotalari: `/docs/:id`, `/work`, `/trash`; tarayici geri/ileri, paylasabilir derin baglantilar ve oturum sonrasi dogrudan dokuman acilisi.
+- [x] Ortak arayuz bileseni kutuphanesi (`components/ui`): Button, IconButton, Lozenge, Tag, Avatar, AvatarGroup, Tabs, PageHeader, EmptyState.
+- [x] Radius olcegini sikilastirmak ve yuzen kart kabugu yerine 1px bolmeli tam genislik panel duzenine gecmek.
+- [x] Tablo satir yogunlugunu ticari arac seviyesine cekmek: kompakt 32, standart 40, rahat 48 piksel hedefleri.
+
+### Faz 1 - Kabuk ve gezinme
+
+- [ ] Ust bari urun cubugu olarak yeniden duzenlemek: global Olustur dugmesi, bildirimler, yardim ve profil sag ustte.
+- [ ] Dosya/Duzen menu cubugunu kaldirip islemleri dokuman arac cubugu, uc nokta menusu ve komut paletine tasimak.
+- [ ] Alan bazli iki seviyeli gezinme: ince ikon rayi (Dokumanlar, Is, Yonetim) ve alana ozel baglamsal kenar cubugu.
+
+### Faz 2 - Jira seviyesinde is alani
+
+- [ ] Is alanini proje sol gezinmesiyle rotali sayfalara ayirmak: Ozet, Pano, Liste, Test planlari, Ayarlar.
+- [ ] Is kaydi gorsel dili: tur ve oncelik ikonlari, durum lozenge renkleri, atanan avatarlari ve gorunur is anahtarlari.
+- [ ] Tam yukseklik pano kolonlari, WIP sayaclari ve zengin kartlar.
+- [ ] `/work/item/:key` rotali iki sutunlu is kaydi gorunumu: solda aciklama ve etkinlik, sagda alan paneli.
+
+### Faz 3 - DOORS seviyesinde dokuman alani
+
+- [ ] Guclendirilmis sabit tablo basligi, sutun genislik yonetimi ve olu bosluk temizligi.
+- [ ] Buyuk dokumanlar icin tablo yaninda modul ana hatti (bolum icindekiler paneli).
+- [ ] Ayrinti panelini alan blogu (durum, tur, tarihce) ve etkinlik akisi olarak yeniden kurmak.
+
+### Faz 4 - Rotali ayarlar/yonetim ve cila
+
+- [ ] Ayarlar, yonetim ve analiz raporlarini modallardan rotali sayfalara donusturmek.
+- [ ] Koyu tema denetimi, giris ekrani ve marka cilasi.
+
 ## Asama tamamlanma olcutu
 
 Bir asama ancak ilgili maddeler isaretlendiginde, regresyon testleri gectiginde, Mac uzerinde `pnpm dev` ile gorsel olarak dogrulandiginda ve degisiklikler `main` dalina gonderildiginde tamamlanmis sayilir.

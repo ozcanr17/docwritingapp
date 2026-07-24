@@ -112,7 +112,7 @@ describe("DocumentGrid", () => {
     act(() => useAuthoringPreferencesStore.getState().setRowDensity("comfortable"));
     renderGrid(rows);
     expect(screen.getByTestId("document-grid-scroll")).toHaveAttribute("data-density", "comfortable");
-    expect(screen.getByTestId("grid-row-1.1")).toHaveClass("min-h-16");
+    expect(screen.getByTestId("grid-row-1.1")).toHaveClass("min-h-12");
     expect(screen.getByText("Gereksinim A")).toHaveClass("whitespace-pre-wrap", "break-words");
   });
 
