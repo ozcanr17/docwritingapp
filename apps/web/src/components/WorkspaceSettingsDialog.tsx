@@ -66,14 +66,14 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
         <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 id="workspace-settings-title" className="font-semibold">{t("workspaceSettings")}</h2><p className="mt-0.5 text-xs text-mutedForeground">{t("workspaceSettingsDescription")}</p></div><button data-testid="close-workspace-settings" aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></div>
         <div className="grid min-h-0 flex-1 md:grid-cols-[13rem_minmax(0,1fr)]">
         <nav aria-label={t("workspaceSettings")} className="flex gap-1 overflow-x-auto border-b border-border bg-muted/25 p-3 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r">
-          {document.data?.documentType === "requirement" && <Tab active={tab === "document"} onClick={() => setTab("document")} icon={<FileCog size={15} />} label={t("documentSettings")} />}
-          <Tab active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette size={15} />} label={t("appearanceSettings")} />
-          <Tab active={tab === "authoring"} onClick={() => setTab("authoring")} icon={<PenLine size={15} />} label={t("authoringSettings")} />
-          <Tab active={tab === "keyboard"} onClick={() => setTab("keyboard")} icon={<Keyboard size={15} />} label={t("keyboardShortcuts")} />
-          <Tab active={tab === "accessibility"} onClick={() => setTab("accessibility")} icon={<Accessibility size={15} />} label={t("accessibilitySettings")} />
-          <Tab active={tab === "notifications"} onClick={() => setTab("notifications")} icon={<Bell size={15} />} label={t("notifications")} />
-          <Tab active={tab === "roles"} onClick={() => setTab("roles")} icon={<Users size={15} />} label={t("rolesAndAccess")} />
-          <Tab active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<Plug size={15} />} label={t("integrations")} />
+          {document.data?.documentType === "requirement" && <Tab testId="settings-tab-document" active={tab === "document"} onClick={() => setTab("document")} icon={<FileCog size={15} />} label={t("documentSettings")} />}
+          <Tab testId="settings-tab-appearance" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette size={15} />} label={t("appearanceSettings")} />
+          <Tab testId="settings-tab-authoring" active={tab === "authoring"} onClick={() => setTab("authoring")} icon={<PenLine size={15} />} label={t("authoringSettings")} />
+          <Tab testId="settings-tab-keyboard" active={tab === "keyboard"} onClick={() => setTab("keyboard")} icon={<Keyboard size={15} />} label={t("keyboardShortcuts")} />
+          <Tab testId="settings-tab-accessibility" active={tab === "accessibility"} onClick={() => setTab("accessibility")} icon={<Accessibility size={15} />} label={t("accessibilitySettings")} />
+          <Tab testId="settings-tab-notifications" active={tab === "notifications"} onClick={() => setTab("notifications")} icon={<Bell size={15} />} label={t("notifications")} />
+          <Tab testId="settings-tab-roles" active={tab === "roles"} onClick={() => setTab("roles")} icon={<Users size={15} />} label={t("rolesAndAccess")} />
+          <Tab testId="settings-tab-integrations" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<Plug size={15} />} label={t("integrations")} />
         </nav>
         <div className="min-h-0 overflow-auto p-5">
         {tab === "document" && document.data?.documentType === "requirement" && <SettingsSection title={t("requirementNumberingSettings")} description={t("requirementNumberingSettingsHelp")}>
@@ -98,6 +98,13 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
               <ChoiceButton active={preferences.rowDensity === "standard"} label={t("standardDensity")} onClick={() => preferences.setRowDensity("standard")} />
               <ChoiceButton active={preferences.rowDensity === "comfortable"} label={t("comfortableDensity")} onClick={() => preferences.setRowDensity("comfortable")} />
             </div>
+            <div>
+              <div className="mb-2 text-sm font-medium">{t("interfaceScale")}</div>
+              <div className="grid grid-cols-3 gap-2" role="group" aria-label={t("interfaceScale")}>
+                {[100, 110, 125].map((scale) => <ChoiceButton key={scale} testId={`interface-scale-${scale}`} active={preferences.interfaceScale === scale} label={`${scale}%`} onClick={() => preferences.setInterfaceScale(scale as 100 | 110 | 125)} />)}
+              </div>
+              <p className="mt-1.5 text-xs text-mutedForeground">{t("interfaceScaleHelp")}</p>
+            </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="rounded-lg border border-border bg-editorBackground p-3 text-sm"><span className="block font-medium">{t("documentFontSize")}</span><span className="mt-0.5 block text-xs text-mutedForeground">{t("documentFontSizeHelp")}</span><select data-testid="document-font-size" className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-1.5" value={preferences.documentFontSize} onChange={(event) => preferences.setDocumentFontSize(Number(event.target.value))}>{[12, 13, 14, 15, 16, 18, 20].map((size) => <option key={size} value={size}>{size} px</option>)}</select></label>
               <label className="rounded-lg border border-border bg-editorBackground p-3 text-sm"><span className="block font-medium">{t("documentFontFamily")}</span><span className="mt-0.5 block text-xs text-mutedForeground">{t("documentFontFamilyHelp")}</span><select data-testid="document-font-family" className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-1.5" value={preferences.documentFontFamily} onChange={(event) => preferences.setDocumentFontFamily(event.target.value as DocumentFontFamily)}><option value="system">{t("fontSystem")}</option><option value="sans">{t("fontSans")}</option><option value="serif">{t("fontSerif")}</option><option value="mono">{t("fontMono")}</option></select></label>
@@ -116,8 +123,8 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
         </div>}
         {tab === "keyboard" && <SettingsSection title={t("keyboardShortcuts")} description={t("keyboardShortcutsHelp")}><KeyboardShortcutsSettings /></SettingsSection>}
         {tab === "accessibility" && <SettingsSection title={t("accessibilitySettings")} description={t("accessibilitySettingsHelp")}>
-          <ToggleRow label={t("highContrast")} description={t("highContrastHelp")} checked={preferences.highContrast} onChange={preferences.setHighContrast} />
-          <ToggleRow label={t("reduceMotion")} description={t("reduceMotionHelp")} checked={preferences.reduceMotion} onChange={preferences.setReduceMotion} />
+          <ToggleRow testId="setting-high-contrast" label={t("highContrast")} description={t("highContrastHelp")} checked={preferences.highContrast} onChange={preferences.setHighContrast} />
+          <ToggleRow testId="setting-reduce-motion" label={t("reduceMotion")} description={t("reduceMotionHelp")} checked={preferences.reduceMotion} onChange={preferences.setReduceMotion} />
           <p className="rounded-lg border border-info/25 bg-info/10 p-3 text-xs leading-5 text-info">{t("accessibilityKeyboardNotice")}</p>
         </SettingsSection>}
         {tab === "notifications" && <div className="space-y-4">
@@ -152,14 +159,14 @@ function SettingsSection({ title, description, children }: { title: string; desc
   return <section className="rounded-xl border border-border p-4"><h3 className="text-sm font-semibold">{title}</h3><p className="mb-3 mt-1 text-xs text-mutedForeground">{description}</p><div className="space-y-2">{children}</div></section>;
 }
 
-function ToggleRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-border bg-editorBackground p-3 text-sm"><span><span className="block font-medium">{label}</span><span className="mt-0.5 block text-xs text-mutedForeground">{description}</span></span><input type="checkbox" className="h-4 w-4 accent-primary" checked={checked} onChange={(event) => onChange(event.target.checked)} /></label>;
+function ToggleRow({ label, description, checked, onChange, testId }: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void; testId?: string }) {
+  return <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-border bg-editorBackground p-3 text-sm"><span><span className="block font-medium">{label}</span><span className="mt-0.5 block text-xs text-mutedForeground">{description}</span></span><input data-testid={testId} type="checkbox" className="h-4 w-4 accent-primary" checked={checked} onChange={(event) => onChange(event.target.checked)} /></label>;
 }
 
 function ChoiceButton({ active, label, onClick, testId }: { active: boolean; label: string; onClick: () => void; testId?: string }) {
   return <button data-testid={testId} className={`rounded-lg border px-3 py-2 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border bg-editorBackground hover:bg-muted"}`} onClick={onClick}>{label}</button>;
 }
 
-function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return <button type="button" aria-current={active ? "page" : undefined} className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm ${active ? "bg-surface text-primary shadow-sm" : "text-mutedForeground hover:bg-muted hover:text-foreground"}`} onClick={onClick}>{icon}{label}</button>;
+function Tab({ active, onClick, icon, label, testId }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; testId?: string }) {
+  return <button data-testid={testId} type="button" aria-current={active ? "page" : undefined} className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm ${active ? "bg-surface text-primary shadow-sm" : "text-mutedForeground hover:bg-muted hover:text-foreground"}`} onClick={onClick}>{icon}{label}</button>;
 }

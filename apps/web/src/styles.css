@@ -60,6 +60,10 @@ body {
   letter-spacing: -0.008em;
 }
 
+html {
+  min-width: 20rem;
+}
+
 @layer base {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
   select,
@@ -196,6 +200,11 @@ body {
   border-color: hsl(var(--border));
 }
 
+.docsys-high-contrast [data-focused="true"] {
+  outline: 3px solid hsl(var(--focus-ring));
+  outline-offset: -3px;
+}
+
 .skip-link {
   position: fixed;
   left: 0.75rem;
@@ -240,5 +249,11 @@ body {
 
   .global-search-trigger {
     width: clamp(10rem, 42vw, 15rem);
+  }
+}
+
+@media (max-width: 520px) {
+  .global-search-trigger {
+    width: clamp(8rem, 38vw, 11rem);
   }
 }

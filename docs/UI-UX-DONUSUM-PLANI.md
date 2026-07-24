@@ -65,11 +65,11 @@ Bu belge, DocSys'in profesyonel ve kurumsal bir urun arayuzune donusumunu izleme
 
 ## Asama 7 - Duyarli tasarim ve erisilebilirlik
 
-- [ ] Ana panel, Explorer, detay paneli ve split view icin minimum ve dar pencere davranislarini tanimlamak.
-- [ ] Klavye sirasi, odak halkalari, atlama baglantilari ve ekran okuyucu etiketlerini denetlemek.
-- [ ] Yuksek kontrast, azaltmis hareket ve yaziyi buyutme senaryolarini test etmek.
-- [ ] Renk disinda ikon ve metinle durum iletmek.
-- [ ] WCAG 2.2 AA hedefi icin otomatik ve manuel kontrol listesi uygulamak.
+- [x] Ana panel, Explorer, detay paneli ve split view icin minimum ve dar pencere davranislarini tanimlamak.
+- [x] Klavye sirasi, odak halkalari, atlama baglantilari ve ekran okuyucu etiketlerini denetlemek.
+- [x] Yuksek kontrast, azaltmis hareket ve yaziyi buyutme senaryolarini test etmek.
+- [x] Renk disinda ikon ve metinle durum iletmek.
+- [x] WCAG 2.2 AA hedefi icin otomatik ve manuel kontrol listesi uygulamak.
 
 ## Asama 8 - Dogrulama ve surekli kalite
 

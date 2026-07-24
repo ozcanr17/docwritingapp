@@ -73,6 +73,8 @@ export function RichTextEditor({ documentId, displayName, readOnly = false }: Ri
       <div className="flex items-center gap-2 border-b border-border px-4 py-1.5 text-xs text-mutedForeground">
         <span
           data-testid="collab-status"
+          role="img"
+          aria-label={connected ? t("connected") : t("connecting")}
           className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-success" : "bg-warning"}`}
         />
         {connected ? t("connected") : t("connecting")}

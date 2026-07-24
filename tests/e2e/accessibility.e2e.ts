@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { dismissOnboarding } from "./helpers";
 
-const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"];
 
 test("login and primary workspace have no automated WCAG A or AA violations", async ({ page }) => {
   const suffix = Date.now();
@@ -24,4 +24,26 @@ test("login and primary workspace have no automated WCAG A or AA violations", as
 
   const workspaceAudit = await new AxeBuilder({ page }).withTags(tags).analyze();
   expect(workspaceAudit.violations).toEqual([]);
+
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect(page.locator("aside[data-responsive-collapsed='true']")).toBeVisible();
+  await expect(page.getByTestId("tree-section")).toBeHidden();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await page.getByTestId("nav-settings").click();
+  await page.getByTestId("interface-scale-125").click();
+  await page.getByTestId("settings-tab-accessibility").click();
+  await page.getByTestId("setting-high-contrast").check();
+  await page.getByTestId("setting-reduce-motion").check();
+  await expect(page.locator("html")).toHaveClass(/docsys-high-contrast/);
+  await expect(page.locator("html")).toHaveClass(/docsys-reduce-motion/);
+  await expect(page.locator("html")).toHaveCSS("font-size", "20px");
+
+  const accessibilityPreferencesAudit = await new AxeBuilder({ page }).withTags(tags).analyze();
+  expect(accessibilityPreferencesAudit.violations).toEqual([]);
 });

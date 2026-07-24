@@ -593,6 +593,8 @@
   "accessibilitySettingsHelp": "Görsel ayrımı ve hareket davranışını kişisel ihtiyacınıza göre ayarlayın.",
   "reduceMotion": "Hareketi azalt",
   "reduceMotionHelp": "Animasyonları ve geçişleri en aza indirerek odak değişimlerini daha sakin gösterir.",
+  "interfaceScale": "Arayüz boyutu",
+  "interfaceScaleHelp": "Doküman içeriğinin boyutunu değiştirmeden gezinmeyi, pencereleri ve kontrolleri büyütür.",
   "accessibilityKeyboardNotice": "Tüm temel çalışma alanı işlemleri klavyeyle erişilebilir olmalıdır. Kısayolları Klavye bölümünde inceleyebilir ve değiştirebilirsiniz.",
   "notificationPreferences": "Bildirim tercihleri",
   "notificationPreferencesHelp": "Uygulama içinde hangi kişisel olayların öne çıkarılacağını belirleyin.",

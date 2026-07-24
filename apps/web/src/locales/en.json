@@ -594,6 +594,8 @@
   "accessibilitySettingsHelp": "Adapt visual distinction and motion behavior to your personal needs.",
   "reduceMotion": "Reduce motion",
   "reduceMotionHelp": "Minimizes animations and transitions for calmer focus changes.",
+  "interfaceScale": "Interface size",
+  "interfaceScaleHelp": "Enlarges navigation, dialogs and controls without changing document content size.",
   "accessibilityKeyboardNotice": "All primary workspace actions should remain keyboard accessible. Review and customize shortcuts in the Keyboard section.",
   "notificationPreferences": "Notification preferences",
   "notificationPreferencesHelp": "Choose which personal events the application should emphasize.",

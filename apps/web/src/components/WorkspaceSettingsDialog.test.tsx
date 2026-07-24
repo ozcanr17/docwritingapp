@@ -37,6 +37,9 @@ describe("WorkspaceSettingsDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: i18n.t("accessibilitySettings") }));
     fireEvent.click(screen.getByText(i18n.t("reduceMotion")));
     expect(useAuthoringPreferencesStore.getState().reduceMotion).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("appearanceSettings") }));
+    fireEvent.click(screen.getByTestId("interface-scale-125"));
+    expect(useAuthoringPreferencesStore.getState().interfaceScale).toBe(125);
 
     fireEvent.click(screen.getByRole("button", { name: i18n.t("notifications") }));
     fireEvent.click(screen.getByText(i18n.t("notifyMentions")));

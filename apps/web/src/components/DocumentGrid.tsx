@@ -1260,6 +1260,8 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                   {showChangeIndicators && <div
                     data-testid={`row-change-state-${row.objectNumber}`}
                     title={t(`rowChangeState.${visibleChangeState}`)}
+                    role="img"
+                    aria-label={t(`rowChangeState.${visibleChangeState}`)}
                     className={`absolute inset-y-0 left-0 z-30 w-1 ${
                       hasUnsavedChange
                         ? "bg-warning"

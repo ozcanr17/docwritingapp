@@ -13,6 +13,7 @@ describe("authoring preferences", () => {
     state.setDefaultFrozenColumns(3);
     state.setDocumentFontSize(16);
     state.setDocumentFontFamily("serif");
+    state.setInterfaceScale(125);
     state.setHighContrast(true);
     state.setReduceMotion(true);
     state.setNotifyMentions(false);
@@ -27,6 +28,7 @@ describe("authoring preferences", () => {
       defaultFrozenColumns: 3,
       documentFontSize: 16,
       documentFontFamily: "serif",
+      interfaceScale: 125,
       highContrast: true,
       reduceMotion: true,
       notifyMentions: false,
@@ -42,6 +44,6 @@ describe("authoring preferences", () => {
     expect(useAuthoringPreferencesStore.getState().defaultFrozenColumns).toBe(5);
     expect(useAuthoringPreferencesStore.getState().documentFontSize).toBe(20);
     useAuthoringPreferencesStore.getState().reset();
-    expect(useAuthoringPreferencesStore.getState()).toEqual(expect.objectContaining({ rowDensity: "standard", defaultFrozenColumns: 0, documentFontSize: 14, documentFontFamily: "system", highContrast: false, reduceMotion: false, notifyMentions: true, notifyAssignments: true, notifyReviewRequests: true, workspaceFocus: "author" }));
+    expect(useAuthoringPreferencesStore.getState()).toEqual(expect.objectContaining({ rowDensity: "standard", defaultFrozenColumns: 0, documentFontSize: 14, documentFontFamily: "system", interfaceScale: 100, highContrast: false, reduceMotion: false, notifyMentions: true, notifyAssignments: true, notifyReviewRequests: true, workspaceFocus: "author" }));
   });
 });

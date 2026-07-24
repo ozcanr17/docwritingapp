@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 export type RowDensity = "compact" | "standard" | "comfortable";
 export type DocumentFontFamily = "system" | "sans" | "serif" | "mono";
 export type WorkspaceFocus = "author" | "tester" | "reviewer";
+export type InterfaceScale = 100 | 110 | 125;
 
 interface AuthoringPreferencesState {
   rowDensity: RowDensity;
@@ -13,6 +14,7 @@ interface AuthoringPreferencesState {
   defaultFrozenColumns: number;
   documentFontSize: number;
   documentFontFamily: DocumentFontFamily;
+  interfaceScale: InterfaceScale;
   highContrast: boolean;
   reduceMotion: boolean;
   notifyMentions: boolean;
@@ -26,6 +28,7 @@ interface AuthoringPreferencesState {
   setDefaultFrozenColumns: (defaultFrozenColumns: number) => void;
   setDocumentFontSize: (documentFontSize: number) => void;
   setDocumentFontFamily: (documentFontFamily: DocumentFontFamily) => void;
+  setInterfaceScale: (interfaceScale: InterfaceScale) => void;
   setHighContrast: (highContrast: boolean) => void;
   setReduceMotion: (reduceMotion: boolean) => void;
   setNotifyMentions: (notifyMentions: boolean) => void;
@@ -43,6 +46,7 @@ const defaults = {
   defaultFrozenColumns: 0,
   documentFontSize: 14,
   documentFontFamily: "system" as DocumentFontFamily,
+  interfaceScale: 100 as InterfaceScale,
   highContrast: false,
   reduceMotion: false,
   notifyMentions: true,
@@ -62,6 +66,7 @@ export const useAuthoringPreferencesStore = create<AuthoringPreferencesState>()(
       setDefaultFrozenColumns: (defaultFrozenColumns) => set({ defaultFrozenColumns: Math.max(0, Math.min(5, defaultFrozenColumns)) }),
       setDocumentFontSize: (documentFontSize) => set({ documentFontSize: Math.max(12, Math.min(20, documentFontSize)) }),
       setDocumentFontFamily: (documentFontFamily) => set({ documentFontFamily }),
+      setInterfaceScale: (interfaceScale) => set({ interfaceScale }),
       setHighContrast: (highContrast) => set({ highContrast }),
       setReduceMotion: (reduceMotion) => set({ reduceMotion }),
       setNotifyMentions: (notifyMentions) => set({ notifyMentions }),

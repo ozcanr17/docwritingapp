@@ -142,6 +142,11 @@ describe("DocumentGrid", () => {
   it("shows a saved change indicator on the row edge", () => {
     renderGrid(rows);
     expect(screen.getByTestId("row-change-state-1")).toHaveClass("bg-primary");
+    expect(screen.getByTestId("row-change-state-1")).toHaveAttribute(
+      "role",
+      "img",
+    );
+    expect(screen.getByTestId("row-change-state-1")).toHaveAccessibleName();
   });
 
   it("collapses and expands a hierarchy from the heading affordance", () => {

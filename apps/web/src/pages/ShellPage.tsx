@@ -22,6 +22,7 @@ import { useOnboardingStore } from "../stores/onboarding";
 import { SaveStatusIndicator } from "../components/SaveStatusIndicator";
 import { useAuthoringPreferencesStore, WorkspaceFocus } from "../stores/authoringPreferences";
 import { recordPilotEvent } from "../lib/pilotTelemetry";
+import { resolveResponsiveLayout } from "../lib/responsiveLayout";
 
 const DocumentGrid = lazy(() => import("../components/DocumentGrid").then((module) => ({ default: module.DocumentGrid })));
 const GlobalSearchDialog = lazy(() => import("../components/GlobalSearchDialog").then((module) => ({ default: module.GlobalSearchDialog })));
@@ -77,6 +78,7 @@ export function ShellPage() {
   const [presenceOpen, setPresenceOpen] = useState(false);
   const [presenceProfileUserId, setPresenceProfileUserId] = useState<string | null>(null);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(() => typeof window === "undefined" ? 1440 : window.innerWidth);
   const presenceCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceTriggerRef = useRef<HTMLDivElement>(null);
   const closeReport = useCallback(() => setReport(null), []);
@@ -116,6 +118,15 @@ export function ShellPage() {
   const setSplitRatio = useLayoutStore((s) => s.setSplitRatio);
   const workspaceFocus = useAuthoringPreferencesStore((s) => s.workspaceFocus);
   const setWorkspaceFocus = useAuthoringPreferencesStore((s) => s.setWorkspaceFocus);
+  const responsiveLayout = resolveResponsiveLayout(viewportWidth);
+  const effectiveSidebarCollapsed = sidebarCollapsed || responsiveLayout.compactSidebar;
+  const effectiveSplitDirection = responsiveLayout.stackSplit ? "vertical" : splitDirection;
+
+  useEffect(() => {
+    const updateViewport = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", updateViewport, { passive: true });
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
 
   useEffect(() => {
     if (detailRowId || linkedRowId) setDetailPanelOpen(true);
@@ -402,45 +413,46 @@ export function ShellPage() {
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
         {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
       </Suspense>
-      <div className="flex flex-1 gap-2 overflow-hidden p-2">
+      <div className="relative flex flex-1 gap-2 overflow-hidden p-2">
       <aside
         aria-label={t("primaryNavigation")}
-        data-collapsed={sidebarCollapsed}
+        data-collapsed={effectiveSidebarCollapsed}
+        data-responsive-collapsed={responsiveLayout.compactSidebar}
         className="app-sidebar flex shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-sidebarBackground text-sidebarForeground"
-        style={{ width: sidebarCollapsed ? 64 : treeWidth }}
+        style={{ width: effectiveSidebarCollapsed ? 64 : treeWidth }}
       >
-        <div className={`flex min-h-16 items-center border-b border-border/70 ${sidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"}`}>
-          {!sidebarCollapsed && (
+        <div className={`flex min-h-16 items-center border-b border-border/70 ${effectiveSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"}`}>
+          {!effectiveSidebarCollapsed && (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
               <Building2 size={17} />
             </span>
           )}
-          {!sidebarCollapsed && (
+          {!effectiveSidebarCollapsed && (
             <div className="min-w-0 flex-1">
               <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-mutedForeground">{t("workspaceArea")}</div>
               <div className="truncate text-sm font-semibold">{workspaces.data?.[0]?.name ?? "—"}</div>
             </div>
           )}
-          <button
+          {!responsiveLayout.compactSidebar && <button
             type="button"
             data-testid="toggle-sidebar"
             className="icon-button shrink-0"
-            aria-label={sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
-            title={sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
+            aria-label={effectiveSidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
+            title={effectiveSidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
             onClick={toggleSidebar}
           >
-            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          </button>
+            {effectiveSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>}
         </div>
         <nav aria-label={t("primaryNavigation")} className="px-2 py-2 text-sm">
-          {!sidebarCollapsed && <div className="section-label px-2 pb-1.5">{t("primaryNavigation")}</div>}
+          {!effectiveSidebarCollapsed && <div className="section-label px-2 pb-1.5">{t("primaryNavigation")}</div>}
           <SidebarItem
             icon={<FileText size={15} />}
             label={t("documents")}
             active={view === "documents"}
             onClick={() => setView("documents")}
             testId="nav-documents"
-            collapsed={sidebarCollapsed}
+            collapsed={effectiveSidebarCollapsed}
           />
           <SidebarItem
             icon={<ClipboardCheck size={15} />}
@@ -448,10 +460,10 @@ export function ShellPage() {
             active={view === "work"}
             onClick={() => setView("work")}
             testId="nav-work"
-            collapsed={sidebarCollapsed}
+            collapsed={effectiveSidebarCollapsed}
           />
         </nav>
-        <section data-testid="tree-section" aria-label={t("documentTree")} className={`min-h-0 flex-1 overflow-hidden border-y border-border/70 bg-surface text-foreground ${sidebarCollapsed ? "hidden" : ""}`}>
+        <section data-testid="tree-section" aria-label={t("documentTree")} className={`min-h-0 flex-1 overflow-hidden border-y border-border/70 bg-surface text-foreground ${effectiveSidebarCollapsed ? "hidden" : ""}`}>
           <div className="section-label border-b border-border/60 px-3 py-2">{t("explorer")}</div>
           {workspaceId &&
             (view === "trash" ? (
@@ -466,25 +478,25 @@ export function ShellPage() {
               />
             ))}
         </section>
-        <div className={`p-2 text-sm ${sidebarCollapsed ? "mt-auto" : ""}`}>
-          {!sidebarCollapsed && <div className="section-label px-2 pb-1.5">{t("workspaceTools")}</div>}
-          <SidebarItem collapsed={sidebarCollapsed} icon={<Clock3 size={15} />} label={t("recentDocuments")} onClick={() => setRecentDocumentsOpen(true)} testId="nav-recent-documents" />
-          {organizationAccess.data?.canManage && <SidebarItem collapsed={sidebarCollapsed} icon={<ShieldCheck size={15} />} label={t("adminPanel")} onClick={() => setAdminOpen(true)} testId="nav-admin" />}
-          {selectedDocumentId && <SidebarItem collapsed={sidebarCollapsed} icon={<FileKey2 size={15} />} label={t("documentPermissions")} onClick={() => setDocumentAccessOpen(true)} testId="nav-document-access" />}
-          <SidebarItem collapsed={sidebarCollapsed} icon={<Trash2 size={15} />} label={t("trash")} active={view === "trash"} onClick={() => setView("trash")} testId="nav-trash" />
-          <SidebarItem collapsed={sidebarCollapsed} icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} testId="nav-settings" />
+        <div className={`p-2 text-sm ${effectiveSidebarCollapsed ? "mt-auto" : ""}`}>
+          {!effectiveSidebarCollapsed && <div className="section-label px-2 pb-1.5">{t("workspaceTools")}</div>}
+          <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<Clock3 size={15} />} label={t("recentDocuments")} onClick={() => setRecentDocumentsOpen(true)} testId="nav-recent-documents" />
+          {organizationAccess.data?.canManage && <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<ShieldCheck size={15} />} label={t("adminPanel")} onClick={() => setAdminOpen(true)} testId="nav-admin" />}
+          {selectedDocumentId && <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<FileKey2 size={15} />} label={t("documentPermissions")} onClick={() => setDocumentAccessOpen(true)} testId="nav-document-access" />}
+          <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<Trash2 size={15} />} label={t("trash")} active={view === "trash"} onClick={() => setView("trash")} testId="nav-trash" />
+          <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} testId="nav-settings" />
         </div>
-        <div className={`border-t border-border/70 p-2 text-sm ${sidebarCollapsed ? "" : "px-3 py-2.5"}`}>
-          <div className={`flex items-center gap-1 ${sidebarCollapsed ? "flex-col" : ""}`}>
+        <div className={`border-t border-border/70 p-2 text-sm ${effectiveSidebarCollapsed ? "" : "px-3 py-2.5"}`}>
+          <div className={`flex items-center gap-1 ${effectiveSidebarCollapsed ? "flex-col" : ""}`}>
             <button
               data-testid="open-profile"
               title={profile.data.displayName}
               aria-label={profile.data.displayName}
-              className={`group min-w-0 flex-1 items-center rounded-xl text-left transition-colors hover:bg-muted ${sidebarCollapsed ? "flex justify-center p-1.5" : "flex gap-2.5 px-2 py-1.5"}`}
+              className={`group min-w-0 flex-1 items-center rounded-xl text-left transition-colors hover:bg-muted ${effectiveSidebarCollapsed ? "flex justify-center p-1.5" : "flex gap-2.5 px-2 py-1.5"}`}
               onClick={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primaryForeground">{initials(profile.data.displayName)}</span>
-              {!sidebarCollapsed && <span className="min-w-0"><span className="flex items-center gap-1.5 truncate text-sm font-medium">{profile.data.displayName}{organizationAccess.data?.canManage && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">{t("administratorBadge")}</span>}</span><span className="block truncate text-[10px] text-mutedForeground">{profile.data.email}</span></span>}
+              {!effectiveSidebarCollapsed && <span className="min-w-0"><span className="flex items-center gap-1.5 truncate text-sm font-medium">{profile.data.displayName}{organizationAccess.data?.canManage && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">{t("administratorBadge")}</span>}</span><span className="block truncate text-[10px] text-mutedForeground">{profile.data.email}</span></span>}
             </button>
           <button
             data-testid="logout"
@@ -505,7 +517,7 @@ export function ShellPage() {
           </div>
         </div>
       </aside>
-      {!sidebarCollapsed && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
+      {!effectiveSidebarCollapsed && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
       <main id="main-content" tabIndex={-1} className="app-main-surface flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-surface">
         {tabs.length > 0 && view === "documents" && <DocumentTabsBar
           tabs={tabs}
@@ -517,7 +529,7 @@ export function ShellPage() {
           onSecondaryChange={setSecondaryDocument}
           onTogglePin={togglePinnedDocument}
           onReorder={reorderDocumentTabs}
-          splitDirection={splitDirection}
+          splitDirection={effectiveSplitDirection}
           onSplitDirectionChange={setSplitDirection}
           onOpenWindow={(id) => {
             const tab = tabs.find((item) => item.id === id);
@@ -599,7 +611,8 @@ export function ShellPage() {
         ) : view === "documents" && selectedDocumentId ? (
           <div
             data-testid="document-split-container"
-            className={`min-h-0 flex-1 overflow-hidden ${secondaryDocumentId ? `flex bg-background p-1.5 ${splitDirection === "horizontal" ? "flex-row" : "flex-col"}` : "flex"}`}
+            data-responsive-stacked={responsiveLayout.stackSplit}
+            className={`min-h-0 flex-1 overflow-hidden ${secondaryDocumentId ? `flex bg-background p-1.5 ${effectiveSplitDirection === "horizontal" ? "flex-row" : "flex-col"}` : "flex"}`}
           >
             <div className="flex min-h-0 min-w-0" style={secondaryDocumentId ? { flex: `0 0 ${splitRatio * 100}%` } : { flex: "1 1 auto" }}>
               <DocumentPane
@@ -617,7 +630,7 @@ export function ShellPage() {
             </div>
             {secondaryDocumentId && (
               <>
-                <SplitResizeHandle direction={splitDirection} ratio={splitRatio} onChange={setSplitRatio} />
+                <SplitResizeHandle direction={effectiveSplitDirection} ratio={splitRatio} onChange={setSplitRatio} />
                 <div className="flex min-h-0 min-w-0 flex-1">
                   <DocumentPane
                     tab={tabs.find((tab) => tab.id === secondaryDocumentId) ?? null}
@@ -665,8 +678,14 @@ export function ShellPage() {
       </main>
       {view === "documents" && selectedDocumentId && detailPanelOpen && (
         <>
-          <ResizeHandle side="right" ariaLabel={t("resizeDetailPanel")} value={detailWidth} min={280} max={640} onResize={(dx) => setDetailWidth(detailWidth + dx)} />
-          <aside className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm" style={{ width: detailWidth }}>
+          {!responsiveLayout.overlayDetails && <ResizeHandle side="right" ariaLabel={t("resizeDetailPanel")} value={detailWidth} min={280} max={640} onResize={(dx) => setDetailWidth(detailWidth + dx)} />}
+          <aside
+            data-testid="detail-panel"
+            data-overlay={responsiveLayout.overlayDetails}
+            aria-label={t("details")}
+            className={`flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm ${responsiveLayout.overlayDetails ? "absolute inset-y-2 right-2 z-40" : ""}`}
+            style={{ width: responsiveLayout.overlayDetails ? `min(${detailWidth}px, calc(100% - 5rem))` : detailWidth }}
+          >
             <Suspense fallback={<PanelLoading />}>
               {linkedRowId ? (
                 <RowDetailPanel rowId={linkedRowId} documentId={selectedDocumentId} variant="linked" />
@@ -746,7 +765,7 @@ function LockAccessIcon() {
   return <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"><FileKey2 size={22} /></span>;
 }
 
-function SplitResizeHandle({ direction, ratio, onChange }: { direction: "horizontal" | "vertical"; ratio: number; onChange: (ratio: number) => void }) {
+export function SplitResizeHandle({ direction, ratio, onChange }: { direction: "horizontal" | "vertical"; ratio: number; onChange: (ratio: number) => void }) {
   const { t } = useTranslation();
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -765,6 +784,11 @@ function SplitResizeHandle({ direction, ratio, onChange }: { direction: "horizon
     window.addEventListener("pointerup", stop, { once: true });
   };
   const adjust = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      onChange(event.key === "Home" ? 0.2 : 0.8);
+      return;
+    }
     const backward = direction === "horizontal" ? event.key === "ArrowLeft" : event.key === "ArrowUp";
     const forward = direction === "horizontal" ? event.key === "ArrowRight" : event.key === "ArrowDown";
     if (!backward && !forward) return;
@@ -776,7 +800,10 @@ function SplitResizeHandle({ direction, ratio, onChange }: { direction: "horizon
       role="separator"
       aria-label={t("resizeSplitView")}
       aria-orientation={direction === "horizontal" ? "vertical" : "horizontal"}
+      aria-valuemin={20}
+      aria-valuemax={80}
       aria-valuenow={Math.round(ratio * 100)}
+      aria-valuetext={`${Math.round(ratio * 100)}%`}
       tabIndex={0}
       data-testid="split-resize-handle"
       className={`group relative shrink-0 touch-none rounded-full outline-none ${direction === "horizontal" ? "mx-1 w-1.5 cursor-col-resize" : "my-1 h-1.5 cursor-row-resize"}`}

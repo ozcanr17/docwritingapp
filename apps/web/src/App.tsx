@@ -17,10 +17,12 @@ const queryClient = new QueryClient({
 export function App() {
   const highContrast = useAuthoringPreferencesStore((state) => state.highContrast);
   const reduceMotion = useAuthoringPreferencesStore((state) => state.reduceMotion);
+  const interfaceScale = useAuthoringPreferencesStore((state) => state.interfaceScale);
   useEffect(() => {
     document.documentElement.classList.toggle("docsys-high-contrast", highContrast);
     document.documentElement.classList.toggle("docsys-reduce-motion", reduceMotion);
-  }, [highContrast, reduceMotion]);
+    document.documentElement.style.fontSize = `${interfaceScale}%`;
+  }, [highContrast, interfaceScale, reduceMotion]);
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>

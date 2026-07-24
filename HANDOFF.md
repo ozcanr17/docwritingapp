@@ -6,7 +6,19 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 through 6 are complete. Stage 7 (responsive design and accessibility) is next.
+The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 through 7 are complete. Stage 8 (continuous visual, workflow and performance verification) is next.
+
+### What was completed in UI/UX Stage 7
+
+1. Defined deterministic responsive modes for the application shell: below 960 px the Explorer becomes an accessible icon rail, below 1180 px row details become a non-destructive overlay instead of compressing the editor, and below 900 px split view stacks vertically.
+2. Preserved the user's explicit sidebar and split preferences while treating compact behavior as a temporary viewport adaptation. Returning to a wide viewport restores the personal layout rather than overwriting it.
+3. Added keyboard-complete split and panel resize separators. Arrow keys resize incrementally, Home/End jump to minimum/maximum bounds, and screen readers receive orientation, range, current value and readable value text.
+4. Added a persisted 100%, 110% and 125% interface-scale preference alongside the existing document-font controls. High contrast, reduced motion and interface scale apply immediately at the application root.
+5. Strengthened non-color communication: row baseline/change stripes and collaboration presence indicators now expose readable screen-reader state instead of relying on color alone. Focused panes receive explicit high-contrast outlines.
+6. Added responsive-layout unit coverage, shell access/separator tests, resize-handle keyboard tests, preference/settings tests and accessible row-state assertions.
+7. Extended the real Playwright accessibility scenario to WCAG 2.2 A/AA tags, a 760 px no-overflow/collapsed-Explorer check, 125% text, high contrast and reduced motion. The scenario passes with zero automated axe violations.
+8. The complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **123 web + 71 API + 13 worker = 207/207 tests**, production build and bundle budget; initial gzip is **129.6 KiB**.
+9. Desktop code and packages remain intentionally unchanged, per the user's instruction for this transformation.
 
 ### What was completed in UI/UX Stage 6
 
@@ -124,18 +136,16 @@ The active task is the user-approved **eight-stage professional UI/UX transforma
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stages 1 through 6 are complete and Stage 7 is ready to start. The current in-app browser can reach the user's host `localhost:5173`; do not stop or replace the user's correctly running dev services without a concrete need. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. UI/UX Stages 1 through 7 are complete and Stage 8 is ready to start. The current in-app browser can reach the user's host `localhost:5173`; do not stop or replace the user's correctly running dev services without a concrete need. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
-1. Implement Stage 7 from `docs/UI-UX-DONUSUM-PLANI.md`: define and test minimum-width behavior for the main panel, Explorer, details panel and both split orientations.
-2. Audit keyboard order, focus rings, skip links and screen-reader names; then close WCAG 2.2 AA gaps found by automated and manual checks.
-3. Exercise high contrast, reduced motion and enlarged text together, and ensure every state currently carried by color also has an icon or readable label.
-3. Unify saved views and filters across work list, board and detail surfaces.
-4. Add one readable requirement-test-execution-defect flow and role-relevant author/test/review landing metrics.
-5. Standardize actionable API and validation errors without leaking server internals or replacing precise conflict/permission explanations with generic failures.
-6. Add regression tests and run wide, narrow, details-panel and split-view live walkthroughs before checking Stage 4.
-7. Preserve the Jira-grade planning backlog, but do not mix unrelated capability expansion into the UI/UX stages unless it is required to eliminate a broken or undiscoverable user path.
+1. Implement Stage 8 from `docs/UI-UX-DONUSUM-PLANI.md`: complete browser-level author, tester, reviewer and administrator workflow coverage.
+2. Add stable wide, narrow, detail-overlay and horizontal/vertical split screenshot baselines with an intentional review/update workflow.
+3. Re-run and document the 10,000-row authoring benchmark for scroll, search, filtering and inline editing; establish regression thresholds suitable for CI.
+4. Make typecheck, unit/integration tests, WCAG automation, production build and selected visual checks one continuously enforced quality gate.
+5. Complete a final macOS browser walkthrough across light/dark, 100%/125%, high contrast, reduced motion, keyboard-only navigation and responsive breakpoints before checking Stage 8.
+6. Preserve the Jira-grade planning backlog, but do not mix unrelated capability expansion into the UI/UX stages unless it is required to eliminate a broken or undiscoverable user path.
 
 ### Pitfalls encountered in the latest task
 
@@ -148,6 +158,9 @@ There is **no active code blocker**. UI/UX Stages 1 through 6 are complete and S
 - Do not switch split-view toolbars with opacity/invisibility transitions. Hidden focused-document portals caused visible flicker and transient duplicate chrome; keep the fixed header height and render only the focused portal visibly.
 - Document-tab scroll arrows depend on measured overflow, not tab count. Preserve ResizeObserver/scroll-state measurement because sidebars, detail panels, split ratios and localized titles all change the available width.
 - Do not solve top-bar collisions by moving the search box away from the geometric center. The measured File/Edit relocation and root `scrollWidth === clientWidth` checks are the current contract at 760 px and 520 px.
+- Do not persist responsive fallback state as a user preference. Compact Explorer, overlay details and stacked split view are derived from viewport width; the user's wide-screen configuration must return unchanged.
+- Keep panel separators as real keyboard-operable ARIA separators. Pointer-only resizing is not acceptable, and Home/End must continue to honor the configured minimum and maximum.
+- Playwright may be installed without its browser binaries after dependency updates. If an accessibility run fails before launching with a missing executable, run `pnpm --filter @docsys/e2e exec playwright install chromium`; do not misdiagnose it as an application regression.
 - The in-app browser test surface cannot access the Mac host through its own `localhost`. For live visual checks, run Vite on `--host` and use the Mac LAN address for the browser plus session-only API/collaboration/CORS environment values. Do not commit a private LAN address or replace production defaults.
 - A prerequisite API is not a complete product feature. Project creation existed on the server but had no ordinary-user entry point; Work and tests therefore presented a dead-end empty state. Every future prerequisite must include discovery, creation/selection, permission feedback, loading/error states and a direct recovery path.
 - Work and tests previously selected the first project for workflow/test plans while listing work items across the whole workspace. Always drive every project-scoped query from the same explicit active-project identifier.

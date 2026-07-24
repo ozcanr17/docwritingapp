@@ -34,11 +34,26 @@ export function ResizeHandle({ onResize, side, ariaLabel, value, min, max }: Res
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={Math.round(value)}
+      aria-valuetext={`${Math.round(value)} px`}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onKeyDown={(e) => {
-        if (e.key === "ArrowLeft") onResize(side === "left" ? -16 : 16);
-        if (e.key === "ArrowRight") onResize(side === "left" ? 16 : -16);
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          onResize(side === "left" ? -16 : 16);
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          onResize(side === "left" ? 16 : -16);
+        }
+        if (e.key === "Home") {
+          e.preventDefault();
+          onResize(min - value);
+        }
+        if (e.key === "End") {
+          e.preventDefault();
+          onResize(max - value);
+        }
       }}
       className="w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary"
     />
