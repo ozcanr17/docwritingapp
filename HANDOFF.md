@@ -6,11 +6,24 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stage 1, covering the design system and application shell, is complete. Stage 2 (document tabs and toolbars) is next.
+The active task is the user-approved **eight-stage professional UI/UX transformation**. The living, checkbox-based scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; update that file as each item is completed. The user asked to ignore desktop packaging during this transformation and validate quickly on macOS with `pnpm dev`. Stages 1 and 2 are complete. Stage 3 (document table and contextual detail panel) is next.
 
 ### What was completed in the latest task
 
-1. Added `docs/UI-UX-DONUSUM-PLANI.md` with every approved goal grouped into eight independently verifiable stages and an explicit definition of done. Stage 1 is checked; all later stages remain unchecked.
+1. Completed Stage 2 in `docs/UI-UX-DONUSUM-PLANI.md`; Stages 1 and 2 are checked and all later stages remain unchecked.
+2. Unified document-tab focus, primary/secondary split participation, pinning and overflow presentation. Tabs retain useful width, auto-reveal the focused document, expose measured left/right scroll buttons only under real overflow, and support Arrow Left/Right, Home and End keyboard navigation.
+3. Added accessible primary/secondary view labels and quiet pane markers to split participants. The focused tab and pane use one primary accent while the non-focused split pane remains fully readable instead of being dimmed.
+4. Removed opacity-based portal switching from the focused document toolbar. Only the focused document toolbar is mounted visibly in the fixed-height header, eliminating the split-focus flicker and keeping the single save-status surface stable.
+5. Kept high-frequency authoring and view controls directly visible at normal widths. Container-aware responsive rules move only lower-frequency blank-object, template, expand/collapse, find/replace, sorting-direction, saved-view and dashboard actions into a functional `More actions` menu when the relevant toolbar becomes narrow.
+6. Standardized responsive overflow actions with the existing accessible context-menu layer, preserving tooltips, configured keyboard-shortcut labels, disabled states and destructive styling.
+7. Stabilized the save/offline/conflict indicator width and added an explicit state data attribute without moving it away from the single document-header location.
+8. Added tab navigation, split-label and scroll-state regression coverage. The complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **102 web + 71 API + 13 worker = 186/186 tests**, and the production build with bundle budgets (**124.3 KiB initial gzip**).
+9. Ran a live macOS browser walkthrough against the current dev services. Six open documents produced real tab overflow and bidirectional scroll controls; split focus changed in both directions with one save-status surface; the responsive advanced and authoring overflow menus exposed the expected actions.
+10. Desktop code and packages were intentionally not changed or rebuilt, per the user's instruction for this transformation.
+
+### What was completed in UI/UX Stage 1
+
+1. Added `docs/UI-UX-DONUSUM-PLANI.md` with every approved goal grouped into eight independently verifiable stages and an explicit definition of done.
 2. Expanded the light/dark design tokens with subtle/hover surfaces, stronger borders and theme-aware shadow color. Added shared application-shell, panel, section-label, icon-button, navigation-item and global-search primitives.
 3. Rebuilt the global top bar as a calmer three-zone surface: application/workspace context on the left, geometrically centered global search, and system actions on the right. The existing measured collision algorithm moves Edit to the right when necessary.
 4. Reorganized the sidebar into workspace identity, primary navigation, Explorer, workspace tools and account sections. The current view has a strong accent state; the profile shows avatar, name and email.
@@ -18,7 +31,7 @@ The active task is the user-approved **eight-stage professional UI/UX transforma
 6. Replaced the plain shell loading text with an accessible application-shell skeleton and strengthened main/side surface hierarchy without changing document data or permissions.
 7. Added layout-store tests and a MenuBar workspace-context test. All 99 web tests, web typecheck, root lint, forbidden-character scan and production web build pass.
 8. Ran the current services locally and completed a live browser walkthrough against the seeded admin account. At 760 px and 520 px viewport widths the page has no root horizontal overflow; search remains centered, File stays left and Edit moves right. Expanded/collapsed sidebar and a real requirements document were visually verified.
-9. Desktop code and packages were intentionally not changed or rebuilt, per the user's instruction for this phase.
+9. Desktop code and packages were intentionally not changed or rebuilt, per the user's instruction for this transformation.
 
 ### What was completed in the preceding work-management task
 
@@ -53,20 +66,23 @@ The active task is the user-approved **eight-stage professional UI/UX transforma
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stage 1 is complete and Stage 2 is ready to start. The in-app browser cannot reach the host's `localhost`, so live browser verification used the Mac LAN address with session-only `VITE_API_URL`, `VITE_COLLAB_URL`, `APP_BASE_URL` and CORS values. This is a test-harness networking constraint, not a product change. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. UI/UX Stages 1 and 2 are complete and Stage 3 is ready to start. The in-app browser cannot reach the host's `localhost`, so live browser verification used the Mac LAN address with session-only `VITE_API_URL`, `VITE_COLLAB_URL`, `APP_BASE_URL` and CORS values. This is a test-harness networking constraint, not a product change. Project rename/archive/member administration, transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, saved work queries, bulk operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
-1. Implement Stage 2 from `docs/UI-UX-DONUSUM-PLANI.md`: unify document-tab focus, pinning, split-view and overflow behavior.
-2. Separate the document toolbar into primary authoring and secondary view actions; use a priority-based overflow only when width requires it.
-3. Keep save/offline/conflict status in one stable location and remove toolbar flicker when split-view focus changes.
-4. Add regression tests for wide, narrow, detail-panel and both split orientations, then run a live macOS `pnpm dev` walkthrough.
-5. Update the checklist and this handoff, commit Stage 2 independently and push it to `origin/main`.
+1. Implement Stage 3 from `docs/UI-UX-DONUSUM-PLANI.md`: make row selection, edit mode and change state immediately distinguishable.
+2. Complete compact, standard and comfortable density behavior; improve long-text wrapping and natural horizontal scrolling without default sticky columns.
+3. Make the contextual detail panel useful when no row is selected by showing document summary, coverage and quality information.
+4. Remove duplicated low-value default columns by document type without deleting stored fields or preventing users from restoring them in a saved view.
+5. Add regression tests and run wide, narrow, detail-panel and split-view live walkthroughs before checking Stage 3.
 6. Preserve the Jira-grade planning backlog, but do not mix unrelated capability expansion into the UI/UX stages unless it is required to eliminate a broken or undiscoverable user path.
 
 ### Pitfalls encountered in the latest task
 
 - A narrow sidebar must not become a dead icon strip. Every icon retains an accessible name and tooltip, and profile/logout remain reachable in collapsed mode. Preserve this when adding more navigation.
+- Do not hide high-frequency authoring actions behind a permanent ellipsis. The Stage 2 overflow triggers are container-driven and appear only when their own toolbar lacks room; wide layouts must continue to show direct controls.
+- Do not switch split-view toolbars with opacity/invisibility transitions. Hidden focused-document portals caused visible flicker and transient duplicate chrome; keep the fixed header height and render only the focused portal visibly.
+- Document-tab scroll arrows depend on measured overflow, not tab count. Preserve ResizeObserver/scroll-state measurement because sidebars, detail panels, split ratios and localized titles all change the available width.
 - Do not solve top-bar collisions by moving the search box away from the geometric center. The measured File/Edit relocation and root `scrollWidth === clientWidth` checks are the current contract at 760 px and 520 px.
 - The in-app browser test surface cannot access the Mac host through its own `localhost`. For live visual checks, run Vite on `--host` and use the Mac LAN address for the browser plus session-only API/collaboration/CORS environment values. Do not commit a private LAN address or replace production defaults.
 - A prerequisite API is not a complete product feature. Project creation existed on the server but had no ordinary-user entry point; Work and tests therefore presented a dead-end empty state. Every future prerequisite must include discovery, creation/selection, permission feedback, loading/error states and a direct recovery path.

@@ -1,5 +1,5 @@
-import { FileText, Pin, X } from "lucide-react";
-import { useState } from "react";
+import { ChevronLeft, ChevronRight, FileText, Pin, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DocumentTab } from "../stores/documentTabs";
 import { ContextMenu } from "./ContextMenu";
@@ -33,15 +33,56 @@ export function DocumentTabsBar({
 }) {
   const { t } = useTranslation();
   const [menu, setMenu] = useState<{ x: number; y: number; tab: DocumentTab } | null>(null);
+  const [scrollState, setScrollState] = useState({ overflow: false, canScrollLeft: false, canScrollRight: false });
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>());
   const openMenu = (tab: DocumentTab, x: number, y: number) => setMenu({ x, y, tab });
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const update = () => setScrollState(resolveTabScrollState(scroller.scrollLeft, scroller.clientWidth, scroller.scrollWidth));
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(scroller);
+    return () => {
+      scroller.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
+  }, [tabs.length]);
+  useEffect(() => {
+    if (!activeId) return;
+    tabRefs.current.get(activeId)?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [activeId]);
+  const activateByOffset = (currentId: string, offset: number) => {
+    const index = tabs.findIndex((tab) => tab.id === currentId);
+    const target = tabs[index + offset];
+    if (target) {
+      onActivate(target.id);
+      requestAnimationFrame(() => tabRefs.current.get(target.id)?.focus());
+    }
+  };
   return (
-    <div className="relative z-30 flex min-h-12 items-center border-b border-border bg-surface/90 px-2 backdrop-blur-xl">
-      <div role="tablist" aria-label={t("openDocuments")} className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1.5">
+    <div className="relative z-30 flex min-h-12 items-center gap-1 border-b border-border bg-surface/90 px-2 backdrop-blur-xl">
+      {scrollState.overflow && (
+        <button
+          type="button"
+          data-testid="scroll-tabs-left"
+          aria-label={t("scrollTabsLeft")}
+          disabled={!scrollState.canScrollLeft}
+          className="icon-button shrink-0"
+          onClick={() => scrollerRef.current?.scrollBy({ left: -280, behavior: "smooth" })}
+        >
+          <ChevronLeft size={15} />
+        </button>
+      )}
+      <div ref={scrollerRef} role="tablist" aria-label={t("openDocuments")} className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map((tab) => (
           <div
             key={tab.id}
             draggable
-            className={`group flex h-9 min-w-32 max-w-64 flex-[1_1_12rem] items-center rounded-lg border transition-colors ${tab.id === activeId ? "border-border bg-editorBackground shadow-sm" : "border-transparent text-mutedForeground hover:bg-muted"}`}
+            data-pane={tab.id === primaryId ? "primary" : tab.id === secondaryId ? "secondary" : "none"}
+            className={`group relative flex h-9 min-w-40 max-w-72 flex-[0_1_15rem] items-center rounded-lg border transition-colors ${tab.id === activeId ? "border-primary/45 bg-primary/10 text-foreground shadow-sm" : tab.id === primaryId || tab.id === secondaryId ? "border-border bg-editorBackground text-foreground" : "border-transparent text-mutedForeground hover:bg-muted"}`}
             onContextMenu={(event) => {
               event.preventDefault();
               onActivate(tab.id);
@@ -61,8 +102,14 @@ export function DocumentTabsBar({
             }}
           >
             <button
+              ref={(element) => {
+                if (element) tabRefs.current.set(tab.id, element);
+                else tabRefs.current.delete(tab.id);
+              }}
               role="tab"
               aria-selected={tab.id === activeId}
+              aria-label={`${tab.title}${tab.id === primaryId ? ` · ${t("primaryPane")}` : tab.id === secondaryId ? ` · ${t("secondaryPane")}` : ""}`}
+              tabIndex={tab.id === activeId ? 0 : -1}
               data-testid={`document-tab-${tab.id}`}
               className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-xs"
               onClick={() => onActivate(tab.id)}
@@ -71,17 +118,49 @@ export function DocumentTabsBar({
                   event.preventDefault();
                   const bounds = event.currentTarget.getBoundingClientRect();
                   openMenu(tab, bounds.left + 12, bounds.bottom + 4);
+                } else if (event.key === "ArrowLeft") {
+                  event.preventDefault();
+                  activateByOffset(tab.id, -1);
+                } else if (event.key === "ArrowRight") {
+                  event.preventDefault();
+                  activateByOffset(tab.id, 1);
+                } else if (event.key === "Home" && tabs[0]) {
+                  event.preventDefault();
+                  const target = tabs[0];
+                  onActivate(target.id);
+                  requestAnimationFrame(() => tabRefs.current.get(target.id)?.focus());
+                } else if (event.key === "End" && tabs.length > 0) {
+                  event.preventDefault();
+                  const target = tabs[tabs.length - 1];
+                  if (!target) return;
+                  onActivate(target.id);
+                  requestAnimationFrame(() => tabRefs.current.get(target.id)?.focus());
                 }
               }}
             >
               <FileText size={13} className={tab.documentType === "test" ? "text-warning" : tab.documentType === "requirement" ? "text-info" : "text-mutedForeground"} />
               {tab.pinned && <Pin size={11} className="text-primary" />}
               <span className="truncate">{tab.title}</span>
+              {(tab.id === primaryId || tab.id === secondaryId) && (
+                <span className={`ml-auto h-1.5 w-1.5 shrink-0 rounded-full ${tab.id === activeId ? "bg-primary" : "bg-mutedForeground/55"}`} aria-hidden="true" />
+              )}
             </button>
             {!tab.pinned && <button data-testid={`close-document-tab-${tab.id}`} aria-label={t("closeDocument", { title: tab.title })} className="mr-1.5 rounded p-1 opacity-50 hover:bg-muted hover:opacity-100" onClick={(event) => { event.stopPropagation(); onClose(tab.id); }}><X size={12} /></button>}
           </div>
         ))}
       </div>
+      {scrollState.overflow && (
+        <button
+          type="button"
+          data-testid="scroll-tabs-right"
+          aria-label={t("scrollTabsRight")}
+          disabled={!scrollState.canScrollRight}
+          className="icon-button shrink-0"
+          onClick={() => scrollerRef.current?.scrollBy({ left: 280, behavior: "smooth" })}
+        >
+          <ChevronRight size={15} />
+        </button>
+      )}
       {menu && (
         <ContextMenu
           x={menu.x}
@@ -110,4 +189,13 @@ export function DocumentTabsBar({
       )}
     </div>
   );
+}
+
+export function resolveTabScrollState(scrollLeft: number, clientWidth: number, scrollWidth: number) {
+  const overflow = scrollWidth > clientWidth + 1;
+  return {
+    overflow,
+    canScrollLeft: overflow && scrollLeft > 1,
+    canScrollRight: overflow && scrollLeft + clientWidth < scrollWidth - 1,
+  };
 }

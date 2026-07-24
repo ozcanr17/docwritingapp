@@ -531,7 +531,7 @@ export function ShellPage() {
                 key={id}
                 id={`docsys-toolbar-${id}`}
                 aria-hidden={selectedDocumentId !== id}
-                className={`absolute inset-0 flex min-w-0 items-center transition-opacity duration-100 ${selectedDocumentId === id ? "z-10 opacity-100" : "pointer-events-none invisible opacity-0"}`}
+                className={`absolute inset-0 min-w-0 items-center ${selectedDocumentId === id ? "z-10 flex" : "hidden"}`}
               />
             ))}
           </div>
@@ -715,7 +715,7 @@ function DocumentPane({ tab, displayName, focused, split, position, onFocus }: {
   if (document.error instanceof ApiError && document.error.status === 403) return <section data-testid={`document-pane-${position}`} className="flex min-w-0 flex-1 items-center justify-center rounded-lg bg-surface p-8"><div className="max-w-md text-center"><LockAccessIcon /><h2 className="mt-4 font-semibold">{t("fileAccessDenied")}</h2><p className="mt-2 text-sm text-mutedForeground">{t("fileAccessDeniedDescription")}</p></div></section>;
   const readOnly = !document.data?.access?.canWrite;
   return (
-    <section data-testid={`document-pane-${position}`} data-document-id={tab.id} data-focused={focused ? "true" : "false"} aria-label={tab.title} className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-surface transition-shadow ${focused && split ? "ring-2 ring-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.18)]" : split ? "ring-1 ring-border opacity-[0.94]" : ""}`} onMouseDownCapture={onFocus}>
+    <section data-testid={`document-pane-${position}`} data-document-id={tab.id} data-focused={focused ? "true" : "false"} aria-label={`${tab.title}${split ? ` · ${focused ? t("focusedPane") : t("secondaryPane")}` : ""}`} className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-surface transition-shadow ${focused && split ? "ring-2 ring-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.18)]" : split ? "ring-1 ring-border" : ""}`} onMouseDownCapture={onFocus}>
       {split && <div className={`flex h-9 shrink-0 items-center justify-between border-b px-3 text-xs ${focused ? "border-primary bg-primary/10 text-foreground" : "border-border bg-editorBackground text-mutedForeground"}`}><span className="truncate font-semibold">{tab.title}</span><div className="flex items-center gap-2">{readOnly && <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">{t("readOnly")}</span>}<span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${focused ? "bg-primary text-primaryForeground" : "bg-muted"}`}>{focused ? t("focusedPane") : t("secondaryPane")}</span></div></div>}
       <Suspense fallback={<PanelLoading />}>
         {tab.documentType === "general_document" ? <RichTextEditor documentId={tab.id} displayName={displayName} readOnly={readOnly} /> : <DocumentGrid documentId={tab.id} documentType={tab.documentType === "test" ? "test" : "requirement"} advancedTargetId={`docsys-toolbar-${tab.id}`} showAdvancedControls readOnly={readOnly} />}

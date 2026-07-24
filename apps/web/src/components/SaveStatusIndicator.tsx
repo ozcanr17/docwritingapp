@@ -27,5 +27,5 @@ export function SaveStatusIndicator({ documentId }: { documentId: string }) {
       : state === "offline"
         ? { icon: <CloudOff size={13} />, label: t("saveState.offline"), tone: "text-warning" }
         : { icon: <Check size={13} />, label: t("saveState.saved"), tone: "text-success" };
-  return <div data-testid="save-status" role="status" aria-live="polite" className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs ${content.tone}`}>{content.icon}<span>{content.label}</span></div>;
+  return <div data-testid="save-status" data-state={state} role="status" aria-live="polite" className={`flex min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs ${content.tone}`}>{content.icon}<span>{content.label}</span></div>;
 }

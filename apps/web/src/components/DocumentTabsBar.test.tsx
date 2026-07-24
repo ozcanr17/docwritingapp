@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { DocumentTabsBar } from "./DocumentTabsBar";
+import { DocumentTabsBar, resolveTabScrollState } from "./DocumentTabsBar";
 
 const tabs = [
   { id: "requirements", title: "Requirements", documentType: "requirement" as const },
@@ -56,5 +56,34 @@ describe("DocumentTabsBar", () => {
     fireEvent.contextMenu(screen.getByTestId("document-tab-tests"), { clientX: 120, clientY: 40 });
     fireEvent.click(screen.getByTestId("menu-split-vertical"));
     expect(changeDirection).toHaveBeenCalledWith("vertical");
+  });
+
+  it("supports arrow, home and end keyboard navigation", () => {
+    const activate = vi.fn();
+    render(<DocumentTabsBar {...splitProps} tabs={tabs} activeId="requirements" primaryId="requirements" secondaryId={null} onActivate={activate} onClose={vi.fn()} onSecondaryChange={vi.fn()} onOpenWindow={vi.fn()} onTogglePin={vi.fn()} onReorder={vi.fn()} />);
+    const requirements = screen.getByTestId("document-tab-requirements");
+    fireEvent.keyDown(requirements, { key: "ArrowRight" });
+    expect(activate).toHaveBeenCalledWith("tests");
+    fireEvent.keyDown(requirements, { key: "End" });
+    expect(activate).toHaveBeenLastCalledWith("tests");
+    fireEvent.keyDown(screen.getByTestId("document-tab-tests"), { key: "Home" });
+    expect(activate).toHaveBeenLastCalledWith("requirements");
+  });
+
+  it("labels primary and secondary split participants", () => {
+    render(<DocumentTabsBar {...splitProps} tabs={tabs} activeId="tests" primaryId="requirements" secondaryId="tests" onActivate={vi.fn()} onClose={vi.fn()} onSecondaryChange={vi.fn()} onOpenWindow={vi.fn()} onTogglePin={vi.fn()} onReorder={vi.fn()} />);
+    expect(screen.getByTestId("document-tab-requirements").parentElement).toHaveAttribute("data-pane", "primary");
+    expect(screen.getByTestId("document-tab-tests").parentElement).toHaveAttribute("data-pane", "secondary");
+    expect(screen.getByTestId("document-tab-requirements")).toHaveAccessibleName(/Requirements/);
+    expect(screen.getByTestId("document-tab-tests")).toHaveAccessibleName(/Tests/);
+  });
+});
+
+describe("resolveTabScrollState", () => {
+  it("reports the available scroll directions", () => {
+    expect(resolveTabScrollState(0, 500, 900)).toEqual({ overflow: true, canScrollLeft: false, canScrollRight: true });
+    expect(resolveTabScrollState(200, 500, 900)).toEqual({ overflow: true, canScrollLeft: true, canScrollRight: true });
+    expect(resolveTabScrollState(400, 500, 900)).toEqual({ overflow: true, canScrollLeft: true, canScrollRight: false });
+    expect(resolveTabScrollState(0, 500, 500)).toEqual({ overflow: false, canScrollLeft: false, canScrollRight: false });
   });
 });

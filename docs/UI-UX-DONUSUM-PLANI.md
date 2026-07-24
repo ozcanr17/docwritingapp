@@ -24,11 +24,11 @@ Bu belge, DocSys'in profesyonel ve kurumsal bir urun arayuzune donusumunu izleme
 
 ## Asama 2 - Dokuman sekmeleri ve arac cubuklari
 
-- [ ] Sekme odagi, sabitleme, bolunmus gorunum ve tasma davranislarini birlestirmek.
-- [ ] Dokuman arac cubugunu birincil yazim islemleri ve ikincil gorunum islemleri olarak ayirmak.
-- [ ] Dar alanlarda islemleri oncelige gore tasma menusune almak.
-- [ ] Kaydetme, cevrimdisi ve cakisma durumlarini tek konumda gostermek.
-- [ ] Ikon, tooltip, klavye kisayolu ve devre disi durumlarini tutarli hale getirmek.
+- [x] Sekme odagi, sabitleme, bolunmus gorunum ve tasma davranislarini birlestirmek.
+- [x] Dokuman arac cubugunu birincil yazim islemleri ve ikincil gorunum islemleri olarak ayirmak.
+- [x] Dar alanlarda islemleri oncelige gore tasma menusune almak.
+- [x] Kaydetme, cevrimdisi ve cakisma durumlarini tek konumda gostermek.
+- [x] Ikon, tooltip, klavye kisayolu ve devre disi durumlarini tutarli hale getirmek.
 
 ## Asama 3 - Dokuman tablosu ve ayrinti paneli
 

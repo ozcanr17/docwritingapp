@@ -132,6 +132,31 @@ body {
       0 1px 2px hsl(var(--shadow-color) / 0.04),
       0 4px 16px hsl(var(--shadow-color) / 0.035);
   }
+
+  .docsys-advanced-toolbar,
+  .docsys-authoring-toolbar {
+    container-type: inline-size;
+  }
+}
+
+@container (max-width: 900px) {
+  .docsys-advanced-toolbar .docsys-advanced-secondary {
+    display: none;
+  }
+
+  .docsys-advanced-toolbar .docsys-advanced-overflow {
+    display: inline-flex;
+  }
+}
+
+@container (max-width: 720px) {
+  .docsys-authoring-toolbar .docsys-authoring-secondary {
+    display: none;
+  }
+
+  .docsys-authoring-toolbar .docsys-authoring-overflow {
+    display: inline-flex;
+  }
 }
 
 * {

@@ -1,4 +1,4 @@
-import { ChevronsDown, ChevronsUp, CornerDownRight, FilePlus2, Filter, IndentDecrease, IndentIncrease, LayoutDashboard, Layers3, Link2, ListPlus, PanelRightOpen, Plus, Redo2, Replace, Save, Search, SlidersHorizontal, Trash2, Undo2, X } from "lucide-react";
+import { ChevronsDown, ChevronsUp, CornerDownRight, Ellipsis, FilePlus2, Filter, IndentDecrease, IndentIncrease, LayoutDashboard, Layers3, Link2, ListPlus, PanelRightOpen, Plus, Redo2, Replace, Save, Search, SlidersHorizontal, Trash2, Undo2, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -6,6 +6,7 @@ import { DashboardSummary, OutlineRow, SavedView } from "../lib/api";
 import { AdvancedFilterConfig } from "../lib/advancedFilters";
 import { GridColumn } from "../lib/columns";
 import { AdvancedFilterPopover } from "./AdvancedFilterPopover";
+import { ContextMenu, MenuItem } from "./ContextMenu";
 import { useEscapeClose } from "../hooks/useEscapeClose";
 import { formatShortcut } from "../lib/keyboardShortcuts";
 import { useKeyboardShortcutsStore } from "../stores/keyboardShortcuts";
@@ -64,6 +65,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
   const [scope, setScope] = useState<"personal" | "team">("personal");
   const [isDefault, setIsDefault] = useState(false);
   const [activeViewId, setActiveViewId] = useState("");
+  const [overflowMenu, setOverflowMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const shortcuts = useKeyboardShortcutsStore((state) => state.bindings);
   const [advancedTarget, setAdvancedTarget] = useState<HTMLElement | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -71,7 +73,8 @@ export function ProductivityBar(props: ProductivityBarProps) {
   useEscapeClose(() => {
     setSaveOpen(false);
     setDashboardOpen(false);
-  }, saveOpen || dashboardOpen);
+    setOverflowMenu(null);
+  }, saveOpen || dashboardOpen || Boolean(overflowMenu));
   useEffect(() => {
     setAdvancedTarget(props.advancedTargetId ? document.getElementById(props.advancedTargetId) : null);
   }, [props.advancedTargetId]);
@@ -82,6 +85,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
         setSaveOpen(false);
         setDashboardOpen(false);
         setFilterOpen(false);
+        setOverflowMenu(null);
       }
     };
     document.addEventListener("pointerdown", closeOutside);
@@ -97,8 +101,27 @@ export function ProductivityBar(props: ProductivityBarProps) {
     setIsDefault(false);
     setSaveOpen(false);
   };
+  const openOverflow = (element: HTMLElement, items: MenuItem[]) => {
+    const bounds = element.getBoundingClientRect();
+    setOverflowMenu({ x: bounds.right - 220, y: bounds.bottom + 4, items });
+  };
+  const advancedOverflowItems: MenuItem[] = [
+    { key: "find-replace", label: t("findReplace"), shortcut: "Ctrl/Cmd+H", onSelect: props.onToggleFindReplace },
+    { key: "templates", label: t("templateLibrary"), onSelect: props.onToggleTemplates },
+    { key: "sort-direction", label: props.sortDirection === "asc" ? "A-Z" : "Z-A", onSelect: () => props.onSortChange(props.sortKey, props.sortDirection === "asc" ? "desc" : "asc") },
+    { key: "save-view", label: t("saveView"), onSelect: () => { setSaveOpen(true); setDashboardOpen(false); } },
+    { key: "dashboard", label: t("dashboard"), onSelect: () => { setDashboardOpen(true); setSaveOpen(false); } },
+    ...(activeViewId ? [{ key: "delete-view", label: t("deleteView"), danger: true, onSelect: () => { props.onDeleteView(activeViewId); setActiveViewId(""); } }] : []),
+  ];
+  const authoringOverflowItems: MenuItem[] = [
+    { key: "add-blank-object", label: `${t("addBlankObjectHelp")} · ${formatShortcut(shortcuts.addBlankObject)}`, disabled: !props.canCreateObjects, onSelect: props.onAddBlankObject },
+    { key: "add-blank-object-below", label: `${t("addBlankObjectBelowHelp")} · ${formatShortcut(shortcuts.addBlankObjectBelow)}`, disabled: !props.canCreateObjects || !props.canAddObjectBelow, onSelect: props.onAddBlankObjectBelow },
+    ...(props.onAddTestTemplate ? [{ key: "add-test-template", label: t("addTestTemplate"), onSelect: props.onAddTestTemplate }] : []),
+    { key: "expand-all", label: `${t("expandAllGroups")} · ${formatShortcut(shortcuts.expandAll)}`, onSelect: props.onExpandAll },
+    { key: "collapse-all", label: `${t("collapseAllGroups")} · ${formatShortcut(shortcuts.collapseAll)}`, onSelect: props.onCollapseAll },
+  ];
   const advancedControls = (
-    <div ref={barRef} className="relative min-w-0 flex-1 overflow-visible text-xs">
+    <div ref={barRef} className="docsys-advanced-toolbar relative min-w-0 flex-1 overflow-visible text-xs">
       <div className="w-full min-w-0 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
       <div className="flex min-w-max items-center gap-1.5 pr-1">
       <label className="flex min-w-40 flex-1 items-center gap-2 rounded-lg border border-border bg-editorBackground px-2.5 py-1.5 xl:max-w-sm">
@@ -123,8 +146,8 @@ export function ProductivityBar(props: ProductivityBarProps) {
       >
         <Filter size={13} /><span className="hidden 2xl:inline">{t("filters")}</span>{props.advancedFilter.conditions.length > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primaryForeground">{props.advancedFilter.conditions.length}</span>}
       </button>
-      <button data-testid="find-replace-toggle" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2 py-1.5 hover:bg-muted" title={`${t("findReplace")} · Ctrl/Cmd+H`} onClick={props.onToggleFindReplace}><Replace size={13} /><span className="hidden 2xl:inline">{t("findReplace")}</span></button>
-      <button data-testid="template-library-toggle" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2 py-1.5 hover:bg-muted" title={t("templateLibrary")} onClick={props.onToggleTemplates}><Layers3 size={13} /><span className="hidden 2xl:inline">{t("templates")}</span></button>
+      <button data-testid="find-replace-toggle" className="docsys-advanced-secondary flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2 py-1.5 hover:bg-muted" title={`${t("findReplace")} · Ctrl/Cmd+H`} onClick={props.onToggleFindReplace}><Replace size={13} /><span className="hidden 2xl:inline">{t("findReplace")}</span></button>
+      <button data-testid="template-library-toggle" className="docsys-advanced-secondary flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2 py-1.5 hover:bg-muted" title={t("templateLibrary")} onClick={props.onToggleTemplates}><Layers3 size={13} /><span className="hidden 2xl:inline">{t("templates")}</span></button>
       <select
         data-testid="grid-type-filter"
         aria-label={t("filterByType")}
@@ -148,7 +171,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
       </select>
       <button
         data-testid="sort-direction"
-        className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted"
+        className="docsys-advanced-secondary rounded-lg border border-border px-2 py-1.5 hover:bg-muted"
         onClick={() => props.onSortChange(props.sortKey, props.sortDirection === "asc" ? "desc" : "asc")}
       >
         {props.sortDirection === "asc" ? "A-Z" : "Z-A"}
@@ -166,17 +189,27 @@ export function ProductivityBar(props: ProductivityBarProps) {
         <option value="">{t("savedViews")}</option>
         {props.views.map((view) => <option key={view.id} value={view.id}>{view.isDefault ? "★ " : ""}{view.name} · {t(view.scope === "team" ? "teamView" : "personalView")}</option>)}
       </select>
-      {activeViewId && <button className="rounded-lg border border-border p-1.5 text-destructive hover:bg-muted" title={t("deleteView")} onClick={() => { props.onDeleteView(activeViewId); setActiveViewId(""); }}><Trash2 size={14} /></button>}
-      <button className="rounded-lg border border-border p-1.5 hover:bg-muted" title={t("saveView")} onClick={() => { setSaveOpen((current) => !current); setDashboardOpen(false); }}>
+      {activeViewId && <button className="docsys-advanced-secondary rounded-lg border border-border p-1.5 text-destructive hover:bg-muted" title={t("deleteView")} onClick={() => { props.onDeleteView(activeViewId); setActiveViewId(""); }}><Trash2 size={14} /></button>}
+      <button className="docsys-advanced-secondary rounded-lg border border-border p-1.5 hover:bg-muted" title={t("saveView")} onClick={() => { setSaveOpen((current) => !current); setDashboardOpen(false); }}>
         <Save size={14} />
       </button>
       <button
         data-testid="dashboard-toggle"
-        className="rounded-lg border border-border p-1.5 hover:bg-muted"
+        className="docsys-advanced-secondary rounded-lg border border-border p-1.5 hover:bg-muted"
         title={t("dashboard")}
         onClick={() => { setDashboardOpen((current) => !current); setSaveOpen(false); }}
       >
         <LayoutDashboard size={14} />
+      </button>
+      <button
+        type="button"
+        data-testid="advanced-overflow"
+        className="docsys-advanced-overflow hidden rounded-lg border border-border p-1.5 hover:bg-muted"
+        title={t("moreActions")}
+        aria-label={t("moreActions")}
+        onClick={(event) => openOverflow(event.currentTarget, advancedOverflowItems)}
+      >
+        <Ellipsis size={14} />
       </button>
       </div>
       </div>
@@ -217,22 +250,32 @@ export function ProductivityBar(props: ProductivityBarProps) {
   );
   return (
     <>
-      <div ref={toolbarRef} className="relative z-20 min-w-0 border-b border-border bg-surface/90 px-2.5 py-1 text-xs backdrop-blur-xl">
+      <div ref={toolbarRef} className="docsys-authoring-toolbar relative z-20 min-w-0 border-b border-border bg-surface/90 px-2.5 py-1 text-xs backdrop-blur-xl">
         <div className="overflow-x-auto [scrollbar-width:thin]">
         <div className="flex min-w-max items-center gap-1">
           <ToolbarButton testId="add-object" label={`${t("addObject")} · ${formatShortcut(shortcuts.addObject)}`} disabled={!props.canCreateObjects} onClick={props.onAddObject}><Plus size={16} /></ToolbarButton>
           <ToolbarButton testId="add-object-below" label={`${t("addObjectBelow")} · ${formatShortcut(shortcuts.addObjectBelow)}`} disabled={!props.canCreateObjects || !props.canAddObjectBelow} onClick={props.onAddObjectBelow}><CornerDownRight size={16} /></ToolbarButton>
-          <ToolbarButton testId="add-blank-object" label={`${t("addBlankObjectHelp")} · ${formatShortcut(shortcuts.addBlankObject)}`} disabled={!props.canCreateObjects} onClick={props.onAddBlankObject}><FilePlus2 size={16} /></ToolbarButton>
-          <ToolbarButton testId="add-blank-object-below" label={`${t("addBlankObjectBelowHelp")} · ${formatShortcut(shortcuts.addBlankObjectBelow)}`} disabled={!props.canCreateObjects || !props.canAddObjectBelow} onClick={props.onAddBlankObjectBelow}><FilePlus2 size={16} /></ToolbarButton>
+          <ToolbarButton className="docsys-authoring-secondary" testId="add-blank-object" label={`${t("addBlankObjectHelp")} · ${formatShortcut(shortcuts.addBlankObject)}`} disabled={!props.canCreateObjects} onClick={props.onAddBlankObject}><FilePlus2 size={16} /></ToolbarButton>
+          <ToolbarButton className="docsys-authoring-secondary" testId="add-blank-object-below" label={`${t("addBlankObjectBelowHelp")} · ${formatShortcut(shortcuts.addBlankObjectBelow)}`} disabled={!props.canCreateObjects || !props.canAddObjectBelow} onClick={props.onAddBlankObjectBelow}><FilePlus2 size={16} /></ToolbarButton>
           {props.onAddTestStep && props.selectedRowType && <ToolbarButton testId="toolbar-add-test-step" label={`${t("addTestStep")} · ${formatShortcut(shortcuts.addTestStep)}`} onClick={props.onAddTestStep}><ListPlus size={16} /></ToolbarButton>}
-          {props.onAddTestTemplate && <ToolbarButton testId="toolbar-add-test-template" label={t("addTestTemplate")} onClick={props.onAddTestTemplate}><Layers3 size={16} /></ToolbarButton>}
+          {props.onAddTestTemplate && <ToolbarButton className="docsys-authoring-secondary" testId="toolbar-add-test-template" label={t("addTestTemplate")} onClick={props.onAddTestTemplate}><Layers3 size={16} /></ToolbarButton>}
           <span className="mx-1 h-5 w-px bg-border" />
           <ToolbarButton testId="toolbar-indent" label={`${t("indent")} · ${formatShortcut(shortcuts.indent)}`} disabled={!props.canModifySelected} onClick={props.onIndent}><IndentIncrease size={16} /></ToolbarButton>
           <ToolbarButton testId="toolbar-outdent" label={`${t("outdent")} · ${formatShortcut(shortcuts.outdent)}`} disabled={!props.canModifySelected} onClick={props.onOutdent}><IndentDecrease size={16} /></ToolbarButton>
           <ToolbarButton testId="toolbar-open-details" label={`${t("openDetails")} · ${formatShortcut(shortcuts.openDetails)}`} disabled={!props.canInspectSelected} onClick={props.onOpenDetails}><PanelRightOpen size={16} /></ToolbarButton>
           <ToolbarButton testId="toolbar-open-links" label={`${t("openLinks")} · ${formatShortcut(shortcuts.openLinks)}`} disabled={!props.canInspectSelected} onClick={props.onOpenLinks}><Link2 size={16} /></ToolbarButton>
-          <ToolbarButton testId="expand-all" label={`${t("expandAllGroups")} · ${formatShortcut(shortcuts.expandAll)}`} onClick={props.onExpandAll}><ChevronsDown size={16} /></ToolbarButton>
-          <ToolbarButton testId="collapse-all" label={`${t("collapseAllGroups")} · ${formatShortcut(shortcuts.collapseAll)}`} onClick={props.onCollapseAll}><ChevronsUp size={16} /></ToolbarButton>
+          <ToolbarButton className="docsys-authoring-secondary" testId="expand-all" label={`${t("expandAllGroups")} · ${formatShortcut(shortcuts.expandAll)}`} onClick={props.onExpandAll}><ChevronsDown size={16} /></ToolbarButton>
+          <ToolbarButton className="docsys-authoring-secondary" testId="collapse-all" label={`${t("collapseAllGroups")} · ${formatShortcut(shortcuts.collapseAll)}`} onClick={props.onCollapseAll}><ChevronsUp size={16} /></ToolbarButton>
+          <button
+            type="button"
+            data-testid="authoring-overflow"
+            className="docsys-authoring-overflow hidden rounded-lg p-2 text-mutedForeground hover:bg-muted hover:text-foreground"
+            title={t("moreActions")}
+            aria-label={t("moreActions")}
+            onClick={(event) => openOverflow(event.currentTarget, authoringOverflowItems)}
+          >
+            <Ellipsis size={16} />
+          </button>
           <span className="mx-1 h-5 w-px bg-border" />
           <ToolbarButton testId="undo-action" label={`${t("undoLastChange")} · ${formatShortcut(shortcuts.undo)}`} disabled={props.undoDisabled} onClick={props.onUndo}><Undo2 size={16} /></ToolbarButton>
           <ToolbarButton testId="redo-action" label={`${t("redoLastChange")} · ${formatShortcut(shortcuts.redo)}`} disabled={props.redoDisabled} onClick={props.onRedo}><Redo2 size={16} /></ToolbarButton>
@@ -240,12 +283,13 @@ export function ProductivityBar(props: ProductivityBarProps) {
         </div>
         </div>
       </div>
+      {overflowMenu && <ContextMenu x={overflowMenu.x} y={overflowMenu.y} items={overflowMenu.items} onClose={() => setOverflowMenu(null)} />}
       {(props.showAdvancedControls ?? true) && (advancedTarget ? createPortal(advancedControls, advancedTarget) : advancedControls)}
     </>
   );
 }
 
-function ToolbarButton({ testId, label, disabled, danger, onClick, children }: { testId: string; label: string; disabled?: boolean; danger?: boolean; onClick: () => void; children: React.ReactNode }) {
+function ToolbarButton({ testId, label, disabled, danger, className = "", onClick, children }: { testId: string; label: string; disabled?: boolean; danger?: boolean; className?: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -253,7 +297,7 @@ function ToolbarButton({ testId, label, disabled, danger, onClick, children }: {
       title={label}
       aria-label={label}
       disabled={disabled}
-      className={`rounded-lg p-2 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-35 ${danger ? "text-destructive" : "text-mutedForeground hover:text-foreground"}`}
+      className={`${className} rounded-lg p-2 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-35 ${danger ? "text-destructive" : "text-mutedForeground hover:text-foreground"}`}
       onClick={onClick}
     >
       {children}
