@@ -219,4 +219,59 @@ describe("WorkManagementPage projects", () => {
     expect(screen.getByRole("button", { name: i18n.t("workHub.assignedToMe") })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: i18n.t("workHub.bugs") })).toHaveAttribute("aria-pressed", "true");
   });
+
+  it("applies a workflow preset and saves transition role rules", async () => {
+    const statuses = ["backlog", "ready", "in_progress", "in_review", "done", "canceled"];
+    const types = ["epic", "story", "task", "bug", "risk"];
+    const createSchemes = (restricted: boolean) => Object.fromEntries(types.map((type) => [type, {
+      transitions: Object.fromEntries(statuses.map((status) => [status, status === "in_review" ? ["done"] : []])),
+      requiredFields: Object.fromEntries(statuses.map((status) => [status, status === "done" ? ["description"] : []])),
+      transitionRoles: Object.fromEntries(statuses.map((status) => [status, status === "in_review" && restricted ? { done: ["project_manager"] } : {}])),
+    }]));
+    let savedBody: Record<string, unknown> | null = null;
+    vi.mocked(api).mockImplementation(async (path, options) => {
+      if (path === "/workspaces/workspace/projects") return [{ id: "project", name: "System", code: "SYS", description: "Core", access: { canManage: true } }];
+      if (path === "/workspaces/workspace/project-access") return { canManage: true };
+      if (path.startsWith("/workspaces/workspace/work-items")) return [];
+      if (path === "/projects/project/test-plans") return [];
+      if (path === "/projects/project/work-dashboard") return {
+        projectId: "project",
+        myOpenBugs: [],
+        recentItems: [],
+        statusCounts: Object.fromEntries(statuses.map((status) => [status, 0])),
+        metrics: { total: 0, open: 0, completed: 0, completionRate: 0, myOpenBugCount: 0, unassigned: 0, criticalOpen: 0, activePlans: 0, requirements: 0, testCases: 0, plannedTests: 0, executions: 0, passedExecutions: 0, failedExecutions: 0, executionPassRate: 0, openDefects: 0, linkedEvidence: 0 },
+      };
+      if (path === "/projects/project/workflow" && options?.method === "PUT") {
+        savedBody = JSON.parse(String(options.body)) as Record<string, unknown>;
+        return { projectId: "project", version: 2, customized: true, actorRoleKeys: ["organization_admin"], schemes: createSchemes(true) };
+      }
+      if (path === "/projects/project/workflow") return { projectId: "project", version: 1, customized: false, actorRoleKeys: ["organization_admin"], schemes: createSchemes(false) };
+      if (path === "/projects/project/workflow-presets") return [{ key: "controlled", schemes: createSchemes(true) }];
+      return [];
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(<QueryClientProvider client={client}><WorkManagementPage workspaceId="workspace" /></QueryClientProvider>);
+
+    const workflowButton = await screen.findByTestId("open-workflow-editor");
+    await waitFor(() => expect(workflowButton).toBeEnabled());
+    fireEvent.click(workflowButton);
+    fireEvent.click(await screen.findByTestId("workflow-preset-controlled"));
+    const permissionLabel = i18n.t("workHub.transitionPermissionLabel", {
+      from: i18n.t("workHub.statuses.in_review"),
+      to: i18n.t("workHub.statuses.done"),
+    });
+    expect(screen.getByLabelText(permissionLabel)).toHaveValue("manager");
+    fireEvent.click(screen.getByTestId("save-workflow"));
+    await waitFor(() => expect(savedBody).not.toBeNull());
+    expect(savedBody).toEqual(expect.objectContaining({
+      expectedVersion: 1,
+      schemes: expect.objectContaining({
+        task: expect.objectContaining({
+          transitionRoles: expect.objectContaining({
+            in_review: { done: ["project_manager"] },
+          }),
+        }),
+      }),
+    }));
+  });
 });

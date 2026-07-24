@@ -41,12 +41,16 @@ import {
   WorkItemSummary,
   WorkItemType,
   WorkItemWorkflow,
+  WorkItemWorkflowPreset,
+  WorkflowRole,
   WorkflowRequiredField,
   WorkUser,
 } from "../lib/api";
 import { ModalSurface } from "./TransientSurface";
 import { ManagedProject, ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { useWorkViewsStore, WorkViewTab } from "../stores/workViews";
+import { useToastStore } from "../stores/toasts";
+import { userFacingError } from "../lib/userFacingError";
 import {
   useAuthoringPreferencesStore,
   WorkspaceFocus,
@@ -77,6 +81,7 @@ export function WorkManagementPage({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const pushToast = useToastStore((state) => state.push);
   const [tab, setTab] = useState<HubTab>("dashboard");
   const [query, setQuery] = useState("");
   const [mine, setMine] = useState(false);
@@ -163,6 +168,7 @@ export function WorkManagementPage({
         body: JSON.stringify({ expectedVersion: item.version, status }),
       }),
     onSuccess: refreshWork,
+    onError: (error) => pushToast("error", userFacingError(error, t)),
   });
   const move = useMutation({
     mutationFn: ({
@@ -186,6 +192,7 @@ export function WorkManagementPage({
         }),
       }),
     onSuccess: refreshWork,
+    onError: (error) => pushToast("error", userFacingError(error, t)),
   });
   const counts = useMemo(
     () => ({
@@ -1163,7 +1170,14 @@ function StatusSelect({
 }
 
 function allowedStatuses(item: WorkItemSummary, workflow?: WorkItemWorkflow) {
-  return workflow?.schemes[item.type].transitions[item.status] ?? allStatuses.filter((status) => status !== item.status);
+  const candidates = workflow?.schemes[item.type].transitions[item.status] ?? allStatuses.filter((status) => status !== item.status);
+  if (!workflow) return candidates;
+  const actorRoles = workflow.actorRoleKeys ?? [];
+  const isAdministrator = actorRoles.some((role) => ["system_admin", "organization_admin", "workspace_admin"].includes(role));
+  return candidates.filter((target) => {
+    const allowedRoles = workflow.schemes[item.type].transitionRoles?.[item.status]?.[target] ?? [];
+    return allowedRoles.length === 0 || isAdministrator || allowedRoles.some((role) => actorRoles.includes(role));
+  });
 }
 
 function TypeIcon({ type }: { type: WorkItemType }) {
@@ -1347,6 +1361,11 @@ function WorkflowDialog({
   const queryClient = useQueryClient();
   const [type, setType] = useState<WorkItemType>("task");
   const [draft, setDraft] = useState<WorkItemWorkflow>(() => structuredClone(workflow));
+  const [activePreset, setActivePreset] = useState("");
+  const presets = useQuery({
+    queryKey: ["work-item-workflow-presets", projectId],
+    queryFn: () => api<WorkItemWorkflowPreset[]>(`/projects/${projectId}/workflow-presets`),
+  });
   const save = useMutation({
     mutationFn: () =>
       api<WorkItemWorkflow>(`/projects/${projectId}/workflow`, {
@@ -1368,8 +1387,31 @@ function WorkflowDialog({
       next.schemes[type].transitions[from] = values.includes(to)
         ? values.filter((value) => value !== to)
         : [...values, to];
+      if (values.includes(to)) delete next.schemes[type].transitionRoles[from][to];
       return next;
     });
+  };
+  const setTransitionRoles = (from: WorkItemStatus, to: WorkItemStatus, value: string) => {
+    setDraft((current) => {
+      const next = structuredClone(current);
+      const roles: WorkflowRole[] = value === "manager"
+        ? ["project_manager"]
+        : value === "editor"
+          ? ["editor"]
+          : value === "manager_editor"
+            ? ["project_manager", "editor"]
+            : [];
+      if (roles.length) next.schemes[type].transitionRoles[from][to] = roles;
+      else delete next.schemes[type].transitionRoles[from][to];
+      return next;
+    });
+  };
+  const transitionRoleValue = (from: WorkItemStatus, to: WorkItemStatus) => {
+    const roles = draft.schemes[type].transitionRoles?.[from]?.[to] ?? [];
+    if (roles.length === 2) return "manager_editor";
+    if (roles[0] === "project_manager") return "manager";
+    if (roles[0] === "editor") return "editor";
+    return "any";
   };
   const toggleRequired = (status: WorkItemStatus, field: WorkflowRequiredField) => {
     setDraft((current) => {
@@ -1384,6 +1426,32 @@ function WorkflowDialog({
   return (
     <DialogFrame title={t("workHub.workflowTitle")} onClose={onClose} wide>
       <p className="mt-2 text-sm text-mutedForeground">{t("workHub.workflowHelp")}</p>
+      <section className="mt-4 rounded-xl border border-border bg-muted/20 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold">{t("workHub.workflowPresets")}</h3>
+            <p className="mt-0.5 text-xs text-mutedForeground">{t("workHub.workflowPresetsHelp")}</p>
+          </div>
+          {activePreset && <span role="status" data-testid="workflow-preset-pending" className="rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary">{t("workHub.workflowPresetPending")}</span>}
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          {presets.data?.map((preset) => (
+            <button
+              key={preset.key}
+              type="button"
+              data-testid={`workflow-preset-${preset.key}`}
+              className={`rounded-lg border p-3 text-left hover:border-primary/50 hover:bg-surface ${activePreset === preset.key ? "border-primary bg-primary/5" : "border-border bg-editorBackground"}`}
+              onClick={() => {
+                setDraft((current) => ({ ...current, schemes: structuredClone(preset.schemes) }));
+                setActivePreset(preset.key);
+              }}
+            >
+              <span className="block text-sm font-medium">{t(`workHub.workflowPresetNames.${preset.key}`)}</span>
+              <span className="mt-1 block text-xs leading-5 text-mutedForeground">{t(`workHub.workflowPresetDescriptions.${preset.key}`)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
       <div className="mt-4 flex flex-wrap gap-1.5" role="tablist" aria-label={t("workHub.type")}>
         {workTypes.map((value) => (
           <button
@@ -1414,14 +1482,32 @@ function WorkflowDialog({
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1.5">
                     {allStatuses.filter((to) => to !== from).map((to) => (
-                      <label key={to} className="flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1">
-                        <input
-                          type="checkbox"
-                          checked={draft.schemes[type].transitions[from].includes(to)}
-                          onChange={() => toggleTransition(from, to)}
-                        />
-                        {t(`workHub.statuses.${to}`)}
-                      </label>
+                      <div key={to} className="rounded-md border border-border bg-editorBackground px-2 py-1.5">
+                        <label className="flex cursor-pointer items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={draft.schemes[type].transitions[from].includes(to)}
+                            onChange={() => toggleTransition(from, to)}
+                          />
+                          {t(`workHub.statuses.${to}`)}
+                        </label>
+                        {draft.schemes[type].transitions[from].includes(to) && (
+                          <select
+                            className="mt-1 w-full rounded border border-border bg-surface px-1.5 py-1 text-[11px]"
+                            aria-label={t("workHub.transitionPermissionLabel", {
+                              from: t(`workHub.statuses.${from}`),
+                              to: t(`workHub.statuses.${to}`),
+                            })}
+                            value={transitionRoleValue(from, to)}
+                            onChange={(event) => setTransitionRoles(from, to, event.target.value)}
+                          >
+                            <option value="any">{t("workHub.transitionRoleOptions.any")}</option>
+                            <option value="manager">{t("workHub.transitionRoleOptions.manager")}</option>
+                            <option value="editor">{t("workHub.transitionRoleOptions.editor")}</option>
+                            <option value="manager_editor">{t("workHub.transitionRoleOptions.managerEditor")}</option>
+                          </select>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </td>

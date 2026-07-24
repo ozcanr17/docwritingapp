@@ -26,4 +26,10 @@ test("project managers can update, archive and restore a project", async ({ page
   await restore.click();
   await page.getByRole("button", { name: "Kapat" }).click();
   await expect(page.getByTestId("project-selector")).toContainText("Verification program");
+
+  await page.getByTestId("open-workflow-editor").click();
+  await page.getByTestId("workflow-preset-controlled").click();
+  await expect(page.getByTestId("workflow-preset-pending")).toBeVisible();
+  await page.getByTestId("save-workflow").click();
+  await expect(page.getByTestId("dialog-frame")).toBeHidden();
 });

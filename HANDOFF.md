@@ -6,7 +6,20 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The user-approved **eight-stage professional UI/UX transformation is complete**. The first post-transformation Jira-grade product increment, project lifecycle and member administration, is also complete and pushed to `main`. The living UI/UX scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; all items are checked. Desktop packaging remains intentionally out of scope until the user changes that direction. The next coherent product increment should continue from the remaining workflow/governance backlog or real pilot evidence.
+The user-approved **eight-stage professional UI/UX transformation is complete**. The first two post-transformation Jira-grade product increments, project lifecycle/member administration and governed workflow transitions/presets, are complete and pushed to `main`. The living UI/UX scope and stage completion criteria are in `docs/UI-UX-DONUSUM-PLANI.md`; all items are checked. Desktop packaging remains intentionally out of scope until the user changes that direction. The next coherent product increment should continue from the remaining planning/governance backlog or real pilot evidence.
+
+### What was completed in the governed workflow increment
+
+1. Extended the existing versioned `workflowConfig` JSON format with transition-role rules without adding a duplicate persistence model or breaking projects saved with the older format.
+2. Every work-item transition now enforces three server-authoritative layers: general work-item write permission, the configured source-to-target transition, and the configured project-role restriction. Required-field validation remains intact.
+3. Transition restrictions can allow Project Managers, Editors, or both. System, organization and workspace administrators retain an explicit governance override; users without general write permission do not gain write access merely because a transition names their role.
+4. The workflow response includes the current user's effective scoped role keys. List status selectors and board drag/drop hide transitions the current user cannot perform, while the API still rejects forged requests.
+5. Added Standard Delivery, Controlled Delivery and Verification Program presets. Presets are returned by a permission-protected API, applied as an unsaved local draft, and remain fully inspectable/editable before saving.
+6. Reworked the workflow editor so every enabled source-to-target transition can define its role rule alongside its required fields. Removing a transition also removes its obsolete role restriction.
+7. Status-update and board-move failures now use the shared actionable toast/error system instead of failing silently.
+8. API tests prove preset availability, required-field enforcement, transition-path enforcement, role denial, delegated Project Manager success, optimistic workflow version conflicts and audited ordering.
+9. Web coverage proves preset preview and serialized transition-role persistence. The project lifecycle Playwright journey now also applies and saves a controlled workflow preset through the real Turkish UI.
+10. The complete `pnpm verify` gate passes: release alignment, database validation, all package typechecks, lint, forbidden-character scan, **127 web + 72 API + 13 worker = 212/212 tests**, production build and bundle budget; initial gzip is **130.9 KiB**.
 
 ### What was completed in the project lifecycle increment
 
@@ -160,17 +173,22 @@ The user-approved **eight-stage professional UI/UX transformation is complete**.
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. UI/UX Stages 1 through 8 and project rename/archive/member administration are complete. Transition permissions, workflow presets, WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work.
+There is **no active code blocker**. UI/UX Stages 1 through 8, project rename/archive/member administration, transition permissions and workflow presets are complete. WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work.
 
 ### Next plan
 
 1. Review real pilot feedback and choose the next coherent product increment; do not reopen the completed UI/UX checklist for unrelated capability work.
-2. The next highest-value Jira-grade candidates are transition permissions plus workflow presets, followed by WIP limits/swimlanes, releases/iterations, shared saved queries, bulk planning operations, watchers, automation and external synchronization.
+2. The next highest-value Jira-grade candidate is release/iteration planning with WIP limits and swimlanes, followed by shared saved queries, bulk planning operations, watchers, automation and external synchronization.
 3. Keep each increment end-to-end: server authority, discoverable UI, permission states, audit, bilingual labels, tests, documentation and production validation.
 4. Monitor the first Linux visual-regression CI run after intentional snapshot changes. If font rendering exceeds the two-percent budget, inspect the diff artifact before adjusting the threshold; never update references merely to make CI green.
 
 ### Pitfalls encountered in the latest task
 
+- Transition-role rules narrow `work_item.write`; they must never grant it. Preserve the outer permission check before evaluating workflow roles.
+- Do not enforce workflow roles only in the client. Status selectors and board drag/drop hide unavailable targets for clarity, but `assertWorkflowTransition` is the authority against forged requests.
+- Old workflow JSON has no `transitionRoles`. `effectiveWorkflow` must continue normalizing absent/malformed role maps to unrestricted empty rules instead of rejecting existing projects.
+- Applying a workflow preset is deliberately non-mutating until the user presses Save. Do not make preset selection immediately overwrite the project configuration.
+- Removing a transition must also remove its stored role restriction, otherwise re-enabling the transition later can resurrect a surprising stale permission.
 - Do not treat `ProjectMember` as a second, independent permission system. It records participation; authority comes from the existing scoped `MemberRole` assignments and `AccessService`.
 - Do not allow project code changes after creation. The code is the stable prefix for issued work-item keys; renaming is limited to the project name and description.
 - Project archive must remain reversible soft deletion. Never cascade-delete work items, workflows, plans or memberships from the user-facing archive action.

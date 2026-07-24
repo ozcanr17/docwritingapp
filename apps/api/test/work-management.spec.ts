@@ -100,15 +100,38 @@ describe("work management", () => {
 
   it("enforces configurable workflows and persists audited ordering", async () => {
     const owner = await registerActor(app, "workflow-owner");
-    const { workspace } = await createOrgWorkspaceDocument(app, owner);
+    const editor = await registerActor(app, "workflow-editor");
+    const { org, workspace } = await createOrgWorkspaceDocument(app, owner);
+    await app.inject({
+      method: "POST",
+      url: `/organizations/${org.id}/members`,
+      headers: { cookie: owner.cookie },
+      payload: { userId: editor.userId, roleKey: "editor" },
+    });
     const projectResponse = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/projects`, headers: { cookie: owner.cookie }, payload: { name: "Controlled delivery", code: "FLOW" } });
     const project = JSON.parse(projectResponse.body) as { id: string };
     const workflowResponse = await app.inject({ method: "GET", url: `/projects/${project.id}/workflow`, headers: { cookie: owner.cookie } });
     expect(workflowResponse.statusCode).toBe(200);
-    const workflow = JSON.parse(workflowResponse.body) as { version: number; customized: boolean; schemes: Record<string, { transitions: Record<string, string[]>; requiredFields: Record<string, string[]> }> };
+    const workflow = JSON.parse(workflowResponse.body) as {
+      version: number;
+      customized: boolean;
+      schemes: Record<string, {
+        transitions: Record<string, string[]>;
+        requiredFields: Record<string, string[]>;
+        transitionRoles: Record<string, Record<string, string[]>>;
+      }>;
+    };
     expect(workflow.customized).toBe(false);
+    const presetsResponse = await app.inject({ method: "GET", url: `/projects/${project.id}/workflow-presets`, headers: { cookie: owner.cookie } });
+    expect(presetsResponse.statusCode).toBe(200);
+    expect(JSON.parse(presetsResponse.body)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "standard" }),
+      expect.objectContaining({ key: "controlled" }),
+      expect.objectContaining({ key: "verification" }),
+    ]));
     workflow.schemes.task.transitions.backlog = ["ready"];
     workflow.schemes.task.requiredFields.ready = ["description"];
+    workflow.schemes.task.transitionRoles.backlog.ready = ["project_manager"];
     const savedWorkflow = await app.inject({ method: "PUT", url: `/projects/${project.id}/workflow`, headers: { cookie: owner.cookie }, payload: { expectedVersion: workflow.version, schemes: workflow.schemes } });
     expect(savedWorkflow.statusCode).toBe(200);
     expect(JSON.parse(savedWorkflow.body)).toEqual(expect.objectContaining({ version: 2, customized: true }));
@@ -125,7 +148,15 @@ describe("work management", () => {
     expect(invalidTransition.statusCode).toBe(422);
     const missingRequiredField = await app.inject({ method: "PATCH", url: `/work-items/${first.id}`, headers: { cookie: owner.cookie }, payload: { expectedVersion: first.version, status: "ready" } });
     expect(missingRequiredField.statusCode).toBe(422);
-    const validTransition = await app.inject({ method: "PATCH", url: `/work-items/${first.id}`, headers: { cookie: owner.cookie }, payload: { expectedVersion: first.version, status: "ready", description: "Ready for implementation" } });
+    const deniedByRole = await app.inject({ method: "PATCH", url: `/work-items/${first.id}`, headers: { cookie: editor.cookie }, payload: { expectedVersion: first.version, status: "ready", description: "Ready for implementation" } });
+    expect(deniedByRole.statusCode).toBe(403);
+    await app.inject({
+      method: "PUT",
+      url: `/projects/${project.id}/members`,
+      headers: { cookie: owner.cookie },
+      payload: { userId: editor.userId, roleKey: "project_manager" },
+    });
+    const validTransition = await app.inject({ method: "PATCH", url: `/work-items/${first.id}`, headers: { cookie: editor.cookie }, payload: { expectedVersion: first.version, status: "ready", description: "Ready for implementation" } });
     expect(validTransition.statusCode).toBe(200);
     const moved = await app.inject({ method: "POST", url: `/work-items/${second.id}/move`, headers: { cookie: owner.cookie }, payload: { expectedVersion: second.version, targetStatus: "backlog", anchorId: first.id, position: "before" } });
     expect(moved.statusCode).toBe(400);

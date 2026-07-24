@@ -120,6 +120,23 @@ export class AccessService implements OnModuleInit {
     return rank[grant.accessLevel] >= rank[required];
   }
 
+  async roleKeys(userId: string, scope: PermissionScope): Promise<string[]> {
+    const assignments = await this.prisma.memberRole.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        OR: [
+          { scopeType: "system" },
+          { scopeType: "organization", organizationId: scope.organizationId },
+          ...(scope.workspaceId ? [{ scopeType: "workspace" as const, workspaceId: scope.workspaceId }] : []),
+          ...(scope.projectId ? [{ scopeType: "project" as const, projectId: scope.projectId }] : []),
+        ],
+      },
+      select: { role: { select: { key: true } } },
+    });
+    return [...new Set(assignments.map((assignment) => assignment.role.key))];
+  }
+
   async documentAccess(userId: string, documentId: string) {
     const document = await this.prisma.document.findFirst({ where: { id: documentId, deletedAt: null } });
     if (!document) return { accessLevel: null, canRead: false, canWrite: false, canManage: false, restricted: false };

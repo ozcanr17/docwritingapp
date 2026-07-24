@@ -1074,6 +1074,26 @@
     "workflow": "Workflow",
     "workflowTitle": "Project workflow",
     "workflowHelp": "Choose which status transitions are available for each work item type and which fields must be completed before entering a status.",
+    "workflowPresets": "Workflow presets",
+    "workflowPresetsHelp": "Start with a proven process, review the resulting rules below, then save when ready.",
+    "workflowPresetPending": "Preset applied · not saved",
+    "workflowPresetNames": {
+      "standard": "Standard delivery",
+      "controlled": "Controlled delivery",
+      "verification": "Verification program"
+    },
+    "workflowPresetDescriptions": {
+      "standard": "Flexible team flow with common forward, return and cancel transitions.",
+      "controlled": "Sequential delivery with required ownership and manager approval before completion.",
+      "verification": "Evidence-oriented flow requiring ownership, due dates and tighter promotion into active work."
+    },
+    "transitionPermissionLabel": "Roles allowed to move from {{from}} to {{to}}",
+    "transitionRoleOptions": {
+      "any": "Any user with write access",
+      "manager": "Project managers only",
+      "editor": "Editors only",
+      "managerEditor": "Project managers and editors"
+    },
     "fromStatus": "Current status",
     "allowedTransitions": "Allowed next statuses",
     "requiredFields": "Required on entry",

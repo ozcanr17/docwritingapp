@@ -79,6 +79,7 @@ const internalDefect = z.object({
   assigneeId: z.string().uuid().nullable().optional(),
 });
 const workflowRequiredField = z.enum(["description", "assignee", "dueAt"]);
+const workflowRole = z.enum(["project_manager", "editor"]);
 const workflowTransitions = z.object({
   backlog: z.array(workItemStatus).max(6).optional(),
   ready: z.array(workItemStatus).max(6).optional(),
@@ -95,7 +96,27 @@ const workflowRequiredFields = z.object({
   done: z.array(workflowRequiredField).max(3).optional(),
   canceled: z.array(workflowRequiredField).max(3).optional(),
 }).strict();
-const workflowScheme = z.object({ transitions: workflowTransitions, requiredFields: workflowRequiredFields.default({}) }).strict();
+const workflowRolesByTarget = z.object({
+  backlog: z.array(workflowRole).max(2).optional(),
+  ready: z.array(workflowRole).max(2).optional(),
+  in_progress: z.array(workflowRole).max(2).optional(),
+  in_review: z.array(workflowRole).max(2).optional(),
+  done: z.array(workflowRole).max(2).optional(),
+  canceled: z.array(workflowRole).max(2).optional(),
+}).strict();
+const workflowTransitionRoles = z.object({
+  backlog: workflowRolesByTarget.optional(),
+  ready: workflowRolesByTarget.optional(),
+  in_progress: workflowRolesByTarget.optional(),
+  in_review: workflowRolesByTarget.optional(),
+  done: workflowRolesByTarget.optional(),
+  canceled: workflowRolesByTarget.optional(),
+}).strict();
+const workflowScheme = z.object({
+  transitions: workflowTransitions,
+  requiredFields: workflowRequiredFields.default({}),
+  transitionRoles: workflowTransitionRoles.default({}),
+}).strict();
 const workflowConfiguration = z.object({
   expectedVersion: z.number().int().positive(),
   schemes: z.object({ epic: workflowScheme, story: workflowScheme, task: workflowScheme, bug: workflowScheme, risk: workflowScheme }).strict(),
@@ -134,6 +155,11 @@ export class WorkManagementController {
   @Get("projects/:projectId/workflow")
   getWorkflow(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
     return this.service.getWorkflow(user.userId, projectId);
+  }
+
+  @Get("projects/:projectId/workflow-presets")
+  getWorkflowPresets(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
+    return this.service.getWorkflowPresets(user.userId, projectId);
   }
 
   @Get("projects/:projectId/work-dashboard")

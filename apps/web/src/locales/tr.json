@@ -1073,6 +1073,26 @@
     "workflow": "İş akışı",
     "workflowTitle": "Proje iş akışı",
     "workflowHelp": "Her iş kaydı türü için kullanılabilir durum geçişlerini ve bir duruma girerken doldurulması zorunlu alanları belirleyin.",
+    "workflowPresets": "İş akışı şablonları",
+    "workflowPresetsHelp": "Kanıtlanmış bir süreçle başlayın, oluşan kuralları aşağıda inceleyin ve hazır olduğunuzda kaydedin.",
+    "workflowPresetPending": "Şablon uygulandı · kaydedilmedi",
+    "workflowPresetNames": {
+      "standard": "Standart teslimat",
+      "controlled": "Kontrollü teslimat",
+      "verification": "Doğrulama programı"
+    },
+    "workflowPresetDescriptions": {
+      "standard": "Yaygın ileri, geri dönüş ve iptal geçişleriyle esnek ekip akışı.",
+      "controlled": "Tamamlanmadan önce zorunlu sorumluluk ve yönetici onayı içeren sıralı teslimat.",
+      "verification": "Sorumlu, bitiş tarihi ve aktif çalışmaya daha kontrollü geçiş gerektiren kanıt odaklı akış."
+    },
+    "transitionPermissionLabel": "{{from}} durumundan {{to}} durumuna geçiş yapabilecek roller",
+    "transitionRoleOptions": {
+      "any": "Yazma yetkisi olan herkes",
+      "manager": "Yalnızca proje yöneticileri",
+      "editor": "Yalnızca düzenleyiciler",
+      "managerEditor": "Proje yöneticileri ve düzenleyiciler"
+    },
     "fromStatus": "Mevcut durum",
     "allowedTransitions": "İzin verilen sonraki durumlar",
     "requiredFields": "Geçişte zorunlu alanlar",

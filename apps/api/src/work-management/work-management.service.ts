@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { Prisma } from "@docsys/database";
 import { randomUUID } from "crypto";
 import { AccessService } from "../access/access.service";
@@ -47,9 +47,19 @@ type InternalDefectInput = { projectId: string; title: string; description?: str
 type WorkStatus = NonNullable<WorkItemUpdate["status"]>;
 type WorkType = WorkItemCreate["type"];
 type WorkflowRequiredField = "description" | "assignee" | "dueAt";
-type WorkflowScheme = { transitions: Record<WorkStatus, WorkStatus[]>; requiredFields: Record<WorkStatus, WorkflowRequiredField[]> };
+type WorkflowRole = "project_manager" | "editor";
+type WorkflowTransitionRoles = Record<WorkStatus, Partial<Record<WorkStatus, WorkflowRole[]>>>;
+type WorkflowScheme = {
+  transitions: Record<WorkStatus, WorkStatus[]>;
+  requiredFields: Record<WorkStatus, WorkflowRequiredField[]>;
+  transitionRoles: WorkflowTransitionRoles;
+};
 type WorkflowConfiguration = { schemes: Record<WorkType, WorkflowScheme> };
-type WorkflowSchemeInput = { transitions: Partial<Record<WorkStatus, WorkStatus[]>>; requiredFields: Partial<Record<WorkStatus, WorkflowRequiredField[]>> };
+type WorkflowSchemeInput = {
+  transitions: Partial<Record<WorkStatus, WorkStatus[]>>;
+  requiredFields: Partial<Record<WorkStatus, WorkflowRequiredField[]>>;
+  transitionRoles: Partial<WorkflowTransitionRoles>;
+};
 
 const workStatuses: WorkStatus[] = ["backlog", "ready", "in_progress", "in_review", "done", "canceled"];
 const workTypes: WorkType[] = ["epic", "story", "task", "bug", "risk"];
@@ -63,7 +73,40 @@ const defaultTransitions: Record<WorkStatus, WorkStatus[]> = {
 };
 
 function defaultWorkflow(): WorkflowConfiguration {
-  return { schemes: Object.fromEntries(workTypes.map((type) => [type, { transitions: Object.fromEntries(workStatuses.map((status) => [status, [...defaultTransitions[status]]])), requiredFields: Object.fromEntries(workStatuses.map((status) => [status, []])) }])) as unknown as Record<WorkType, WorkflowScheme> };
+  return {
+    schemes: Object.fromEntries(workTypes.map((type) => [type, {
+      transitions: Object.fromEntries(workStatuses.map((status) => [status, [...defaultTransitions[status]]])),
+      requiredFields: Object.fromEntries(workStatuses.map((status) => [status, []])),
+      transitionRoles: Object.fromEntries(workStatuses.map((status) => [status, {}])),
+    }])) as unknown as Record<WorkType, WorkflowScheme>,
+  };
+}
+
+function workflowPreset(key: "standard" | "controlled" | "verification"): WorkflowConfiguration {
+  const workflow = defaultWorkflow();
+  if (key === "standard") return workflow;
+  for (const type of workTypes) {
+    const scheme = workflow.schemes[type];
+    scheme.transitions = {
+      backlog: ["ready", "canceled"],
+      ready: ["backlog", "in_progress", "canceled"],
+      in_progress: ["ready", "in_review", "canceled"],
+      in_review: ["in_progress", "done", "canceled"],
+      done: ["in_review"],
+      canceled: ["backlog"],
+    };
+    scheme.requiredFields.ready = ["description", "assignee"];
+    scheme.requiredFields.in_review = ["description", "assignee"];
+    scheme.requiredFields.done = ["description", "assignee"];
+    scheme.transitionRoles.in_review.done = ["project_manager"];
+    if (key === "verification") {
+      scheme.requiredFields.ready = ["description", "assignee", "dueAt"];
+      scheme.requiredFields.done = ["description", "assignee", "dueAt"];
+      scheme.transitionRoles.ready.in_progress = ["project_manager"];
+      scheme.transitionRoles.in_progress.in_review = ["project_manager", "editor"];
+    }
+  }
+  return workflow;
 }
 
 const detailInclude = {
@@ -149,7 +192,23 @@ export class WorkManagementService {
   async getWorkflow(actorId: string, projectId: string) {
     const project = await this.requireProject(projectId);
     await this.access.assertPermission(actorId, "work_item.read", this.projectScope(project));
-    return { projectId, version: project.workflowVersion, customized: this.hasWorkflowConfiguration(project.workflowConfig), ...this.effectiveWorkflow(project.workflowConfig) };
+    const actorRoleKeys = await this.access.roleKeys(actorId, this.projectScope(project));
+    return {
+      projectId,
+      version: project.workflowVersion,
+      customized: this.hasWorkflowConfiguration(project.workflowConfig),
+      actorRoleKeys,
+      ...this.effectiveWorkflow(project.workflowConfig),
+    };
+  }
+
+  async getWorkflowPresets(actorId: string, projectId: string) {
+    const project = await this.requireProject(projectId);
+    await this.access.assertPermission(actorId, "project.manage", this.projectScope(project));
+    return (["standard", "controlled", "verification"] as const).map((key) => ({
+      key,
+      ...workflowPreset(key),
+    }));
   }
 
   async getWorkDashboard(actorId: string, projectId: string) {
@@ -307,7 +366,7 @@ export class WorkManagementService {
     if (input.parentId === workItemId) throw new BadRequestException("A work item cannot be its own parent");
     if (input.parentId) await this.assertParent(input.parentId, current.projectId);
     const { expectedVersion, ...fields } = input;
-    if (fields.status && fields.status !== current.status) await this.assertWorkflowTransition(current, fields.status, fields);
+    if (fields.status && fields.status !== current.status) await this.assertWorkflowTransition(actorId, current, fields.status, fields);
     const data: Prisma.WorkItemUncheckedUpdateManyInput = {
       ...fields,
       description: fields.description === undefined ? undefined : fields.description,
@@ -331,7 +390,7 @@ export class WorkManagementService {
   async moveWorkItem(actorId: string, workItemId: string, input: { expectedVersion: number; targetStatus: WorkStatus; anchorId: string | null; position: "before" | "after" }) {
     const current = await this.requireWorkItem(workItemId);
     await this.access.assertPermission(actorId, "work_item.write", this.itemScope(current));
-    if (input.targetStatus !== current.status) await this.assertWorkflowTransition(current, input.targetStatus, {});
+    if (input.targetStatus !== current.status) await this.assertWorkflowTransition(actorId, current, input.targetStatus, {});
     if (input.anchorId === workItemId) throw new BadRequestException("A work item cannot be positioned relative to itself");
     if (input.anchorId) {
       const anchor = await this.requireWorkItem(input.anchorId);
@@ -603,10 +662,21 @@ export class WorkManagementService {
     return this.getWorkItem(actorId, created.id);
   }
 
-  private async assertWorkflowTransition(current: { projectId: string; type: WorkType; status: WorkStatus; description: string | null; assigneeId: string | null; dueAt: Date | null }, targetStatus: WorkStatus, fields: Partial<WorkItemUpdate>) {
-    const project = await this.prisma.project.findUniqueOrThrow({ where: { id: current.projectId }, select: { workflowConfig: true } });
+  private async assertWorkflowTransition(actorId: string, current: { projectId: string; type: WorkType; status: WorkStatus; description: string | null; assigneeId: string | null; dueAt: Date | null }, targetStatus: WorkStatus, fields: Partial<WorkItemUpdate>) {
+    const project = await this.prisma.project.findUniqueOrThrow({
+      where: { id: current.projectId },
+      select: { id: true, organizationId: true, workspaceId: true, workflowConfig: true },
+    });
     const scheme = this.effectiveWorkflow(project.workflowConfig).schemes[fields.type ?? current.type];
     if (!scheme.transitions[current.status].includes(targetStatus)) throw new UnprocessableEntityException(`Transition from ${current.status} to ${targetStatus} is not allowed`);
+    const allowedRoles = scheme.transitionRoles[current.status][targetStatus] ?? [];
+    if (allowedRoles.length) {
+      const actorRoles = await this.access.roleKeys(actorId, this.projectScope(project));
+      const administratorRoles = ["system_admin", "organization_admin", "workspace_admin"];
+      if (!actorRoles.some((role) => administratorRoles.includes(role) || allowedRoles.includes(role as WorkflowRole))) {
+        throw new ForbiddenException("Your project role cannot perform this workflow transition");
+      }
+    }
     const values = {
       description: fields.description === undefined ? current.description : fields.description,
       assignee: fields.assigneeId === undefined ? current.assigneeId : fields.assigneeId,
@@ -628,6 +698,16 @@ export class WorkManagementService {
         return [type, {
           transitions: Object.fromEntries(workStatuses.map((status) => [status, [...new Set((input.transitions[status] ?? defaults.schemes[type].transitions[status]).filter((target) => target !== status))]])) as Record<WorkStatus, WorkStatus[]>,
           requiredFields: Object.fromEntries(workStatuses.map((status) => [status, [...new Set(input.requiredFields[status] ?? [])]])) as Record<WorkStatus, WorkflowRequiredField[]>,
+          transitionRoles: Object.fromEntries(workStatuses.map((from) => [
+            from,
+            Object.fromEntries(workStatuses
+              .filter((to) => to !== from)
+              .map((to) => [
+                to,
+                [...new Set((input.transitionRoles[from]?.[to] ?? []).filter((role): role is WorkflowRole => role === "project_manager" || role === "editor"))],
+              ])
+              .filter(([, roles]) => (roles as WorkflowRole[]).length)),
+          ])) as WorkflowTransitionRoles,
         }];
       })) as unknown as Record<WorkType, WorkflowScheme>,
     };
@@ -642,6 +722,7 @@ export class WorkManagementService {
       const rawScheme = type in rawSchemes && rawSchemes[type] && typeof rawSchemes[type] === "object" && !Array.isArray(rawSchemes[type]) ? rawSchemes[type] : null;
       const rawTransitions = rawScheme && "transitions" in rawScheme && rawScheme.transitions && typeof rawScheme.transitions === "object" && !Array.isArray(rawScheme.transitions) ? rawScheme.transitions : null;
       const rawRequired = rawScheme && "requiredFields" in rawScheme && rawScheme.requiredFields && typeof rawScheme.requiredFields === "object" && !Array.isArray(rawScheme.requiredFields) ? rawScheme.requiredFields : null;
+      const rawTransitionRoles = rawScheme && "transitionRoles" in rawScheme && rawScheme.transitionRoles && typeof rawScheme.transitionRoles === "object" && !Array.isArray(rawScheme.transitionRoles) ? rawScheme.transitionRoles : null;
       const transitions = Object.fromEntries(workStatuses.map((status) => {
         const candidates = rawTransitions && status in rawTransitions && Array.isArray(rawTransitions[status]) ? rawTransitions[status] : defaults.schemes[type].transitions[status];
         return [status, [...new Set(candidates.filter((entry): entry is WorkStatus => typeof entry === "string" && workStatuses.includes(entry as WorkStatus) && entry !== status))]];
@@ -650,7 +731,17 @@ export class WorkManagementService {
         const candidates = rawRequired && status in rawRequired && Array.isArray(rawRequired[status]) ? rawRequired[status] : [];
         return [status, [...new Set(candidates.filter((entry): entry is WorkflowRequiredField => entry === "description" || entry === "assignee" || entry === "dueAt"))]];
       })) as Record<WorkStatus, WorkflowRequiredField[]>;
-      return [type, { transitions, requiredFields }];
+      const transitionRoles = Object.fromEntries(workStatuses.map((from) => {
+        const byTarget = rawTransitionRoles && from in rawTransitionRoles && rawTransitionRoles[from] && typeof rawTransitionRoles[from] === "object" && !Array.isArray(rawTransitionRoles[from])
+          ? rawTransitionRoles[from] as Record<string, unknown>
+          : null;
+        return [from, Object.fromEntries(workStatuses.flatMap((to) => {
+          const candidates = byTarget && Array.isArray(byTarget[to]) ? byTarget[to] : [];
+          const roles = [...new Set(candidates.filter((entry): entry is WorkflowRole => entry === "project_manager" || entry === "editor"))];
+          return roles.length ? [[to, roles]] : [];
+        }))];
+      })) as WorkflowTransitionRoles;
+      return [type, { transitions, requiredFields, transitionRoles }];
     })) as unknown as Record<WorkType, WorkflowScheme>;
     return { schemes };
   }

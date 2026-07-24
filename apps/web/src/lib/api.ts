@@ -110,15 +110,23 @@ export type WorkItemType = "epic" | "story" | "task" | "bug" | "risk";
 export type WorkItemStatus = "backlog" | "ready" | "in_progress" | "in_review" | "done" | "canceled";
 export type WorkItemPriority = "lowest" | "low" | "medium" | "high" | "highest" | "critical";
 export type WorkflowRequiredField = "description" | "assignee" | "dueAt";
+export type WorkflowRole = "project_manager" | "editor";
 
 export interface WorkItemWorkflow {
   projectId: string;
   version: number;
   customized: boolean;
+  actorRoleKeys: string[];
   schemes: Record<WorkItemType, {
     transitions: Record<WorkItemStatus, WorkItemStatus[]>;
     requiredFields: Record<WorkItemStatus, WorkflowRequiredField[]>;
+    transitionRoles: Record<WorkItemStatus, Partial<Record<WorkItemStatus, WorkflowRole[]>>>;
   }>;
+}
+
+export interface WorkItemWorkflowPreset {
+  key: "standard" | "controlled" | "verification";
+  schemes: WorkItemWorkflow["schemes"];
 }
 
 export interface WorkItemSummary {
