@@ -42,6 +42,7 @@ const CommandPalette = lazy(() => import("../components/CommandPalette").then((m
 const OnboardingDialog = lazy(() => import("../components/OnboardingDialog").then((module) => ({ default: module.OnboardingDialog })));
 const DocumentOverviewPanel = lazy(() => import("../components/DocumentOverviewPanel").then((module) => ({ default: module.DocumentOverviewPanel })));
 const AdminPanel = lazy(() => import("../components/AdminPanel").then((module) => ({ default: module.AdminPanel })));
+const TestRepositoryPage = lazy(() => import("../components/TestRepositoryPage").then((module) => ({ default: module.TestRepositoryPage })));
 const DocumentAccessDialog = lazy(() => import("../components/DocumentAccessDialog").then((module) => ({ default: module.DocumentAccessDialog })));
 const PilotFeedbackDialog = lazy(() => import("../components/PilotFeedbackDialog").then((module) => ({ default: module.PilotFeedbackDialog })));
 const PilotChecklistDialog = lazy(() => import("../components/PilotChecklistDialog").then((module) => ({ default: module.PilotChecklistDialog })));
@@ -57,15 +58,19 @@ interface Workspace {
   name: string;
 }
 
-type ShellView = "documents" | "work" | "trash" | "settings" | "admin";
+type ShellView = "documents" | "work" | "tests" | "trash" | "settings" | "admin";
 
 function viewForPath(pathname: string): ShellView {
   if (pathname.startsWith("/work")) return "work";
+  if (pathname.startsWith("/tests")) return "tests";
   if (pathname.startsWith("/trash")) return "trash";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/admin")) return "admin";
   return "documents";
 }
+
+const TEST_SECTIONS = ["repository", "executions", "coverage", "traceability", "report"] as const;
+type TestSection = (typeof TEST_SECTIONS)[number];
 
 export function ShellPage() {
   const { t } = useTranslation();
@@ -81,7 +86,12 @@ export function ShellPage() {
     () => /^\/docs\/([0-9a-fA-F-]{36})(?:\/|$)/.exec(location.pathname)?.[1] ?? null,
     [location.pathname],
   );
+  const testSection = resolveSection<TestSection>(pathSegments[1], TEST_SECTIONS, "repository");
   const setView = useCallback((next: ShellView) => {
+    if (next === "tests") {
+      navigate("/tests/repository");
+      return;
+    }
     if (next === "work" || next === "trash" || next === "settings" || next === "admin") {
       navigate(`/${next === "work" ? "work" : next}`);
       return;
@@ -446,6 +456,7 @@ export function ShellPage() {
   const areaMeta: Record<typeof view, { title: string; icon: React.ReactNode }> = {
     documents: { title: t("documents"), icon: <FileText size={16} /> },
     work: { title: t("workHub.title"), icon: <ClipboardCheck size={16} /> },
+    tests: { title: t("navTestManagement"), icon: <FlaskConical size={16} /> },
     trash: { title: t("trash"), icon: <Trash2 size={16} /> },
     settings: { title: t("workspaceSettings"), icon: <Settings size={16} /> },
     admin: { title: t("adminPanel"), icon: <ShieldCheck size={16} /> },
@@ -502,6 +513,25 @@ export function ShellPage() {
             active={pathSegments[1] !== "item" && workSection === item.id}
             onClick={() => navigate(`/work/${item.id}`)}
             testId={`work-nav-${item.id}`}
+          />
+        ))}
+      </SidebarGroup>
+    ) : view === "tests" ? (
+      <SidebarGroup>
+        {([
+          { id: "repository" as TestSection, label: t("testRepository"), icon: <FlaskConical size={16} /> },
+          { id: "executions" as TestSection, label: t("testExecutions"), icon: <Activity size={16} /> },
+          { id: "coverage" as TestSection, label: t("testCoverageReport"), icon: <ClipboardList size={16} /> },
+          { id: "traceability" as TestSection, label: t("traceabilityMatrix"), icon: <FolderKanban size={16} /> },
+          { id: "report" as TestSection, label: t("testExecutionReport"), icon: <LayoutList size={16} /> },
+        ]).map((item) => (
+          <SidebarItem
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            active={testSection === item.id}
+            onClick={() => navigate(`/tests/${item.id}`)}
+            testId={`tests-nav-${item.id}`}
           />
         ))}
       </SidebarGroup>
@@ -744,7 +774,20 @@ export function ShellPage() {
           </div>,
           document.body,
         )}
-        {view === "settings" && organizationId && workspaceId ? (
+        {view === "tests" ? (
+          workspaceId ? (
+            testSection === "repository" ? (
+              <Suspense fallback={<PanelLoading />}><TestRepositoryPage workspaceId={workspaceId} /></Suspense>
+            ) : (
+              <div className="p-6">
+                <div className="mx-auto max-w-xl rounded-xl border border-dashed border-border bg-surfaceSubtle p-6 text-center">
+                  <h2 className="text-sm font-semibold">{t("sectionNotAvailable")}</h2>
+                  <p className="mt-1.5 text-sm leading-5 text-mutedForeground">{t("sectionNotAvailableHelp")}</p>
+                </div>
+              </div>
+            )
+          ) : <PanelLoading />
+        ) : view === "settings" && organizationId && workspaceId ? (
           <Suspense fallback={<PanelLoading />}>
             <WorkspaceSettingsDialog
               variant="page"
