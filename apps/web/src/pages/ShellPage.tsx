@@ -43,6 +43,8 @@ const OnboardingDialog = lazy(() => import("../components/OnboardingDialog").the
 const DocumentOverviewPanel = lazy(() => import("../components/DocumentOverviewPanel").then((module) => ({ default: module.DocumentOverviewPanel })));
 const AdminPanel = lazy(() => import("../components/AdminPanel").then((module) => ({ default: module.AdminPanel })));
 const TestRepositoryPage = lazy(() => import("../components/TestRepositoryPage").then((module) => ({ default: module.TestRepositoryPage })));
+const TestCoveragePage = lazy(() => import("../components/TestCoveragePage").then((module) => ({ default: module.TestCoveragePage })));
+const TraceabilityMatrixPage = lazy(() => import("../components/TraceabilityMatrixPage").then((module) => ({ default: module.TraceabilityMatrixPage })));
 const DocumentAccessDialog = lazy(() => import("../components/DocumentAccessDialog").then((module) => ({ default: module.DocumentAccessDialog })));
 const PilotFeedbackDialog = lazy(() => import("../components/PilotFeedbackDialog").then((module) => ({ default: module.PilotFeedbackDialog })));
 const PilotChecklistDialog = lazy(() => import("../components/PilotChecklistDialog").then((module) => ({ default: module.PilotChecklistDialog })));
@@ -778,6 +780,10 @@ export function ShellPage() {
           workspaceId ? (
             testSection === "repository" ? (
               <Suspense fallback={<PanelLoading />}><TestRepositoryPage workspaceId={workspaceId} /></Suspense>
+            ) : testSection === "coverage" ? (
+              <Suspense fallback={<PanelLoading />}><TestCoveragePage workspaceId={workspaceId} /></Suspense>
+            ) : testSection === "traceability" ? (
+              <Suspense fallback={<PanelLoading />}><TraceabilityMatrixPage workspaceId={workspaceId} /></Suspense>
             ) : (
               <div className="p-6">
                 <div className="mx-auto max-w-xl rounded-xl border border-dashed border-border bg-surfaceSubtle p-6 text-center">
