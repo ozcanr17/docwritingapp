@@ -583,7 +583,13 @@ export function ShellPage() {
         title={areaMeta[view].title}
         subtitle={workspaces.data?.[0]?.name}
         icon={areaMeta[view].icon}
+        view={view}
+        canManage={Boolean(organizationAccess.data?.canManage)}
+        profile={{ displayName: profile.data.displayName, email: profile.data.email, isAdmin: Boolean(organizationAccess.data?.canManage) }}
         onToggleCollapse={toggleSidebar}
+        onNavigate={(path) => navigate(path)}
+        onOpenProfile={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
+        onLogout={() => { void handleLogout(); }}
       >
         {contextLabel && <div className="px-4 pb-1 pt-3 text-[11px] font-medium text-mutedForeground">{contextLabel}</div>}
         {sidebarContext}
@@ -592,8 +598,6 @@ export function ShellPage() {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <AppTopNav
         area={view}
-        canManage={Boolean(organizationAccess.data?.canManage)}
-        profile={{ displayName: profile.data.displayName, email: profile.data.email, isAdmin: Boolean(organizationAccess.data?.canManage) }}
         projects={projects.data ?? []}
         activeProjectId={activeWorkProjectId}
         recentDocuments={recentDocuments.map((document) => ({ id: document.id, title: document.title }))}
@@ -626,8 +630,6 @@ export function ShellPage() {
         onOpenOnboarding={() => setOnboardingOpen(true)}
         onOpenFeedback={() => setPilotFeedbackOpen(true)}
         onOpenPilotChecklist={() => setPilotChecklistOpen(true)}
-        onOpenProfile={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
-        onLogout={() => { void handleLogout(); }}
         onCreateDocument={(documentType) => setCreateDocumentType(documentType)}
         onCreateWorkItem={openWorkItemCreate}
         onCreateProject={() => {

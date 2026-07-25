@@ -10,7 +10,13 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof AppSidebar
     width: 288,
     title: "Documents",
     subtitle: "Main Workspace",
+    view: "documents",
+    canManage: true,
+    profile: { displayName: "Ada Lovelace", email: "ada@example.com", isAdmin: true },
     onToggleCollapse: vi.fn(),
+    onNavigate: vi.fn(),
+    onOpenProfile: vi.fn(),
+    onLogout: vi.fn(),
     children: <div data-testid="context-slot">sections</div>,
     ...overrides,
   };
@@ -37,5 +43,30 @@ describe("AppSidebar", () => {
   it("hides the collapse control when the viewport forces compact mode", () => {
     renderSidebar({ collapseDisabled: true, responsiveCollapsed: true });
     expect(screen.queryByTestId("toggle-sidebar")).not.toBeInTheDocument();
+  });
+
+  it("keeps settings, administration, trash and the account reachable in the footer", () => {
+    const props = renderSidebar();
+    for (const testId of ["nav-trash", "nav-admin", "nav-settings", "open-profile"]) {
+      expect(screen.getByTestId(testId)).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByTestId("nav-settings"));
+    expect(props.onNavigate).toHaveBeenCalledWith("/settings");
+    fireEvent.click(screen.getByTestId("open-profile"));
+    fireEvent.click(screen.getByTestId("menuitem-logout"));
+    expect(props.onLogout).toHaveBeenCalledOnce();
+  });
+
+  it("keeps footer entries as labelled icons when collapsed", () => {
+    renderSidebar({ collapsed: true });
+    expect(screen.getByRole("button", { name: i18n.t("settings") })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: i18n.t("trash") })).toBeInTheDocument();
+    expect(screen.queryByText("ada@example.com")).not.toBeInTheDocument();
+  });
+
+  it("hides administration from members who cannot manage the organization", () => {
+    renderSidebar({ canManage: false });
+    expect(screen.queryByTestId("nav-admin")).not.toBeInTheDocument();
+    expect(screen.getByTestId("nav-settings")).toBeInTheDocument();
   });
 });

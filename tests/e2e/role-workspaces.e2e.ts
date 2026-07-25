@@ -43,8 +43,7 @@ test("author, tester, reviewer and administrator entry points stay task focused"
   await page.getByTestId("workspace-focus-action").click();
   await expect(page.getByTestId(`document-tab-${documentId}`)).toBeVisible();
 
-  await page.getByTestId("nav-settings-menu").click();
-  await page.getByTestId("menuitem-settings-admin").click();
+  await page.getByTestId("nav-admin").click();
   await expect(page.getByTestId("admin-panel")).toBeVisible();
   await page.getByTestId("admin-tab-users").click();
   await expect(page.getByTestId("admin-tab-users")).toHaveAttribute(

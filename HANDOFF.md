@@ -264,6 +264,15 @@ The user supplied a reference product screenshot (a well-organized CRM dashboard
 
 ### Where work is currently stuck
 
+### What was completed in the latest navigation/layout pass
+
+1. **Off-screen popovers fixed** (`Menu.tsx`). Panels were positioned from the trigger rect with no viewport clamping, so right-edge menus (help, account) and bottom-edge menus overflowed. They now clamp horizontally to the viewport with an 8px margin, flip above the trigger when they do not fit below, and cap their height to the remaining space. Submenus measure the parent row and flip to `right-full` when they would overflow. Verified by measuring all nine menus at 1440x900: every panel is fully inside the viewport.
+2. **Regression caught and fixed in the same pass:** adding `overflow-y-auto` to the menu panel clipped nested submenus, breaking the Add-column and Export e2e flows. Panels that contain submenus no longer become scroll containers; only leaf menus do.
+3. **Settings, Administration, Trash and the account moved into the sidebar footer.** When the sidebar is collapsed they remain as labelled icons (48px rail), matching the user's request. The theme toggle moved into the account menu, so no capability was dropped when the top-bar gear was removed.
+4. **Top bar rearranged:** the Create button now sits directly next to Filters inside the navigation group, and the search field grows to fill the remaining space (min 7rem, max 28rem) instead of a fixed narrow width. The navigation no longer scrolls horizontally, so no menu label is clipped.
+5. **The DocSys wordmark now opens the user's dashboard** (`/work/summary`) instead of the documents area.
+6. e2e specs reverted to direct `nav-settings` / `nav-trash` / `nav-admin` clicks since those controls are single-click again in the sidebar.
+
 ### Test management area (`/tests`) — Test Repository delivered, reports pending
 
 The `/tests` area exists as a real routed area with its own contextual sidebar (Test havuzu, Test koşumları, Test kapsamı, İzlenebilirlik matrisi, Test planı koşum raporu) and is reachable from the top-nav Test management menu. `viewForPath` recognizes `/tests`, and `TEST_SECTIONS` drives `/tests/:section`.

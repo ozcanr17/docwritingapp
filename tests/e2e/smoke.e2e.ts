@@ -75,8 +75,7 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
   expect((idBefore?.x ?? 0) - (idAfter?.x ?? 0)).toBeGreaterThan(20);
   expect((requirementBefore?.x ?? 0) - (requirementAfter?.x ?? 0)).toBeGreaterThan(20);
 
-  await page.getByTestId("nav-settings-menu").click();
-  await page.getByTestId("menuitem-settings-workspace").click();
+  await page.getByTestId("nav-settings").click();
   await page.getByTestId("document-font-size").selectOption("18");
   await page.getByTestId("document-font-family").selectOption("serif");
   await expect(page.getByTestId("document-font-preview")).toHaveCSS("font-size", "18px");
@@ -94,14 +93,12 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
 
   await expect(page.getByTestId("presence-count")).toContainText(": 1");
 
-  await page.getByTestId("nav-settings-menu").click();
-  await page.getByTestId("menuitem-settings-trash").click();
+  await page.getByTestId("nav-trash").click();
   await expect(page.getByTestId("trash-panel")).toBeVisible();
   await page.getByTestId("nav-documents").click();
   await page.getByTestId("menuitem-documents-all").click();
 
-  await page.getByTestId("nav-settings-menu").click();
-  await page.getByTestId("menuitem-settings-workspace").click();
+  await page.getByTestId("nav-settings").click();
   await page.getByTestId("language-en").click();
   await expect(page.getByRole("button", { name: "Documents" })).toBeVisible();
   await page.getByTestId("language-tr").click();

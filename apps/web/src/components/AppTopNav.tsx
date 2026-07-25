@@ -1,10 +1,8 @@
-import { ChevronDown, HelpCircle, Plus, Search, Settings } from "lucide-react";
+import { ChevronDown, HelpCircle, Plus, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useThemeStore } from "../stores/theme";
 import { useToastStore } from "../stores/toasts";
 import { Menu, MenuEntry } from "./Menu";
 import { NotificationCenter } from "./NotificationCenter";
-import { Avatar } from "./ui";
 
 export type TopNavArea = "documents" | "work" | "tests" | "trash" | "settings" | "admin" | "myWork" | "projects";
 
@@ -21,8 +19,6 @@ export interface TopNavDocument {
 
 interface AppTopNavProps {
   area: TopNavArea;
-  canManage: boolean;
-  profile: { displayName: string; email: string; isAdmin: boolean };
   projects: TopNavProject[];
   activeProjectId: string | null;
   recentDocuments: TopNavDocument[];
@@ -43,8 +39,6 @@ interface AppTopNavProps {
   onOpenOnboarding: () => void;
   onOpenFeedback: () => void;
   onOpenPilotChecklist: () => void;
-  onOpenProfile: () => void;
-  onLogout: () => void;
   onCreateDocument: (documentType: "requirement" | "test") => void;
   onCreateWorkItem: () => void;
   onCreateProject: () => void;
@@ -67,8 +61,6 @@ function NavMenu({ label, testId, active, entries }: { label: string; testId: st
 
 export function AppTopNav({
   area,
-  canManage,
-  profile,
   projects,
   activeProjectId,
   recentDocuments,
@@ -89,8 +81,6 @@ export function AppTopNav({
   onOpenOnboarding,
   onOpenFeedback,
   onOpenPilotChecklist,
-  onOpenProfile,
-  onLogout,
   onCreateDocument,
   onCreateWorkItem,
   onCreateProject,
@@ -98,12 +88,6 @@ export function AppTopNav({
 }: AppTopNavProps) {
   const { t } = useTranslation();
   const pushToast = useToastStore((s) => s.push);
-  const themeMode = useThemeStore((s) => s.mode);
-  const setThemeMode = useThemeStore((s) => s.setMode);
-  const isDark =
-    themeMode === "dark" ||
-    (themeMode === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-
   const myWorkEntries: MenuEntry[] = [
     { key: "my-work-assigned", label: t("workHub.assignedToMe"), onSelect: () => onNavigate("/work/list?assignee=me") },
     { key: "my-work-bugs", label: t("workHub.myOpenBugs"), onSelect: () => onNavigate("/work/list?assignee=me&type=bug") },
@@ -202,25 +186,24 @@ export function AppTopNav({
       <button
         type="button"
         data-testid="nav-home"
+        title={t("workHub.dashboard")}
         className="mr-1 flex shrink-0 items-center gap-2 rounded-md px-1 py-1 outline-none hover:bg-muted"
-        onClick={() => onNavigate("/docs")}
+        onClick={() => onNavigate("/work/summary")}
       >
         <img src="/docsys-icon.png" alt="" className="h-7 w-7 rounded-md" />
         <span className="app-wordmark text-[15px] font-semibold tracking-tight">{t("appName")}</span>
       </button>
-      <nav aria-label={t("primaryNavigation")} className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav aria-label={t("primaryNavigation")} className="flex shrink-0 items-center gap-0.5">
         <NavMenu label={t("navMyWork")} testId="nav-my-work" active={area === "myWork"} entries={myWorkEntries} />
         <NavMenu label={t("navProjects")} testId="nav-projects" active={area === "projects"} entries={projectEntries} />
         <NavMenu label={t("navDocuments")} testId="nav-documents" active={area === "documents" || area === "trash"} entries={documentEntries} />
         <NavMenu label={t("navDashboards")} testId="nav-dashboards" active={area === "work"} entries={dashboardEntries} />
         <NavMenu label={t("navTestManagement")} testId="nav-tests" active={area === "tests"} entries={testEntries} />
         <NavMenu label={t("navFilters")} testId="nav-filters" active={false} entries={filterEntries} />
-      </nav>
-      <div className="ml-auto flex shrink-0 items-center gap-1.5">
         <Menu
           testId="global-create"
           label={t("create")}
-          triggerClassName="inline-flex h-8 shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent bg-primary px-3 text-sm font-medium text-primaryForeground outline-none transition-colors hover:bg-primary/90"
+          triggerClassName="ml-1.5 inline-flex h-8 shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent bg-primary px-3 text-sm font-medium text-primaryForeground outline-none transition-colors hover:bg-primary/90"
           icon={<span className="inline-flex items-center gap-1.5"><Plus size={15} /><span className="hidden sm:inline">{t("create")}</span></span>}
           entries={[
             { key: "create-work-item", label: t("workHub.newItem"), onSelect: onCreateWorkItem },
@@ -232,11 +215,13 @@ export function AppTopNav({
             { key: "create-project", label: t("workHub.newProject"), onSelect: onCreateProject },
           ]}
         />
+      </nav>
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
         <div
           id="docsys-global-search"
           data-testid="global-search-trigger"
           title={t("globalSearchHelp")}
-          className={`global-search-trigger flex w-[clamp(7rem,13vw,13rem)] min-w-0 shrink-0 items-center gap-2 border border-border bg-editorBackground px-3 py-1.5 text-xs text-mutedForeground transition-colors focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15 hover:border-primary/40 ${searchOpen ? "rounded-t-md rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-md"}`}
+          className={`global-search-trigger flex min-w-28 max-w-[28rem] flex-1 items-center gap-2 border border-border bg-editorBackground px-3 py-1.5 text-xs text-mutedForeground transition-colors focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15 hover:border-primary/40 ${searchOpen ? "rounded-t-md rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-md"}`}
         >
           <Search size={14} className="shrink-0" />
           <input
@@ -271,33 +256,6 @@ export function AppTopNav({
             { key: "command-palette", label: t("commandPalette"), shortcut: commandPaletteShortcut, onSelect: onOpenCommandPalette },
             { key: "help-sep", label: "", separator: true },
             { key: "about", label: t("about"), onSelect: () => pushToast("info", `${t("appName")} — ${t("aboutText")}`) },
-          ]}
-        />
-        <Menu
-          testId="nav-settings-menu"
-          label={t("settings")}
-          icon={<Settings size={17} />}
-          entries={[
-            { key: "settings-workspace", label: t("workspaceSettings"), onSelect: () => onNavigate("/settings") },
-            ...(canManage ? [{ key: "settings-admin", label: t("adminPanel"), onSelect: () => onNavigate("/admin") }] : []),
-            { key: "settings-sep", label: "", separator: true },
-            { key: "settings-trash", label: t("trash"), onSelect: () => onNavigate("/trash") },
-            { key: "settings-theme-sep", label: "", separator: true },
-            { key: "settings-theme", label: isDark ? t("themeLight") : t("themeDark"), onSelect: () => setThemeMode(isDark ? "light" : "dark") },
-          ]}
-        />
-        <Menu
-          testId="open-profile"
-          label={profile.displayName}
-          triggerClassName="flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-none transition-shadow hover:ring-2 hover:ring-primary/35"
-          icon={<Avatar name={profile.displayName} size="md" />}
-          entries={[
-            { key: "account-email", label: profile.email, disabled: true },
-            { key: "account-sep", label: "", separator: true },
-            { key: "profile", label: t("profile"), onSelect: onOpenProfile },
-            { key: "settings", label: t("workspaceSettings"), onSelect: () => onNavigate("/settings") },
-            { key: "logout-sep", label: "", separator: true },
-            { key: "logout", label: t("logout"), danger: true, onSelect: onLogout },
           ]}
         />
       </div>
