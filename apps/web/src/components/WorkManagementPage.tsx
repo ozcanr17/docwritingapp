@@ -1304,7 +1304,7 @@ function DialogFrame({
   );
 }
 
-function CreateProjectDialog({
+export function CreateProjectDialog({
   workspaceId,
   onCreated,
   onClose,

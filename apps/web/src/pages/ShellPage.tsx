@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Accessibility, Activity, Bell, ClipboardCheck, ClipboardList, Clock3, Columns3, FileCog, FileKey2, FileText, FlaskConical, FolderKanban, Keyboard, LayoutList, MessageSquareWarning, Palette, PenLine, Plug, Settings, ShieldCheck, Star, Trash2, Users } from "lucide-react";
+import { Accessibility, Activity, Bell, Building2, ClipboardCheck, ClipboardList, Clock3, Columns3, FileCog, FileKey2, FileText, FlaskConical, FolderKanban, Keyboard, LayoutList, MessageSquareWarning, Palette, PenLine, Plug, Settings, ShieldCheck, Star, Trash2, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -474,7 +474,8 @@ export function ShellPage() {
     { id: "integrations", label: t("integrations"), icon: <Plug size={16} /> },
   ];
   const adminSectionMeta: Array<{ id: AdminSection; label: string; icon: React.ReactNode }> = [
-    { id: "overview", label: t("adminOverview"), icon: <FolderKanban size={16} /> },
+    { id: "overview", label: t("adminOverview"), icon: <Building2 size={16} /> },
+    { id: "projects", label: t("projectAdministration"), icon: <FolderKanban size={16} /> },
     { id: "users", label: t("usersAndRoles"), icon: <Users size={16} /> },
     { id: "audit", label: t("auditLog"), icon: <Activity size={16} /> },
     { id: "feedback", label: t("pilotFeedbackInbox"), icon: <MessageSquareWarning size={16} /> },
@@ -813,6 +814,7 @@ export function ShellPage() {
               <AdminPanel
                 variant="page"
                 organizationId={organizationId}
+                workspaceId={workspaceId}
                 currentUserId={profile.data.id}
                 section={adminSection}
                 onSectionChange={(next) => navigate(`/admin/${next}`)}

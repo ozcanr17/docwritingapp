@@ -200,6 +200,50 @@ enum ProjectKeyStrategy {
   per_type
 }
 
+model WorkItemTypeDefinition {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId    String       @db.Uuid
+  key          String
+  name         String
+  description  String?
+  baseType     WorkItemType
+  color        String?
+  displayOrder Int          @default(0)
+  isSystem     Boolean      @default(false)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+  archivedAt   DateTime?    @db.Timestamptz(6)
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  workItems WorkItem[]
+
+  @@unique([projectId, key])
+  @@index([projectId, archivedAt, displayOrder])
+  @@map("work_item_type_definitions")
+}
+
+model WorkItemFieldDefinition {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId     String          @db.Uuid
+  key           String
+  label         String
+  helpText      String?
+  fieldType     CustomFieldType
+  required      Boolean         @default(false)
+  options       String[]        @default([])
+  appliesToKeys String[]        @default([])
+  displayOrder  Int             @default(0)
+  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
+  archivedAt    DateTime?       @db.Timestamptz(6)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, key])
+  @@index([projectId, archivedAt, displayOrder])
+  @@map("work_item_field_definitions")
+}
+
 enum TestPlanStatus {
   draft
   active
@@ -461,6 +505,8 @@ model Project {
   testPlans   TestPlan[]
   documents   Document[]
   executions  TestExecution[]
+  itemTypes   WorkItemTypeDefinition[]
+  itemFields  WorkItemFieldDefinition[]
 
   @@unique([workspaceId, code])
   @@index([organizationId, deletedAt])
@@ -1061,6 +1107,8 @@ model WorkItem {
   assigneeId       String?          @db.Uuid
   parentId         String?          @db.Uuid
   labels           String[]         @default([])
+  typeDefinitionId String?          @db.Uuid
+  customFields     Json             @default("{}")
   dueAt            DateTime?        @db.Timestamptz(6)
   resolvedAt       DateTime?        @db.Timestamptz(6)
   rank             Int
@@ -1070,13 +1118,14 @@ model WorkItem {
   deletedAt        DateTime?        @db.Timestamptz(6)
   deletedById      String?          @db.Uuid
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  reporter     User         @relation("WorkItemReporter", fields: [reporterId], references: [id], onDelete: Restrict)
-  assignee     User?        @relation("WorkItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  parent       WorkItem?    @relation("WorkItemChildren", fields: [parentId], references: [id], onDelete: Restrict)
-  children     WorkItem[]   @relation("WorkItemChildren")
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workspace      Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  project        Project                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  typeDefinition WorkItemTypeDefinition? @relation(fields: [typeDefinitionId], references: [id], onDelete: Restrict)
+  reporter       User                    @relation("WorkItemReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  assignee       User?                   @relation("WorkItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  parent         WorkItem?               @relation("WorkItemChildren", fields: [parentId], references: [id], onDelete: Restrict)
+  children       WorkItem[]              @relation("WorkItemChildren")
 
   outgoingRelations WorkItemRelation[]     @relation("WorkItemRelationSource")
   incomingRelations WorkItemRelation[]     @relation("WorkItemRelationTarget")

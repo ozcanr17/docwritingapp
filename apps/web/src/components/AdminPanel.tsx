@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Building2, FolderKanban, MessageSquareWarning, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
+import { Activity, Building2, FolderKanban, FolderPlus, MessageSquareWarning, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
 import { ConfirmDialog, ModalSurface } from "./TransientSurface";
 import { AdminSection } from "../lib/appSections";
-import { Card, CardBody, CardHeader, Metric, MetricStrip } from "./ui";
+import { Card, CardBody, CardHeader, EmptyState, Lozenge, Metric, MetricStrip } from "./ui";
+import { ProjectSchemaAdmin } from "./ProjectSchemaAdmin";
+import { CreateProjectDialog } from "./WorkManagementPage";
+import { Button } from "./ui";
 
 type RoleKey = "organization_admin" | "workspace_admin" | "project_manager" | "editor" | "reviewer" | "viewer";
 interface Member { id: string; email: string; displayName: string; isActive: boolean; roleKey: RoleKey; }
@@ -17,14 +20,26 @@ interface AdminSummary {
 
 const roles: RoleKey[] = ["organization_admin", "workspace_admin", "project_manager", "editor", "reviewer", "viewer"];
 
-export function AdminPanel({ organizationId, currentUserId, onClose, variant = "dialog", section, onSectionChange }: { organizationId: string; currentUserId: string; onClose: () => void; variant?: "dialog" | "page"; section?: AdminSection; onSectionChange?: (section: AdminSection) => void }) {
+export function AdminPanel({ organizationId, workspaceId, currentUserId, onClose, variant = "dialog", section, onSectionChange }: { organizationId: string; workspaceId?: string | null; currentUserId: string; onClose: () => void; variant?: "dialog" | "page"; section?: AdminSection; onSectionChange?: (section: AdminSection) => void }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ displayName: "", email: "", password: "", roleKey: "editor" as RoleKey });
   const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
   const [internalTab, setInternalTab] = useState<AdminSection>("overview");
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const tab = section ?? internalTab;
   const setTab = onSectionChange ?? setInternalTab;
+  const projects = useQuery({
+    queryKey: ["projects", workspaceId],
+    queryFn: () => api<Array<{ id: string; code: string; name: string; access?: { canManage: boolean } }>>(`/workspaces/${workspaceId}/projects`),
+    enabled: Boolean(workspaceId) && tab === "projects",
+  });
+  const projectAccess = useQuery({
+    queryKey: ["project-access", workspaceId],
+    queryFn: () => api<{ canManage: boolean; canCreate: boolean }>(`/workspaces/${workspaceId}/project-access`),
+    enabled: Boolean(workspaceId) && tab === "projects",
+  });
   const members = useQuery({ queryKey: ["organization-members", organizationId], queryFn: () => api<Member[]>(`/organizations/${organizationId}/members`) });
   const feedback = useQuery({ queryKey: ["pilot-feedback", organizationId], queryFn: () => api<PilotFeedback[]>(`/organizations/${organizationId}/pilot-feedback`) });
   const summary = useQuery({ queryKey: ["administration-summary", organizationId], queryFn: () => api<AdminSummary>(`/organizations/${organizationId}/administration-summary`) });
@@ -47,6 +62,7 @@ export function AdminPanel({ organizationId, currentUserId, onClose, variant = "
       <div className={variant === "page" ? "flex min-h-0 flex-1" : "flex min-h-0 flex-1 flex-col"}>
       {variant === "dialog" && <nav className="flex gap-1 overflow-x-auto border-b border-border bg-muted/25 px-4 py-2" aria-label={t("adminPanel")}>
         <AdminTab testId="admin-tab-overview" active={tab === "overview"} onClick={() => setTab("overview")} icon={<Building2 size={15} />} label={t("adminOverview")} />
+        <AdminTab testId="admin-tab-projects" active={tab === "projects"} onClick={() => setTab("projects")} icon={<FolderKanban size={15} />} label={t("projectAdministration")} />
         <AdminTab testId="admin-tab-users" active={tab === "users"} onClick={() => setTab("users")} icon={<Users size={15} />} label={t("usersAndRoles")} />
         <AdminTab testId="admin-tab-audit" active={tab === "audit"} onClick={() => setTab("audit")} icon={<Activity size={15} />} label={t("auditLog")} />
         <AdminTab testId="admin-tab-feedback" active={tab === "feedback"} onClick={() => setTab("feedback")} icon={<MessageSquareWarning size={15} />} label={t("pilotFeedbackInbox")} />
@@ -78,6 +94,66 @@ export function AdminPanel({ organizationId, currentUserId, onClose, variant = "
           </Card>
         </div>
       </section>}
+      {tab === "projects" && (
+        <section className="space-y-4 p-4" data-testid="admin-projects">
+          {!workspaceId ? (
+            <EmptyState title={t("selectProjectToConfigure")} description={t("projectSchemaHelp")} />
+          ) : projects.isLoading ? (
+            <p className="text-sm text-mutedForeground">{t("loading")}</p>
+          ) : (projects.data ?? []).length === 0 ? (
+            <EmptyState
+              title={t("workHub.noProject")}
+              description={t("workHub.noProjectHelp")}
+              action={projectAccess.data?.canCreate ? (
+                <Button variant="primary" icon={<FolderPlus size={14} />} data-testid="admin-create-project" onClick={() => setCreateProjectOpen(true)}>
+                  {t("workHub.createProject")}
+                </Button>
+              ) : undefined}
+            />
+          ) : (
+            <>
+              <Card>
+                <CardHeader
+                  title={t("projectAdministration")}
+                  badge={<Lozenge>{projects.data?.length ?? 0}</Lozenge>}
+                  actions={projectAccess.data?.canCreate ? (
+                    <Button size="sm" icon={<FolderPlus size={14} />} data-testid="admin-create-project" onClick={() => setCreateProjectOpen(true)}>
+                      {t("workHub.createProject")}
+                    </Button>
+                  ) : undefined}
+                />
+                <CardBody className="flex flex-wrap gap-1.5">
+                  {(projects.data ?? []).map((project) => (
+                    <button
+                      key={project.id}
+                      type="button"
+                      data-testid={`admin-project-${project.code}`}
+                      aria-pressed={selectedProjectId === project.id || (!selectedProjectId && projects.data?.[0]?.id === project.id)}
+                      className={`rounded-md border px-2.5 py-1.5 text-sm ${(selectedProjectId ?? projects.data?.[0]?.id) === project.id ? "border-primary/40 bg-primary/10 text-primary" : "border-border hover:bg-muted"}`}
+                      onClick={() => setSelectedProjectId(project.id)}
+                    >
+                      <span className="font-mono text-xs">{project.code}</span> {project.name}
+                    </button>
+                  ))}
+                </CardBody>
+              </Card>
+              {(selectedProjectId ?? projects.data?.[0]?.id) && (
+                <ProjectSchemaAdmin
+                  projectId={(selectedProjectId ?? projects.data?.[0]?.id) as string}
+                  canManage={Boolean(projectAccess.data?.canManage)}
+                />
+              )}
+            </>
+          )}
+          {createProjectOpen && workspaceId && (
+            <CreateProjectDialog
+              workspaceId={workspaceId}
+              onCreated={(projectId) => setSelectedProjectId(projectId)}
+              onClose={() => setCreateProjectOpen(false)}
+            />
+          )}
+        </section>
+      )}
       {tab === "users" && <div className="grid min-h-0 lg:grid-cols-[20rem_1fr]">
         <form autoComplete="off" className="border-b border-border p-5 lg:border-b-0 lg:border-r" onSubmit={submit}>
           <h3 className="flex items-center gap-2 text-sm font-semibold"><UserPlus size={16} />{t("createUser")}</h3>

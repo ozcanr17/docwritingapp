@@ -4,10 +4,32 @@ import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionUser } from "../auth/auth.types";
 import { ZodBodyPipe } from "../common/zod-body.pipe";
 import { WorkManagementService } from "./work-management.service";
+import { WorkItemSchemaService } from "./work-item-schema.service";
 
 const workItemType = z.enum(["epic", "story", "task", "bug", "risk"]);
 const workItemStatus = z.enum(["backlog", "ready", "in_progress", "in_review", "done", "canceled"]);
 const workItemPriority = z.enum(["lowest", "low", "medium", "high", "highest", "critical"]);
+const customFieldType = z.enum(["text", "long_text", "integer", "decimal", "boolean", "date", "datetime", "single_select", "multi_select", "user", "project", "url"]);
+const createTypeDefinition = z.object({
+  key: z.string().trim().max(40).optional(),
+  name: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(500).nullable().optional(),
+  baseType: workItemType,
+  color: z.string().trim().max(20).nullable().optional(),
+  displayOrder: z.number().int().min(0).max(999).optional(),
+});
+const updateTypeDefinition = createTypeDefinition.partial().refine((value) => Object.keys(value).length > 0);
+const createFieldDefinition = z.object({
+  key: z.string().trim().max(40).optional(),
+  label: z.string().trim().min(1).max(60),
+  helpText: z.string().trim().max(500).nullable().optional(),
+  fieldType: customFieldType,
+  required: z.boolean().optional(),
+  options: z.array(z.string().trim().min(1).max(60)).max(50).optional(),
+  appliesToKeys: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  displayOrder: z.number().int().min(0).max(999).optional(),
+});
+const updateFieldDefinition = createFieldDefinition.partial().refine((value) => Object.keys(value).length > 0);
 const artifact = z.object({
   documentId: z.string().uuid().optional(),
   rowId: z.string().uuid().optional(),
@@ -18,6 +40,8 @@ const artifact = z.object({
 const artifactBatch = z.object({ artifacts: z.array(artifact).min(1).max(50) });
 const createWorkItem = z.object({
   type: workItemType.default("task"),
+  typeKey: z.string().trim().max(40).optional(),
+  customFields: z.record(z.unknown()).optional(),
   title: z.string().trim().min(1).max(300),
   description: z.string().max(30000).optional(),
   stepsToReproduce: z.string().max(30000).optional(),
@@ -130,7 +154,10 @@ const moveWorkItem = z.object({
 
 @Controller()
 export class WorkManagementController {
-  constructor(private readonly service: WorkManagementService) {}
+  constructor(
+    private readonly service: WorkManagementService,
+    private readonly schema: WorkItemSchemaService,
+  ) {}
 
   @Get("workspaces/:workspaceId/work-items")
   listWorkItems(@CurrentUser() user: SessionUser, @Param("workspaceId", ParseUUIDPipe) workspaceId: string, @Query() query: Record<string, string | undefined>) {
@@ -256,6 +283,57 @@ export class WorkManagementController {
   @Post("executions/:executionId/steps/:stepRowId/internal-defect")
   createInternalDefect(@CurrentUser() user: SessionUser, @Param("executionId", ParseUUIDPipe) executionId: string, @Param("stepRowId", ParseUUIDPipe) stepRowId: string, @Body(new ZodBodyPipe(internalDefect)) body: z.infer<typeof internalDefect>) {
     return this.service.createInternalDefect(user.userId, executionId, stepRowId, body);
+  }
+
+  @Get("projects/:projectId/work-item-schema")
+  listWorkItemSchema(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
+    return this.schema.listSchema(user.userId, projectId);
+  }
+
+  @Post("projects/:projectId/work-item-types")
+  createWorkItemType(
+    @CurrentUser() user: SessionUser,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
+    @Body(new ZodBodyPipe(createTypeDefinition)) body: z.infer<typeof createTypeDefinition>,
+  ) {
+    return this.schema.createType(user.userId, projectId, body);
+  }
+
+  @Patch("work-item-types/:typeId")
+  updateWorkItemType(
+    @CurrentUser() user: SessionUser,
+    @Param("typeId", ParseUUIDPipe) typeId: string,
+    @Body(new ZodBodyPipe(updateTypeDefinition)) body: z.infer<typeof updateTypeDefinition>,
+  ) {
+    return this.schema.updateType(user.userId, typeId, body);
+  }
+
+  @Delete("work-item-types/:typeId")
+  archiveWorkItemType(@CurrentUser() user: SessionUser, @Param("typeId", ParseUUIDPipe) typeId: string) {
+    return this.schema.archiveType(user.userId, typeId);
+  }
+
+  @Post("projects/:projectId/work-item-fields")
+  createWorkItemField(
+    @CurrentUser() user: SessionUser,
+    @Param("projectId", ParseUUIDPipe) projectId: string,
+    @Body(new ZodBodyPipe(createFieldDefinition)) body: z.infer<typeof createFieldDefinition>,
+  ) {
+    return this.schema.createField(user.userId, projectId, body);
+  }
+
+  @Patch("work-item-fields/:fieldId")
+  updateWorkItemField(
+    @CurrentUser() user: SessionUser,
+    @Param("fieldId", ParseUUIDPipe) fieldId: string,
+    @Body(new ZodBodyPipe(updateFieldDefinition)) body: z.infer<typeof updateFieldDefinition>,
+  ) {
+    return this.schema.updateField(user.userId, fieldId, body);
+  }
+
+  @Delete("work-item-fields/:fieldId")
+  archiveWorkItemField(@CurrentUser() user: SessionUser, @Param("fieldId", ParseUUIDPipe) fieldId: string) {
+    return this.schema.archiveField(user.userId, fieldId);
   }
 
   @Get("executions/:executionId/defect-projects")

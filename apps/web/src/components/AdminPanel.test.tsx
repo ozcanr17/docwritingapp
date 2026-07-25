@@ -67,4 +67,34 @@ describe("AdminPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: i18n.t("usersAndRoles") }));
     expect(await screen.findByText("Admin User")).toBeInTheDocument();
   });
+
+  it("configures work item types and fields per project", async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === "/workspaces/workspace/projects")
+        return [
+          { id: "project-sys", code: "SYS", name: "System" },
+          { id: "project-ver", code: "VER", name: "Verification" },
+        ];
+      if (path === "/workspaces/workspace/project-access") return { canManage: true, canCreate: true };
+      if (path === "/projects/project-ver/work-item-schema")
+        return { types: [{ id: "type-bug", key: "bug", name: "Bug", baseType: "bug", color: null, isSystem: true, displayOrder: 3 }], fields: [] };
+      if (path.endsWith("/work-item-schema")) return { types: [], fields: [] };
+      if (path.endsWith("/administration-summary")) return { scope: { workspaces: 1, projects: 2, documents: 0, restrictedDocuments: 0 }, recentAudit: [] };
+      return [];
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <AdminPanel organizationId="organization" workspaceId="workspace" currentUserId="admin" onClose={vi.fn()} variant="page" section="projects" onSectionChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId("admin-project-SYS")).toBeInTheDocument();
+    expect(screen.getByTestId("admin-project-SYS")).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByTestId("project-schema-admin")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("admin-project-VER"));
+    expect(await screen.findByTestId("schema-type-bug")).toBeInTheDocument();
+    expect(screen.getByTestId("admin-project-SYS")).toHaveAttribute("aria-pressed", "false");
+  });
 });

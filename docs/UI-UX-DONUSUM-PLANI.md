@@ -138,6 +138,17 @@ Kullanici, iyi organize edilmis bir referans urun tasarimi (tek kenar cubugu, sa
 - [x] Tum gorunumlerde icerik ayni x konumunda baslar (olculen 292 piksel) ve ayni 56 piksel baslik yuksekligi kullanilir; gorunum degistirirken hicbir ogenin yeri kaymaz.
 - [x] Is panosu ozeti, yonetim genel bakisi, liste tablosu ve test plani kartlari yeni tasarim diline gecirildi.
 
+## Asama 12 - Proje yonetimi ve yapilandirilabilir is kaydi semasi
+
+Kullanici, yeni proje olusturmanin herkese acik olmamasini ve Jira'daki gibi bir yonetim panelinden yeni proje, yeni is kaydi turu ile is kayitlarina eklenebilecek alanlarin (tur ve zorunluluk bilgisiyle) tanimlanabilmesini istedi.
+
+- [x] Proje olusturma ayri bir yetki (`project.create`) oldu; yalnizca sistem, organizasyon ve calisma alani yoneticileri kullanabilir. `project_manager` yeniden adlandirma ve arsivlemeyi surdurur.
+- [x] Bir proje icindeki tum kayitlar tek bir sayacla numaralanir (`SYS-5`, `SYS-6` ...); yonetici isterse testleri ayri bir kodla ilerletebilir (`keyStrategy` = `per_type`, `testCode`).
+- [x] Yonetim panelinde yeni Projeler bolumu (`/admin/projects`): proje listesi, proje olusturma ve secili proje icin sema yonetimi.
+- [x] Is kaydi turleri: her proje bes yerlesik turle baslar; yoneticiler ozel tur ekleyebilir. Yerlesik turler arsivlenemez, kullanimda olan turler arsivlenemez.
+- [x] Is kaydi alanlari: etiket, veri turu (metin, uzun metin, tam sayi, ondalik, mantiksal, tarih, tarih-saat, tek/cok secim, baglanti), zorunluluk, secim listesi ve hangi turlere uygulanacagi. Sunucu tarafi dogrulama zorunlu alani, gecersiz secenegi ve turu uymayan degeri reddeder.
+- [x] Yetkisi olmayan uyeler tablolari salt okunur gorur; tum kurallar sunucuda dogrulanir.
+
 ## Asama tamamlanma olcutu
 
 Bir asama ancak ilgili maddeler isaretlendiginde, regresyon testleri gectiginde, Mac uzerinde `pnpm dev` ile gorsel olarak dogrulandiginda ve degisiklikler `main` dalina gonderildiginde tamamlanmis sayilir.

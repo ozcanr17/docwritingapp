@@ -4,6 +4,7 @@ import { hash } from "bcryptjs";
 import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { BUILT_IN_WORK_ITEM_TYPES } from "../work-management/work-item-types.constants";
 
 @Injectable()
 export class TenancyService {
@@ -91,6 +92,9 @@ export class TenancyService {
           },
         });
         await tx.projectMember.create({ data: { projectId: project.id, userId: actorId } });
+        await tx.workItemTypeDefinition.createMany({
+          data: BUILT_IN_WORK_ITEM_TYPES.map((builtIn) => ({ ...builtIn, projectId: project.id, isSystem: true })),
+        });
         await this.audit.record(tx, {
           organizationId: workspace.organizationId,
           workspaceId,

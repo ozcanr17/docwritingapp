@@ -4,12 +4,15 @@ import { randomUUID } from "crypto";
 import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
 import { ProjectKeyService } from "../tenancy/project-key.service";
+import { WorkItemSchemaService } from "./work-item-schema.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { resolveTestScenario } from "../common/test-scenarios";
 
 type ArtifactInput = { documentId?: string; rowId?: string; testExecutionId?: string; testStepExecutionId?: string; role: "relates_to" | "affects" | "found_in" | "verifies" };
 type WorkItemCreate = {
   type: "epic" | "story" | "task" | "bug" | "risk";
+  typeKey?: string;
+  customFields?: Record<string, unknown>;
   title: string;
   description?: string;
   stepsToReproduce?: string;
@@ -142,6 +145,7 @@ export class WorkManagementService {
     private readonly access: AccessService,
     private readonly audit: AuditService,
     private readonly projectKeys: ProjectKeyService,
+    private readonly schema: WorkItemSchemaService,
   ) {}
 
   async listWorkItems(actorId: string, workspaceId: string, query: Record<string, string | undefined>) {
@@ -308,6 +312,16 @@ export class WorkManagementService {
     const item = await this.prisma.$transaction(async (tx) => {
       const issued = await this.projectKeys.allocate(tx, projectId, "work_item");
       const sequence = issued.sequence;
+      const typeDefinition = await tx.workItemTypeDefinition.findFirst({
+        where: { projectId, key: input.typeKey ?? input.type, archivedAt: null },
+        select: { id: true, key: true, baseType: true },
+      });
+      const customFields = await this.schema.validateCustomFields(
+        tx,
+        projectId,
+        typeDefinition?.key ?? input.type,
+        input.customFields,
+      );
       const created = await tx.workItem.create({
         data: {
           organizationId: project.organizationId,
@@ -315,7 +329,9 @@ export class WorkManagementService {
           projectId,
           sequence,
           key: issued.key,
-          type: input.type,
+          typeDefinitionId: typeDefinition?.id ?? null,
+          customFields: customFields as Prisma.InputJsonValue,
+          type: typeDefinition?.baseType ?? input.type,
           title: input.title,
           description: input.description ?? null,
           stepsToReproduce: input.stepsToReproduce ?? null,

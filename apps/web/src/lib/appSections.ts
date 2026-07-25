@@ -11,7 +11,7 @@ export const SETTINGS_SECTIONS = [
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
-export const ADMIN_SECTIONS = ["overview", "users", "audit", "feedback"] as const;
+export const ADMIN_SECTIONS = ["overview", "projects", "users", "audit", "feedback"] as const;
 
 export type AdminSection = (typeof ADMIN_SECTIONS)[number];
 
