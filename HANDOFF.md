@@ -264,6 +264,23 @@ The user supplied a reference product screenshot (a well-organized CRM dashboard
 
 ### Where work is currently stuck
 
+### Unified project keys and project-creation permission (delivered)
+
+The user asked for one shared key sequence per project across every record type, with an optional admin setting to give tests their own code, plus restricted project creation.
+
+1. **Migration `20260726090000_unified_project_keys`.** Adds `nextRecordNumber`, `nextTestNumber`, `keyStrategy` (`unified` | `per_type`) and `testCode` to `projects`; adds nullable `projectId`/`sequence`/`key` plus a project FK and `@@unique([projectId, key])` to `documents` and `test_executions`. The backfill seeds the unified counter past every key already issued to work items and test plans, attaches every existing document to a project in its workspace preferring code `SYS` (via `JOIN LATERAL` ordered by `code = 'SYS'` first), issues document keys in stable `createdAt` order, then advances the counter past what it issued. Verified on the real dev database: work items kept SYS-1..SYS-4 and the 15 existing documents became SYS-5..SYS-19. Verified that all 23 migrations apply cleanly to an empty database.
+2. **`ProjectKeyService`** (`apps/api/src/tenancy/project-key.service.ts`) is the single allocator. It atomically increments the right counter with `UPDATE ... RETURNING` inside the caller's transaction and formats the key. Under `per_type` it routes test plans, test executions and **test** documents to `nextTestNumber` with `testCode` (falling back to `<code>T`), leaving tasks, defects and requirement documents on the shared sequence.
+3. **Every creation path now uses it:** work items (both the ordinary and the internal-defect path), test plans, and documents. Documents pick their project explicitly or default to the workspace's oldest project.
+4. **Bug found by live verification, not by tests:** after switching only documents to the shared counter, a new work item was issued `SYS-5`, which the backfill had already given to a document. Two records held the same key. The remaining work-item and test-plan allocation sites were switched to the shared allocator and the duplicate row was repaired in the dev database. The unique index now makes this class of collision impossible.
+5. **Project creation is now a distinct permission.** Added `project.create`, granted only to system, organization and workspace administrators; `project_manager` keeps `project.manage` (rename, archive, members) but can no longer create projects. `projectAccess` returns `{ canManage, canCreate }` and the UI hides both the toolbar and empty-state create buttons, showing an explanation instead. Two API tests were updated to assert the new rule rather than the old one.
+6. **The key strategy is editable in Project Settings** with a live preview of the resulting keys, and document keys now render in the Explorer tree.
+7. Verified live end to end: unified mode issues `SYS-23` (document) then `SYS-24` (work item) then `SYS-25` (test document) from one sequence; switching to `per_type` with test code `SYSQA` issues `SYS-26` for a task and `SYS-27` for a requirement document while the test document becomes `SYSQA-20` and the plan `SYSQA-21`.
+8. The complete `pnpm verify` gate passes: **148 web + 72 API + 13 worker = 233/233 tests**, production build and bundle budget; initial gzip is **135.2 KiB**. The browser suite passes **12/12**.
+
+**Pitfall recorded (important):** the repository root `.env` still points `DATABASE_URL` at `reqtrack_v2`, so running `prisma migrate deploy` from the repo without an explicit `DATABASE_URL` silently migrates the wrong database. Always pass `DATABASE_URL="postgresql://docsys:docsys@localhost:5432/docsys"` explicitly. Also, `createdb` without `-O docsys` produces a database the `docsys` role cannot migrate ("permission denied for schema public").
+
+**Still open from the same user request:** configurable work item types and custom field definitions (type + required flag) in the admin panel, and test execution creation plus the Test Plan Execution Report.
+
 ### What was completed in the latest navigation/layout pass
 
 1. **Off-screen popovers fixed** (`Menu.tsx`). Panels were positioned from the trigger rect with no viewport clamping, so right-edge menus (help, account) and bottom-edge menus overflowed. They now clamp horizontally to the viewport with an 8px margin, flip above the trigger when they do not fit below, and cap their height to the remaining space. Submenus measure the parent row and flip to `right-full` when they would overflow. Verified by measuring all nine menus at 1440x900: every panel is fully inside the viewport.

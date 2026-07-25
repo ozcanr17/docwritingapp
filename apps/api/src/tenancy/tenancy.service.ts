@@ -73,7 +73,7 @@ export class TenancyService {
 
   async createProject(actorId: string, workspaceId: string, name: string, code: string, description?: string) {
     const workspace = await this.requireWorkspace(workspaceId);
-    await this.access.assertPermission(actorId, "project.manage", {
+    await this.access.assertPermission(actorId, "project.create", {
       organizationId: workspace.organizationId,
       workspaceId,
     });
@@ -142,20 +142,31 @@ export class TenancyService {
       organizationId: workspace.organizationId,
       workspaceId,
     });
-    return {
-      canManage: await this.access.hasPermission(actorId, "project.manage", {
+    const [canManage, canCreate] = await Promise.all([
+      this.access.hasPermission(actorId, "project.manage", {
         organizationId: workspace.organizationId,
         workspaceId,
       }),
-    };
+      this.access.hasPermission(actorId, "project.create", {
+        organizationId: workspace.organizationId,
+        workspaceId,
+      }),
+    ]);
+    return { canManage, canCreate };
   }
 
-  async updateProject(actorId: string, projectId: string, input: { name?: string; description?: string | null }) {
+  async updateProject(
+    actorId: string,
+    projectId: string,
+    input: { name?: string; description?: string | null; keyStrategy?: "unified" | "per_type"; testCode?: string | null },
+  ) {
     const project = await this.requireProject(projectId);
     await this.assertProjectManagement(actorId, project);
     const nextData = {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.description !== undefined ? { description: input.description || null } : {}),
+      ...(input.keyStrategy !== undefined ? { keyStrategy: input.keyStrategy } : {}),
+      ...(input.testCode !== undefined ? { testCode: input.testCode ? input.testCode.toLocaleUpperCase("en") : null } : {}),
     };
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.project.update({ where: { id: projectId }, data: nextData });
@@ -166,7 +177,7 @@ export class TenancyService {
         action: "project.updated",
         entityType: "project",
         entityId: projectId,
-        previousData: { name: project.name, description: project.description },
+        previousData: { name: project.name, description: project.description, keyStrategy: project.keyStrategy, testCode: project.testCode },
         nextData,
       });
       return { ...updated, access: { canManage: true } };

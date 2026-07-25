@@ -21,7 +21,13 @@ const createProjectSchema = z.object({
 const updateProjectSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   description: z.string().trim().max(2000).nullable().optional(),
-}).refine((value) => value.name !== undefined || value.description !== undefined);
+  keyStrategy: z.enum(["unified", "per_type"]).optional(),
+  testCode: z.string().trim().regex(/^[A-Za-z][A-Za-z0-9]{0,19}$/).nullable().optional(),
+}).refine((value) =>
+  value.name !== undefined
+  || value.description !== undefined
+  || value.keyStrategy !== undefined
+  || value.testCode !== undefined);
 const projectMemberSchema = z.object({
   userId: z.string().uuid(),
   roleKey: z.enum(["project_manager", "editor", "reviewer", "viewer"]),

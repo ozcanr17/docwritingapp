@@ -1363,5 +1363,15 @@
   "noMatrixDataHelp": "Link requirements to tests to build the matrix.",
   "matrixLegend": "A dot marks a link. Amber marks a suspect link.",
   "totalItems": "Items",
-  "noRequirementDocuments": "No requirement or test documents yet"
+  "noRequirementDocuments": "No requirement or test documents yet",
+  "projectCreateRestricted": "Only workspace or organization administrators can create projects. Ask an administrator to create one for you.",
+  "keyStrategyTitle": "Record keys",
+  "keyStrategyHelp": "Choose whether every record in this project shares one sequence or tests use their own code.",
+  "keyStrategyUnified": "One shared sequence",
+  "keyStrategyUnifiedHelp": "Documents, tests, plans, executions, defects and tasks all continue the same numbering.",
+  "keyStrategyPerType": "Separate code for tests",
+  "keyStrategyPerTypeHelp": "Test documents, plans and executions use their own code and sequence.",
+  "testCodeLabel": "Test code",
+  "testCodeHelp": "Prefix used for test records when they have their own sequence.",
+  "projectAdministration": "Projects"
 }

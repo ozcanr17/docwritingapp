@@ -32,6 +32,7 @@ describe("WorkManagementPage projects", () => {
           ? [{ id: "project", name: "System", code: "SYS", description: "Core" }]
           : [];
       }
+      if (path === "/workspaces/workspace/project-access") return { canManage: true, canCreate: true };
       if (path.startsWith("/workspaces/workspace/work-items")) return [];
       if (path === "/projects/project/test-plans") return [];
       if (path === "/projects/project/work-dashboard") {
@@ -291,7 +292,7 @@ describe("WorkManagementPage projects", () => {
     let savedBody: Record<string, unknown> | null = null;
     vi.mocked(api).mockImplementation(async (path, options) => {
       if (path === "/workspaces/workspace/projects") return [{ id: "project", name: "System", code: "SYS", description: "Core", access: { canManage: true } }];
-      if (path === "/workspaces/workspace/project-access") return { canManage: true };
+      if (path === "/workspaces/workspace/project-access") return { canManage: true, canCreate: true };
       if (path.startsWith("/workspaces/workspace/work-items")) return [];
       if (path === "/projects/project/test-plans") return [];
       if (path === "/projects/project/work-dashboard") return {

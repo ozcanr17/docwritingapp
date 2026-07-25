@@ -130,7 +130,7 @@ export function WorkManagementPage({
   });
   const projectAccess = useQuery({
     queryKey: ["project-access", workspaceId],
-    queryFn: () => api<{ canManage: boolean }>(`/workspaces/${workspaceId}/project-access`),
+    queryFn: () => api<{ canManage: boolean; canCreate: boolean }>(`/workspaces/${workspaceId}/project-access`),
   });
   const activeProjectId =
     projects.data?.some((project) => project.id === selectedProjectId)
@@ -359,9 +359,9 @@ export function WorkManagementPage({
                 {t("workHub.projectSettings")}
               </Button>
             )}
-            <Button size="sm" icon={<FolderPlus size={14} />} data-testid="open-create-project" onClick={() => setCreateProjectOpen(true)}>
+            {projectAccess.data?.canCreate && <Button size="sm" icon={<FolderPlus size={14} />} data-testid="open-create-project" onClick={() => setCreateProjectOpen(true)}>
               {t("workHub.newProject")}
-            </Button>
+            </Button>}
           </div>
         </div>
       )}
@@ -492,15 +492,19 @@ export function WorkManagementPage({
             title={t("workHub.noProject")}
             detail={t("workHub.noProjectHelp")}
             action={
-              <button
-                type="button"
-                data-testid="empty-create-project"
-                className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primaryForeground"
-                onClick={() => setCreateProjectOpen(true)}
-              >
-                <FolderPlus size={15} className="mr-1.5 inline" />
-                {t("workHub.createFirstProject")}
-              </button>
+              projectAccess.data?.canCreate ? (
+                <button
+                  type="button"
+                  data-testid="empty-create-project"
+                  className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primaryForeground"
+                  onClick={() => setCreateProjectOpen(true)}
+                >
+                  <FolderPlus size={15} className="mr-1.5 inline" />
+                  {t("workHub.createFirstProject")}
+                </button>
+              ) : (
+                <p className="mt-3 text-xs text-mutedForeground">{t("projectCreateRestricted")}</p>
+              )
             }
           />
         ) : tab === "dashboard" ? (

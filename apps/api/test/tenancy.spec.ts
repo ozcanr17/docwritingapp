@@ -52,7 +52,14 @@ describe("tenancy and isolation", () => {
       headers: { cookie: manager.cookie },
       payload: { name: "Managed project", code: "MGR" },
     });
-    expect(managerProject.statusCode).toBe(201);
+    expect(managerProject.statusCode).toBe(403);
+    const managerRename = await app.inject({
+      method: "PATCH",
+      url: `/projects/${project.id}`,
+      headers: { cookie: manager.cookie },
+      payload: { name: "Managed by the project manager" },
+    });
+    expect(managerRename.statusCode).toBe(200);
   });
 
   it("manages the project lifecycle and project-scoped members", async () => {

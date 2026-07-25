@@ -1362,5 +1362,15 @@
   "noMatrixDataHelp": "Matrisi oluşturmak için gereksinimleri testlere bağlayın.",
   "matrixLegend": "Nokta bir bağlantıyı gösterir. Amber renk şüpheli bağlantıyı belirtir.",
   "totalItems": "Nesneler",
-  "noRequirementDocuments": "Henüz gereksinim veya test dokümanı yok"
+  "noRequirementDocuments": "Henüz gereksinim veya test dokümanı yok",
+  "projectCreateRestricted": "Yalnızca çalışma alanı veya organizasyon yöneticileri proje oluşturabilir. Bir yöneticiden proje oluşturmasını isteyin.",
+  "keyStrategyTitle": "Kayıt anahtarları",
+  "keyStrategyHelp": "Bu projedeki tüm kayıtların tek sırayı mı paylaşacağını yoksa testlerin kendi kodunu mu kullanacağını seçin.",
+  "keyStrategyUnified": "Tek ortak sıra",
+  "keyStrategyUnifiedHelp": "Dokümanlar, testler, planlar, koşumlar, hatalar ve görevler aynı numaralandırmayı sürdürür.",
+  "keyStrategyPerType": "Testler için ayrı kod",
+  "keyStrategyPerTypeHelp": "Test dokümanları, planlar ve koşumlar kendi kodunu ve sırasını kullanır.",
+  "testCodeLabel": "Test kodu",
+  "testCodeHelp": "Testler kendi sırasını kullandığında kullanılacak ön ek.",
+  "projectAdministration": "Projeler"
 }

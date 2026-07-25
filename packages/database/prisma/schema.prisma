@@ -195,6 +195,11 @@ enum WorkItemArtifactRole {
   verifies
 }
 
+enum ProjectKeyStrategy {
+  unified
+  per_type
+}
+
 enum TestPlanStatus {
   draft
   active
@@ -426,21 +431,25 @@ model MemberRole {
 }
 
 model Project {
-  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId     String    @db.Uuid
-  workspaceId        String    @db.Uuid
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String             @db.Uuid
+  workspaceId        String             @db.Uuid
   name               String
   code               String
   description        String?
-  workflowConfig     Json      @default("{}")
-  workflowVersion    Int       @default(1)
-  nextWorkItemNumber Int       @default(1)
-  nextTestPlanNumber Int       @default(1)
-  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime  @updatedAt @db.Timestamptz(6)
-  createdById        String?   @db.Uuid
-  deletedAt          DateTime? @db.Timestamptz(6)
-  deletedById        String?   @db.Uuid
+  workflowConfig     Json               @default("{}")
+  workflowVersion    Int                @default(1)
+  nextWorkItemNumber Int                @default(1)
+  nextTestPlanNumber Int                @default(1)
+  nextRecordNumber   Int                @default(1)
+  nextTestNumber     Int                @default(1)
+  keyStrategy        ProjectKeyStrategy @default(unified)
+  testCode           String?
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @db.Timestamptz(6)
+  createdById        String?            @db.Uuid
+  deletedAt          DateTime?          @db.Timestamptz(6)
+  deletedById        String?            @db.Uuid
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
@@ -450,6 +459,8 @@ model Project {
   memberRoles MemberRole[]
   workItems   WorkItem[]
   testPlans   TestPlan[]
+  documents   Document[]
+  executions  TestExecution[]
 
   @@unique([workspaceId, code])
   @@index([organizationId, deletedAt])
@@ -505,6 +516,9 @@ model Document {
   id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId    String       @db.Uuid
   workspaceId       String       @db.Uuid
+  projectId         String?      @db.Uuid
+  sequence          Int?
+  key               String?
   folderId          String?      @db.Uuid
   templateId        String?      @db.Uuid
   documentType      DocumentType
@@ -526,6 +540,7 @@ model Document {
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  project      Project?          @relation(fields: [projectId], references: [id], onDelete: Restrict)
   folder       Folder?           @relation(fields: [folderId], references: [id], onDelete: Restrict)
   template     DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
 
@@ -543,8 +558,10 @@ model Document {
   accessGrants         DocumentAccessGrant[]
   workItemLinks        WorkItemArtifactLink[]
 
+  @@unique([projectId, key])
   @@index([workspaceId, folderId, deletedAt, rank])
   @@index([organizationId, deletedAt])
+  @@index([projectId, deletedAt])
   @@map("documents")
 }
 
@@ -989,6 +1006,9 @@ model RowComment {
 model TestExecution {
   id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId      String          @db.Uuid
+  projectId           String?         @db.Uuid
+  sequence            Int?
+  key                 String?
   testCaseRowId       String          @db.Uuid
   executedById        String          @db.Uuid
   retestPackageItemId String?         @db.Uuid
@@ -1004,6 +1024,7 @@ model TestExecution {
   updatedAt           DateTime        @updatedAt @db.Timestamptz(6)
 
   organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project           Project?               @relation(fields: [projectId], references: [id], onDelete: Restrict)
   testCaseRow       DocumentRow            @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
   executedBy        User                   @relation("ExecutionUser", fields: [executedById], references: [id], onDelete: Restrict)
   retestPackageItem RetestPackageItem?     @relation(fields: [retestPackageItemId], references: [id], onDelete: Restrict)
@@ -1011,6 +1032,7 @@ model TestExecution {
   steps             TestStepExecution[]
   workItemLinks     WorkItemArtifactLink[]
 
+  @@unique([projectId, key])
   @@index([testCaseRowId, createdAt])
   @@index([organizationId, status])
   @@index([retestPackageItemId, createdAt])

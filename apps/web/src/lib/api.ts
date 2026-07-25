@@ -392,6 +392,8 @@ export interface DocumentSummary {
   folderId: string | null;
   version: number;
   requirementPrefix?: string;
+  key?: string | null;
+  projectId?: string | null;
   access?: { accessLevel: "read" | "write" | "manage" | null; canRead: boolean; canWrite: boolean; canManage: boolean; restricted: boolean };
 }
 

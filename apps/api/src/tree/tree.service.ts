@@ -9,6 +9,7 @@ import { randomUUID } from "crypto";
 import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
 import { EventsService } from "../events/events.service";
+import { ProjectKeyService } from "../tenancy/project-key.service";
 import { rankBetween } from "../common/rank";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -19,6 +20,7 @@ export class TreeService {
     private readonly access: AccessService,
     private readonly audit: AuditService,
     private readonly events: EventsService,
+    private readonly projectKeys: ProjectKeyService,
   ) {}
 
   async createFolder(actorId: string, workspaceId: string, name: string, parentId: string | null) {
@@ -80,7 +82,7 @@ export class TreeService {
       this.prisma.document.findMany({
         where: { workspaceId, folderId: parentId, deletedAt: null },
         orderBy: { rank: "asc" },
-        select: { id: true, title: true, documentType: true, folderId: true, rank: true, version: true, requirementPrefix: true, updatedAt: true },
+        select: { id: true, title: true, documentType: true, folderId: true, rank: true, version: true, requirementPrefix: true, updatedAt: true, key: true, projectId: true },
       }),
     ]);
     const readableIds = await this.access.readableDocumentIds(actorId, documents.map((document) => document.id), {
@@ -299,6 +301,7 @@ export class TreeService {
     title: string,
     documentType: DocumentType,
     folderId: string | null,
+    projectId?: string | null,
   ) {
     const workspace = await this.requireWorkspace(workspaceId);
     await this.access.assertPermission(actorId, "document.manage", {
@@ -314,10 +317,24 @@ export class TreeService {
         where: { workspaceId, folderId, deletedAt: null },
         orderBy: { rank: "desc" },
       });
+      const targetProject = projectId
+        ? await tx.project.findFirst({ where: { id: projectId, workspaceId, deletedAt: null }, select: { id: true } })
+        : await tx.project.findFirst({
+            where: { workspaceId, deletedAt: null },
+            orderBy: [{ createdAt: "asc" }],
+            select: { id: true },
+          });
+      if (projectId && !targetProject) throw new NotFoundException("Project not found");
+      const issued = targetProject
+        ? await this.projectKeys.allocate(tx, targetProject.id, "document", { documentType })
+        : null;
       const document = await tx.document.create({
         data: {
           organizationId: workspace.organizationId,
           workspaceId,
+          projectId: targetProject?.id ?? null,
+          sequence: issued?.sequence ?? null,
+          key: issued?.key ?? null,
           folderId,
           documentType,
           title,
@@ -334,7 +351,7 @@ export class TreeService {
         entityType: "document",
         entityId: document.id,
         documentId: document.id,
-        nextData: { title, documentType },
+        nextData: { title, documentType, key: issued?.key ?? null },
       });
       return document;
     });

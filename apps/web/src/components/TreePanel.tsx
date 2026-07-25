@@ -572,6 +572,7 @@ function TreeBranch(props: {
             }}
           >
             <FileText size={14} className="text-info" />
+            {document.key && <span className="shrink-0 font-mono text-[11px] text-primary">{document.key}</span>}
             <span className="truncate">{document.title}</span>
             {favoriteIds.has(document.id) && <Star size={12} className="ml-auto fill-warning text-warning" aria-label={t("favoriteDocument")} />}
             <GripVertical size={12} className={`${favoriteIds.has(document.id) ? "" : "ml-auto"} opacity-0 transition-opacity group-hover:opacity-50`} />

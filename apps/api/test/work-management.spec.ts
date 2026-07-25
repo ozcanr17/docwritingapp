@@ -183,7 +183,7 @@ describe("work management", () => {
     const planResponse = await app.inject({ method: "POST", url: `/projects/${project.id}/test-plans`, headers: { cookie: owner.cookie }, payload: { name: "Release acceptance", environment: "staging", buildReference: "1.2.0" } });
     expect(planResponse.statusCode).toBe(201);
     const plan = JSON.parse(planResponse.body) as { id: string; key: string; version: number };
-    expect(plan.key).toBe("VER-TP-1");
+    expect(plan.key).toMatch(/^VER-\d+$/);
     const candidatesResponse = await app.inject({ method: "GET", url: `/test-plans/${plan.id}/candidates?q=auth`, headers: { cookie: owner.cookie } });
     expect(candidatesResponse.statusCode).toBe(200);
     expect(JSON.parse(candidatesResponse.body)).toContainEqual(expect.objectContaining({ id: testCase.id, stepCount: 1 }));
@@ -201,8 +201,8 @@ describe("work management", () => {
     const defectResponse = await app.inject({ method: "POST", url: `/executions/${execution.id}/steps/${step.id}/internal-defect`, headers: { cookie: owner.cookie }, payload: { projectId: project.id, title: "Invalid authentication is accepted", priority: "critical" } });
     expect(defectResponse.statusCode).toBe(201);
     const defect = JSON.parse(defectResponse.body) as { id: string; key: string; artifactLinks: Array<{ testStepExecutionId: string }> };
+    expect(defect.key).toMatch(/^VER-\d+$/);
     expect(defect).toEqual(expect.objectContaining({
-      key: "VER-1",
       stepsToReproduce: "Sign in",
       actualResult: "Authentication was accepted",
       environment: "staging",
@@ -210,7 +210,7 @@ describe("work management", () => {
       artifactLinks: [expect.objectContaining({ testStepExecutionId: stepExecutionId })],
     }));
     const storedStep = await prisma.testStepExecution.findUniqueOrThrow({ where: { id: stepExecutionId } });
-    expect(storedStep.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "defect", reference: "VER-1", workItemId: defect.id })]));
+    expect(storedStep.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "defect", reference: defect.key, workItemId: defect.id })]));
     const removableTestResponse = await app.inject({ method: "POST", url: `/documents/${document.id}/rows`, headers: { cookie: owner.cookie }, payload: { rowType: "test_case", title: "Removable test", parentId: null } });
     const removableTest = JSON.parse(removableTestResponse.body) as { id: string };
     await app.inject({ method: "POST", url: `/documents/${document.id}/rows`, headers: { cookie: owner.cookie }, payload: { rowType: "test_step", title: "Temporary step", parentId: removableTest.id } });

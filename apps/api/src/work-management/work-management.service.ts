@@ -3,6 +3,7 @@ import { Prisma } from "@docsys/database";
 import { randomUUID } from "crypto";
 import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
+import { ProjectKeyService } from "../tenancy/project-key.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { resolveTestScenario } from "../common/test-scenarios";
 
@@ -140,6 +141,7 @@ export class WorkManagementService {
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly audit: AuditService,
+    private readonly projectKeys: ProjectKeyService,
   ) {}
 
   async listWorkItems(actorId: string, workspaceId: string, query: Record<string, string | undefined>) {
@@ -304,15 +306,15 @@ export class WorkManagementService {
     const artifacts = [...input.artifacts, ...(input.artifact ? [input.artifact] : [])];
     await Promise.all(artifacts.map((entry) => this.assertArtifact(actorId, entry, project.workspaceId)));
     const item = await this.prisma.$transaction(async (tx) => {
-      const numberedProject = await tx.project.update({ where: { id: projectId }, data: { nextWorkItemNumber: { increment: 1 } }, select: { nextWorkItemNumber: true } });
-      const sequence = numberedProject.nextWorkItemNumber - 1;
+      const issued = await this.projectKeys.allocate(tx, projectId, "work_item");
+      const sequence = issued.sequence;
       const created = await tx.workItem.create({
         data: {
           organizationId: project.organizationId,
           workspaceId: project.workspaceId,
           projectId,
           sequence,
-          key: `${project.code.toLocaleUpperCase()}-${sequence}`,
+          key: issued.key,
           type: input.type,
           title: input.title,
           description: input.description ?? null,
@@ -501,9 +503,9 @@ export class WorkManagementService {
     const project = await this.requireProject(projectId);
     await this.access.assertPermission(actorId, "test_plan.write", this.projectScope(project));
     const plan = await this.prisma.$transaction(async (tx) => {
-      const numbered = await tx.project.update({ where: { id: projectId }, data: { nextTestPlanNumber: { increment: 1 } }, select: { nextTestPlanNumber: true } });
-      const sequence = numbered.nextTestPlanNumber - 1;
-      const created = await tx.testPlan.create({ data: { organizationId: project.organizationId, workspaceId: project.workspaceId, projectId, sequence, key: `${project.code.toLocaleUpperCase()}-TP-${sequence}`, name: input.name, description: input.description ?? null, ownerId: actorId, environment: input.environment, buildReference: input.buildReference, startsAt: input.startsAt ? new Date(input.startsAt) : null, endsAt: input.endsAt ? new Date(input.endsAt) : null } });
+      const issued = await this.projectKeys.allocate(tx, projectId, "test_plan");
+      const sequence = issued.sequence;
+      const created = await tx.testPlan.create({ data: { organizationId: project.organizationId, workspaceId: project.workspaceId, projectId, sequence, key: issued.key, name: input.name, description: input.description ?? null, ownerId: actorId, environment: input.environment, buildReference: input.buildReference, startsAt: input.startsAt ? new Date(input.startsAt) : null, endsAt: input.endsAt ? new Date(input.endsAt) : null } });
       await this.audit.record(tx, { organizationId: project.organizationId, workspaceId: project.workspaceId, actorId, action: "test_plan.created", entityType: "test_plan", entityId: created.id, nextData: { key: created.key, name: created.name, status: created.status } });
       return created;
     });
@@ -626,15 +628,15 @@ export class WorkManagementService {
     await this.access.assertRowAccess(actorId, stepRowId, "read");
     await this.assertUserInOrganization(input.assigneeId, project.organizationId);
     const created = await this.prisma.$transaction(async (tx) => {
-      const numberedProject = await tx.project.update({ where: { id: project.id }, data: { nextWorkItemNumber: { increment: 1 } }, select: { nextWorkItemNumber: true } });
-      const sequence = numberedProject.nextWorkItemNumber - 1;
+      const issued = await this.projectKeys.allocate(tx, project.id, "work_item");
+      const sequence = issued.sequence;
       const item = await tx.workItem.create({
         data: {
           organizationId: project.organizationId,
           workspaceId: project.workspaceId,
           projectId: project.id,
           sequence,
-          key: `${project.code.toLocaleUpperCase()}-${sequence}`,
+          key: issued.key,
           type: "bug",
           title: input.title,
           description: input.description ?? null,

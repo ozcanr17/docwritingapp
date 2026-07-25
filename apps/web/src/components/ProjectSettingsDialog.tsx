@@ -11,6 +11,8 @@ export interface ManagedProject {
   code: string;
   description: string | null;
   deletedAt?: string | null;
+  keyStrategy?: "unified" | "per_type";
+  testCode?: string | null;
   access: { canManage: boolean };
 }
 
@@ -48,6 +50,8 @@ export function ProjectSettingsDialog({
   const [tab, setTab] = useState<SettingsTab>(project ? "general" : "archive");
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
+  const [keyStrategy, setKeyStrategy] = useState<"unified" | "per_type">(project?.keyStrategy ?? "unified");
+  const [testCode, setTestCode] = useState(project?.testCode ?? "");
   const [userId, setUserId] = useState("");
   const [roleKey, setRoleKey] = useState<(typeof projectRoles)[number]>("editor");
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -69,11 +73,15 @@ export function ProjectSettingsDialog({
   useEffect(() => {
     if (!userId && unassignedUsers[0]) setUserId(unassignedUsers[0].id);
   }, [unassignedUsers, userId]);
+  useEffect(() => {
+    setKeyStrategy(project?.keyStrategy ?? "unified");
+    setTestCode(project?.testCode ?? "");
+  }, [project?.id, project?.keyStrategy, project?.testCode]);
 
   const updateProject = useMutation({
     mutationFn: () => api<ManagedProject>(`/projects/${project?.id}`, {
       method: "PATCH",
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify({ name, description, keyStrategy, testCode: keyStrategy === "per_type" ? (testCode.trim() || null) : null }),
     }),
     onSuccess: async (updated) => {
       await queryClient.invalidateQueries({ queryKey: ["projects", workspaceId] });
@@ -165,6 +173,41 @@ export function ProjectSettingsDialog({
               <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-mutedForeground">
                 {t("workHub.projectCodeImmutable", { code: project.code })}
               </div>
+              <fieldset className="rounded-lg border border-border p-3">
+                <legend className="px-1 text-sm font-medium">{t("keyStrategyTitle")}</legend>
+                <p className="mb-2 text-xs leading-5 text-mutedForeground">{t("keyStrategyHelp")}</p>
+                <label className="flex items-start gap-2 rounded-md px-1 py-1.5 text-sm">
+                  <input type="radio" data-testid="key-strategy-unified" className="mt-0.5" name="keyStrategy" checked={keyStrategy === "unified"} onChange={() => setKeyStrategy("unified")} />
+                  <span>
+                    <span className="block font-medium">{t("keyStrategyUnified")}</span>
+                    <span className="block text-xs text-mutedForeground">{t("keyStrategyUnifiedHelp")}</span>
+                    <span className="mt-1 block font-mono text-xs text-primary">{project.code}-1, {project.code}-2, {project.code}-3</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 rounded-md px-1 py-1.5 text-sm">
+                  <input type="radio" data-testid="key-strategy-per-type" className="mt-0.5" name="keyStrategy" checked={keyStrategy === "per_type"} onChange={() => setKeyStrategy("per_type")} />
+                  <span>
+                    <span className="block font-medium">{t("keyStrategyPerType")}</span>
+                    <span className="block text-xs text-mutedForeground">{t("keyStrategyPerTypeHelp")}</span>
+                  </span>
+                </label>
+                {keyStrategy === "per_type" && (
+                  <label className="mt-2 block text-sm">
+                    <span className="mb-1 block font-medium">{t("testCodeLabel")}</span>
+                    <span className="mb-1 block text-xs text-mutedForeground">{t("testCodeHelp")}</span>
+                    <span className="flex items-center gap-2">
+                      <input
+                        data-testid="project-test-code"
+                        className="input w-40 uppercase"
+                        maxLength={20}
+                        value={testCode}
+                        onChange={(event) => setTestCode(event.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase())}
+                      />
+                      <span className="font-mono text-xs text-mutedForeground">{(testCode || `${project.code}T`)}-1</span>
+                    </span>
+                  </label>
+                )}
+              </fieldset>
               {updateProject.isError && <p role="alert" className="text-sm text-destructive">{t("workHub.projectUpdateError")}</p>}
               {updateProject.isSuccess && <p role="status" className="text-sm text-success">{t("workHub.projectUpdated")}</p>}
               <div className="flex justify-between gap-3">
