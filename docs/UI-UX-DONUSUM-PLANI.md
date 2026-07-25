@@ -120,8 +120,11 @@ Gercek pilot degerlendirmesi, mevcut arayuzun Jira ve DOORS sinifi ticari urun b
 
 ### Faz 4 - Rotali ayarlar/yonetim ve cila
 
-- [ ] Ayarlar, yonetim ve analiz raporlarini modallardan rotali sayfalara donusturmek.
-- [ ] Koyu tema denetimi, giris ekrani ve marka cilasi.
+- [x] Ayarlar (`/settings`), yonetim (`/admin`) ve analiz raporlari (`?report=`) modallardan rotali sayfalara donusturuldu; soguk derin baglantilar calisir.
+- [x] Koyu tema tum yenilenen yuzeylerde token tabanli olarak dogrulandi; giris ekrani ve marka cilasi uygulandi.
+- [x] Gorunumler arasi tutarlilik: her alan (dokumanlar, is, ayarlar, yonetim, cop kutusu) ayni konumda ve genislikte ikincil gezinme kolonu kullanir; icerik gorunum degistirirken kaymaz.
+- [x] "DocSys Demo" markasi kaldirildi: ust bar yalnizca calisma alani adini gosterir, seed organizasyonu profesyonel adla olusturulur.
+- [x] WCAG kontrast duzeltmesi: bilgi (info) rengi acik temada 4.5:1 esigini karsilayacak sekilde koyulastirildi.
 
 ## Asama tamamlanma olcutu
 

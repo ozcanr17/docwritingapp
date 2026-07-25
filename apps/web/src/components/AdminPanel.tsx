@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
 import { ConfirmDialog, ModalSurface } from "./TransientSurface";
+import { useLayoutStore } from "../stores/layout";
 
 type RoleKey = "organization_admin" | "workspace_admin" | "project_manager" | "editor" | "reviewer" | "viewer";
 interface Member { id: string; email: string; displayName: string; isActive: boolean; roleKey: RoleKey; }
@@ -15,12 +16,13 @@ interface AdminSummary {
 
 const roles: RoleKey[] = ["organization_admin", "workspace_admin", "project_manager", "editor", "reviewer", "viewer"];
 
-export function AdminPanel({ organizationId, currentUserId, onClose }: { organizationId: string; currentUserId: string; onClose: () => void }) {
+export function AdminPanel({ organizationId, currentUserId, onClose, variant = "dialog" }: { organizationId: string; currentUserId: string; onClose: () => void; variant?: "dialog" | "page" }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ displayName: "", email: "", password: "", roleKey: "editor" as RoleKey });
   const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
   const [tab, setTab] = useState<"overview" | "users" | "audit" | "feedback">("overview");
+  const sideNavWidth = useLayoutStore((s) => s.treeWidth);
   const members = useQuery({ queryKey: ["organization-members", organizationId], queryFn: () => api<Member[]>(`/organizations/${organizationId}/members`) });
   const feedback = useQuery({ queryKey: ["pilot-feedback", organizationId], queryFn: () => api<PilotFeedback[]>(`/organizations/${organizationId}/pilot-feedback`) });
   const summary = useQuery({ queryKey: ["administration-summary", organizationId], queryFn: () => api<AdminSummary>(`/organizations/${organizationId}/administration-summary`) });
@@ -38,10 +40,11 @@ export function AdminPanel({ organizationId, currentUserId, onClose }: { organiz
     onSuccess: () => { setRemoveTarget(null); void refresh(); },
   });
   const submit = (event: FormEvent) => { event.preventDefault(); createUser.mutate(); };
-  return <>
-    <ModalSurface onClose={onClose} labelledBy="admin-panel-title" testId="admin-panel" panelClassName="flex max-h-[88vh] w-full max-w-5xl flex-col">
-      <header className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><span className="rounded-xl bg-primary/10 p-2 text-primary"><ShieldCheck size={20} /></span><div><h2 id="admin-panel-title" className="font-semibold">{t("adminPanel")}</h2><p className="text-xs text-mutedForeground">{t("adminPanelDescription")}</p></div></div><button aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></header>
-      <nav className="flex gap-1 overflow-x-auto border-b border-border bg-muted/25 px-4 py-2" aria-label={t("adminPanel")}>
+  const body = <>
+      {variant === "dialog" && <header className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><span className="rounded-lg bg-primary/10 p-2 text-primary"><ShieldCheck size={20} /></span><div><h2 id="admin-panel-title" className="font-semibold">{t("adminPanel")}</h2><p className="text-xs text-mutedForeground">{t("adminPanelDescription")}</p></div></div><button aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></header>}
+      <div className={variant === "page" ? "flex min-h-0 flex-1" : "flex min-h-0 flex-1 flex-col"}>
+      <nav style={variant === "page" ? { width: sideNavWidth } : undefined} className={variant === "page" ? "flex shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-surface p-3 [&_button]:w-full [&_button]:justify-start" : "flex gap-1 overflow-x-auto border-b border-border bg-muted/25 px-4 py-2"} aria-label={t("adminPanel")}>
+        {variant === "page" && <div id="admin-panel-title" className="section-label px-2 pb-2 pt-1">{t("adminPanel")}</div>}
         <AdminTab testId="admin-tab-overview" active={tab === "overview"} onClick={() => setTab("overview")} icon={<Building2 size={15} />} label={t("adminOverview")} />
         <AdminTab testId="admin-tab-users" active={tab === "users"} onClick={() => setTab("users")} icon={<Users size={15} />} label={t("usersAndRoles")} />
         <AdminTab testId="admin-tab-audit" active={tab === "audit"} onClick={() => setTab("audit")} icon={<Activity size={15} />} label={t("auditLog")} />
@@ -82,7 +85,18 @@ export function AdminPanel({ organizationId, currentUserId, onClose }: { organiz
       {tab === "audit" && <section className="p-5"><div className="mb-3"><h3 className="text-sm font-semibold">{t("auditLog")}</h3><p className="mt-1 text-xs text-mutedForeground">{t("auditLogHelp")}</p></div><div className="overflow-hidden rounded-xl border border-border">{summary.data?.recentAudit.length === 0 && <p className="p-5 text-sm text-mutedForeground">{t("noAuditEvents")}</p>}{summary.data?.recentAudit.map((event) => <article key={event.id} className="grid gap-2 border-b border-border bg-editorBackground px-4 py-3 text-xs last:border-b-0 sm:grid-cols-[minmax(0,1fr)_9rem_11rem]"><div><div className="font-medium text-foreground">{event.action}</div><div className="mt-1 font-mono text-[10px] text-mutedForeground">{event.entityType} · {event.entityId}</div></div><span className="self-center text-mutedForeground">{event.workspaceId ? t("workspaceScope") : t("organizationScopeLabel")}</span><time className="self-center text-mutedForeground">{new Date(event.createdAt).toLocaleString()}</time></article>)}</div></section>}
       {tab === "feedback" && <section className="p-5"><div className="mb-3 flex items-center gap-2"><MessageSquareWarning size={16} /><div><h3 className="text-sm font-semibold">{t("pilotFeedbackInbox")}</h3><p className="text-xs text-mutedForeground">{t("pilotFeedbackInboxHelp")}</p></div><span className="ml-auto rounded-full bg-muted px-2 py-1 text-xs">{feedback.data?.length ?? 0}</span></div><div className="space-y-2">{feedback.data?.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-sm text-mutedForeground">{t("noPilotFeedback")}</p>}{feedback.data?.map((item) => <article key={item.id} data-testid={`pilot-feedback-item-${item.id}`} className="rounded-xl border border-border bg-editorBackground p-3"><div className="flex items-center gap-2"><span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">{t(`feedbackCategory.${item.nextData.category ?? "bug"}`)}</span><span className="truncate text-xs text-mutedForeground">{item.actor?.displayName ?? t("unknownUser")} - {new Date(item.createdAt).toLocaleString()}</span></div><h4 className="mt-2 text-sm font-medium">{item.nextData.title}</h4><p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-mutedForeground">{item.nextData.description}</p></article>)}</div></section>}
       </div>
-    </ModalSurface>
+      </div>
+  </>;
+  return <>
+    {variant === "page" ? (
+      <div data-testid="admin-panel" aria-labelledby="admin-panel-title" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface">
+        {body}
+      </div>
+    ) : (
+      <ModalSurface onClose={onClose} labelledBy="admin-panel-title" testId="admin-panel" panelClassName="flex max-h-[88vh] w-full max-w-5xl flex-col">
+        {body}
+      </ModalSurface>
+    )}
     {removeTarget && <ConfirmDialog
       title={t("removeUser")}
       description={t("removeUserConfirm", { name: removeTarget.displayName })}

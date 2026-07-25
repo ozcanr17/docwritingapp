@@ -79,7 +79,7 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
   await page.getByTestId("document-font-size").selectOption("18");
   await page.getByTestId("document-font-family").selectOption("serif");
   await expect(page.getByTestId("document-font-preview")).toHaveCSS("font-size", "18px");
-  await page.getByTestId("close-workspace-settings").click();
+  await page.getByTestId("nav-documents").click();
   await expect(page.getByTestId("grid-row-1")).toHaveCSS("font-size", "18px");
 
   await page.getByTestId("global-search-input").fill("REQ-001");

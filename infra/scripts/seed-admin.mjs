@@ -288,7 +288,7 @@ async function main() {
   if (!organizationId) {
     const org = await call(
       "/organizations",
-      { method: "POST", body: JSON.stringify({ name: "DocSys Demo", slug: "docsys-demo" }) },
+      { method: "POST", body: JSON.stringify({ name: "DocSys", slug: "docsys" }) },
       cookie,
     );
     organizationId = org.body.id;

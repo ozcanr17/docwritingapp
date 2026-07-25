@@ -54,11 +54,13 @@ interface Workspace {
   name: string;
 }
 
-type ShellView = "documents" | "work" | "trash";
+type ShellView = "documents" | "work" | "trash" | "settings" | "admin";
 
 function viewForPath(pathname: string): ShellView {
   if (pathname.startsWith("/work")) return "work";
   if (pathname.startsWith("/trash")) return "trash";
+  if (pathname.startsWith("/settings")) return "settings";
+  if (pathname.startsWith("/admin")) return "admin";
   return "documents";
 }
 
@@ -73,22 +75,21 @@ export function ShellPage() {
     [location.pathname],
   );
   const setView = useCallback((next: ShellView) => {
-    if (next === "work") {
-      navigate("/work");
-      return;
-    }
-    if (next === "trash") {
-      navigate("/trash");
+    if (next === "work" || next === "trash" || next === "settings" || next === "admin") {
+      navigate(`/${next === "work" ? "work" : next}`);
       return;
     }
     const currentId = useSelectionStore.getState().selectedDocumentId;
     navigate(currentId ? `/docs/${currentId}` : "/docs");
   }, [navigate]);
-  const [report, setReport] = useState<"readiness" | "baselines" | "coverage" | "matrix" | "reviews" | "runs" | null>(null);
+  const reportTabs = ["readiness", "baselines", "coverage", "matrix", "reviews", "runs"] as const;
+  const reportParam = new URLSearchParams(location.search).get("report");
+  const report = (reportTabs as readonly string[]).includes(reportParam ?? "") ? reportParam as typeof reportTabs[number] : null;
+  const setReport = useCallback((tab: "readiness" | "baselines" | "coverage" | "matrix" | "reviews" | "runs") => {
+    navigate(`${location.pathname}?report=${tab}`);
+  }, [location.pathname, navigate]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
   const [documentAccessOpen, setDocumentAccessOpen] = useState(false);
   const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
   const [historyMode, setHistoryMode] = useState<"row" | "document" | null>(null);
@@ -102,7 +103,7 @@ export function ShellPage() {
   const [viewportWidth, setViewportWidth] = useState(() => typeof window === "undefined" ? 1440 : window.innerWidth);
   const presenceCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceTriggerRef = useRef<HTMLDivElement>(null);
-  const closeReport = useCallback(() => setReport(null), []);
+  const closeReport = useCallback(() => navigate(location.pathname, { replace: true }), [location.pathname, navigate]);
   const tabs = useDocumentTabsStore((s) => s.tabs);
   const recentDocuments = useDocumentTabsStore((s) => s.recentDocuments);
   const favoriteDocuments = useDocumentTabsStore((s) => s.favoriteDocuments);
@@ -243,7 +244,7 @@ export function ShellPage() {
       return;
     }
     if (commandId === "openSettings") {
-      setSettingsOpen(true);
+      setView("settings");
       return;
     }
     window.dispatchEvent(new CustomEvent("docsys:execute-document-command", { detail: { commandId, documentId: selectedDocumentId } }));
@@ -430,7 +431,6 @@ export function ShellPage() {
   return (
     <div className="app-shell flex h-screen flex-col overflow-hidden bg-background">
       <AppBar
-        organizationName={organizations.data?.[0]?.name}
         workspaceName={workspaces.data?.[0]?.name}
         workspaceId={workspaceId}
         profile={{ id: profile.data.id, displayName: profile.data.displayName, email: profile.data.email }}
@@ -447,7 +447,7 @@ export function ShellPage() {
         onOpenFeedback={() => setPilotFeedbackOpen(true)}
         onOpenPilotChecklist={() => setPilotChecklistOpen(true)}
         onOpenProfile={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => setView("settings")}
         onLogout={() => { void handleLogout(); }}
         onDocumentCreated={(document) => {
           void queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] });
@@ -482,8 +482,6 @@ export function ShellPage() {
             }}
           />
         )}
-        {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} documentId={selectedDocumentId} onClose={() => setSettingsOpen(false)} />}
-        {adminOpen && organizationId && <AdminPanel organizationId={organizationId} currentUserId={profile.data.id} onClose={() => setAdminOpen(false)} />}
         {documentAccessOpen && selectedDocumentId && <DocumentAccessDialog documentId={selectedDocumentId} title={selectedDocument.data?.title ?? ""} onClose={() => setDocumentAccessOpen(false)} />}
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
         {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
@@ -502,10 +500,10 @@ export function ShellPage() {
           panelToggleDisabled={responsiveLayout.compactSidebar}
           onNavigate={setView}
           onTogglePanel={toggleSidebar}
-          onOpenAdmin={() => setAdminOpen(true)}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenAdmin={() => setView("admin")}
+          onOpenSettings={() => setView("settings")}
         />
-        {!effectiveSidebarCollapsed && view !== "work" && (
+        {!effectiveSidebarCollapsed && (view === "documents" || view === "trash") && (
           <div className="flex flex-col overflow-hidden border-r border-border" style={{ width: treeWidth }}>
             <div className="flex min-h-12 items-center gap-2.5 border-b border-border/70 px-3">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
@@ -538,7 +536,7 @@ export function ShellPage() {
           </div>
         )}
       </aside>
-      {!effectiveSidebarCollapsed && view !== "work" && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
+      {!effectiveSidebarCollapsed && (view === "documents" || view === "trash") && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
       <main id="main-content" tabIndex={-1} className="app-main-surface flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
         {tabs.length > 0 && view === "documents" && <DocumentTabsBar
           tabs={tabs}
@@ -625,7 +623,30 @@ export function ShellPage() {
           </div>,
           document.body,
         )}
-        {view === "work" && workspaceId ? (
+        {view === "settings" && organizationId && workspaceId ? (
+          <Suspense fallback={<PanelLoading />}>
+            <WorkspaceSettingsDialog
+              variant="page"
+              organizationId={organizationId}
+              workspaceId={workspaceId}
+              documentId={selectedDocumentId}
+              onClose={() => setView("documents")}
+            />
+          </Suspense>
+        ) : view === "admin" ? (
+          organizationAccess.data?.canManage && organizationId ? (
+            <Suspense fallback={<PanelLoading />}>
+              <AdminPanel
+                variant="page"
+                organizationId={organizationId}
+                currentUserId={profile.data.id}
+                onClose={() => setView("documents")}
+              />
+            </Suspense>
+          ) : (
+            <div className="p-8 text-sm text-mutedForeground">{t("fileAccessDeniedDescription")}</div>
+          )
+        ) : view === "work" && workspaceId ? (
           <Suspense fallback={<PanelLoading />}><WorkManagementPage workspaceId={workspaceId} contextDocumentId={selectedDocumentId} contextRowId={selectedRowId} /></Suspense>
         ) : view === "documents" && selectedDocumentId ? (
           <div

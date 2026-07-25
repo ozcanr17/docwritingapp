@@ -16,7 +16,6 @@ export interface AppBarProfile {
 }
 
 interface AppBarProps {
-  organizationName?: string;
   workspaceName?: string;
   workspaceId: string | null;
   profile: AppBarProfile;
@@ -40,7 +39,6 @@ interface AppBarProps {
 }
 
 export function AppBar({
-  organizationName = "",
   workspaceName = "",
   workspaceId,
   profile,
@@ -71,11 +69,9 @@ export function AppBar({
       <div className="app-topbar relative z-50 flex min-h-12 items-center px-2.5 py-1.5">
         <div data-testid="menubar-leading-actions" className="flex min-w-0 items-center gap-1">
           <span className="app-wordmark shrink-0 px-2 text-sm font-semibold">{t("appName")}</span>
-          {(organizationName || workspaceName) && (
-            <div className="workspace-crumb hidden min-w-0 items-center gap-1.5 border-l border-border pl-3 md:flex">
-              {organizationName && <span className="max-w-32 truncate text-[11px] text-mutedForeground">{organizationName}</span>}
-              {organizationName && workspaceName && <span aria-hidden="true" className="text-mutedForeground/50">/</span>}
-              {workspaceName && <span className="max-w-36 truncate text-xs font-medium text-foreground">{workspaceName}</span>}
+          {workspaceName && (
+            <div className="workspace-crumb hidden min-w-0 items-center gap-2 border-l border-border pl-3 md:flex">
+              <span className="max-w-48 truncate text-sm font-medium text-foreground">{workspaceName}</span>
             </div>
           )}
         </div>

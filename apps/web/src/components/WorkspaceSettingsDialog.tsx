@@ -7,19 +7,21 @@ import { setLanguage, storedLanguage } from "../lib/i18n";
 import { useToastStore } from "../stores/toasts";
 import { useThemeStore } from "../stores/theme";
 import { DocumentFontFamily, documentFontFamilies, useAuthoringPreferencesStore } from "../stores/authoringPreferences";
+import { useLayoutStore } from "../stores/layout";
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
 import { RoleGuide } from "./RoleGuide";
 import { pilotTelemetryEnabled, setPilotTelemetryEnabled } from "../lib/pilotTelemetry";
 import { ModalSurface } from "./TransientSurface";
 import { userFacingError } from "../lib/userFacingError";
 
-export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentId, onClose }: { organizationId: string; workspaceId: string; documentId: string | null; onClose: () => void }) {
+export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentId, onClose, variant = "dialog" }: { organizationId: string; workspaceId: string; documentId: string | null; onClose: () => void; variant?: "dialog" | "page" }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const toast = useToastStore((state) => state.push);
   const themeMode = useThemeStore((state) => state.mode);
   const setThemeMode = useThemeStore((state) => state.setMode);
   const [tab, setTab] = useState<"document" | "appearance" | "authoring" | "keyboard" | "accessibility" | "notifications" | "roles" | "integrations">("appearance");
+  const sideNavWidth = useLayoutStore((s) => s.treeWidth);
   const [pilotTelemetry, setPilotTelemetry] = useState(pilotTelemetryEnabled());
   const [name, setName] = useState("");
   const [kind, setKind] = useState("variant");
@@ -61,11 +63,12 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
     },
     onError: (error) => toast("error", userFacingError(error, t)),
   });
-  return (
-    <ModalSurface onClose={onClose} labelledBy="workspace-settings-title" testId="workspace-settings-dialog" panelClassName="flex max-h-[86vh] w-[60rem] max-w-full flex-col">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 id="workspace-settings-title" className="font-semibold">{t("workspaceSettings")}</h2><p className="mt-0.5 text-xs text-mutedForeground">{t("workspaceSettingsDescription")}</p></div><button data-testid="close-workspace-settings" aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></div>
-        <div className="grid min-h-0 flex-1 md:grid-cols-[13rem_minmax(0,1fr)]">
-        <nav aria-label={t("workspaceSettings")} className="flex gap-1 overflow-x-auto border-b border-border bg-muted/25 p-3 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r">
+  const body = (
+    <>
+        {variant === "dialog" && <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 id="workspace-settings-title" className="font-semibold">{t("workspaceSettings")}</h2><p className="mt-0.5 text-xs text-mutedForeground">{t("workspaceSettingsDescription")}</p></div><button data-testid="close-workspace-settings" aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></div>}
+        <div className={variant === "page" ? "flex min-h-0 flex-1" : "grid min-h-0 flex-1 md:grid-cols-[13rem_minmax(0,1fr)]"}>
+        <nav aria-label={t("workspaceSettings")} style={variant === "page" ? { width: sideNavWidth } : undefined} className={`flex gap-1 overflow-x-auto border-b border-border bg-surface p-3 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r ${variant === "page" ? "shrink-0 flex-col overflow-y-auto" : ""}`}>
+          {variant === "page" && <div className="section-label px-2 pb-2 pt-1">{t("workspaceSettings")}</div>}
           {document.data?.documentType === "requirement" && <Tab testId="settings-tab-document" active={tab === "document"} onClick={() => setTab("document")} icon={<FileCog size={15} />} label={t("documentSettings")} />}
           <Tab testId="settings-tab-appearance" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette size={15} />} label={t("appearanceSettings")} />
           <Tab testId="settings-tab-authoring" active={tab === "authoring"} onClick={() => setTab("authoring")} icon={<PenLine size={15} />} label={t("authoringSettings")} />
@@ -151,6 +154,18 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
         </div>}
         </div>
         </div>
+    </>
+  );
+  if (variant === "page") {
+    return (
+      <div data-testid="workspace-settings-dialog" aria-labelledby="workspace-settings-title" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface">
+        {body}
+      </div>
+    );
+  }
+  return (
+    <ModalSurface onClose={onClose} labelledBy="workspace-settings-title" testId="workspace-settings-dialog" panelClassName="flex max-h-[86vh] w-[60rem] max-w-full flex-col">
+      {body}
     </ModalSurface>
   );
 }

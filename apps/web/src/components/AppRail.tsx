@@ -2,7 +2,7 @@ import { ClipboardCheck, FileText, PanelLeftClose, PanelLeftOpen, Settings, Shie
 import { useTranslation } from "react-i18next";
 
 interface AppRailProps {
-  view: "documents" | "work" | "trash";
+  view: "documents" | "work" | "trash" | "settings" | "admin";
   canManage: boolean;
   panelCollapsed: boolean;
   panelToggleDisabled: boolean;
@@ -51,11 +51,11 @@ export function AppRail({ view, canManage, panelCollapsed, panelToggleDisabled, 
           <Trash2 size={17} />
         </RailButton>
         {canManage && (
-          <RailButton label={t("adminPanel")} onClick={onOpenAdmin} testId="nav-admin">
+          <RailButton label={t("adminPanel")} active={view === "admin"} onClick={onOpenAdmin} testId="nav-admin">
             <ShieldCheck size={17} />
           </RailButton>
         )}
-        <RailButton label={t("settings")} onClick={onOpenSettings} testId="nav-settings">
+        <RailButton label={t("settings")} active={view === "settings"} onClick={onOpenSettings} testId="nav-settings">
           <Settings size={17} />
         </RailButton>
       </div>

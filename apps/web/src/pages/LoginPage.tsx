@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { api, getApiUrl, getServerAddress, refreshClientConfig, setServerAddress, setSessionToken } from "../lib/api";
 import { isDesktopRuntime } from "../lib/desktop";
+import { Button } from "../components/ui";
 
 interface AuthResponse {
   token?: string;
@@ -56,12 +57,12 @@ export function LoginPage() {
 
   return (
     <main id="main-content" className="flex min-h-screen items-center justify-center bg-background px-4">
-      <form onSubmit={submit} aria-labelledby="login-title" className="w-full max-w-md rounded-xl border border-border bg-surface p-8 shadow-lg">
+      <form onSubmit={submit} aria-labelledby="login-title" className="w-full max-w-md rounded-xl border border-border bg-surface p-8 shadow-[0_1px_2px_hsl(var(--shadow-color)/0.08),0_12px_32px_hsl(var(--shadow-color)/0.1)]">
         <div className="mb-3 flex items-center gap-3">
-          <img src="/docsys-icon.png" alt="" className="h-12 w-12 rounded-xl" />
-          <h1 id="login-title" className="text-xl font-semibold">{t("appName")}</h1>
+          <img src="/docsys-icon.png" alt="" className="h-11 w-11 rounded-lg" />
+          <h1 id="login-title" className="text-xl font-semibold tracking-tight">{t("appName")}</h1>
         </div>
-        <p className="mb-6 text-sm text-mutedForeground">{t("loginDescription")}</p>
+        <p className="mb-6 text-sm leading-5 text-mutedForeground">{t("loginDescription")}</p>
         {desktop && (
           <label className="mb-3 block text-sm">
             {t("serverAddress")}
@@ -72,7 +73,7 @@ export function LoginPage() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              className="mt-1 w-full rounded border border-border bg-surface px-3 py-2"
+              className="mt-1.5 w-full rounded-md border border-border bg-editorBackground px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
               value={serverAddress}
               placeholder={t("serverAddressPlaceholder")}
               onChange={(event) => setServerAddressInput(event.target.value)}
@@ -86,7 +87,7 @@ export function LoginPage() {
             {t("displayName")}
             <input
               data-testid="auth-display-name"
-              className="mt-1 w-full rounded border border-border bg-surface px-3 py-2"
+              className="mt-1.5 w-full rounded-md border border-border bg-editorBackground px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
@@ -101,7 +102,7 @@ export function LoginPage() {
             autoComplete="username"
             autoCapitalize="none"
             spellCheck={false}
-            className="mt-1 w-full rounded border border-border bg-surface px-3 py-2"
+            className="mt-1.5 w-full rounded-md border border-border bg-editorBackground px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             required
@@ -113,7 +114,7 @@ export function LoginPage() {
             data-testid="auth-password"
             type="password"
             autoComplete={mode === "login" ? "current-password" : "new-password"}
-            className="mt-1 w-full rounded border border-border bg-surface px-3 py-2"
+            className="mt-1.5 w-full rounded-md border border-border bg-editorBackground px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -127,18 +128,19 @@ export function LoginPage() {
           </label>
         )}
         {error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
-        <button
+        <Button
           data-testid="auth-submit"
           type="submit"
-          className="w-full rounded bg-primary px-4 py-2 text-primaryForeground"
+          variant="primary"
+          className="h-10 w-full"
         >
           {mode === "login" ? t("login") : t("register")}
-        </button>
+        </Button>
         {mode === "login" && !desktop && (
           <div className="mt-5 border-t border-border pt-5">
             <div className="mb-2 text-center text-xs uppercase tracking-wide text-mutedForeground">{t("orUseSso")}</div>
             <div className="flex gap-2">
-              <input className="min-w-0 flex-1 rounded border border-border bg-surface px-3 py-2 text-sm" value={organizationSlug} placeholder={t("organizationSlug")} onChange={(event) => setOrganizationSlug(event.target.value)} />
+              <input className="min-w-0 flex-1 rounded-md border border-border bg-editorBackground px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20" value={organizationSlug} placeholder={t("organizationSlug")} onChange={(event) => setOrganizationSlug(event.target.value)} />
               <button type="button" className="rounded border border-border px-3 text-sm hover:bg-muted" disabled={!organizationSlug.trim()} onClick={() => { window.location.href = `${getApiUrl()}/auth/sso/${encodeURIComponent(organizationSlug.trim())}/start`; }}>{t("sso")}</button>
             </div>
           </div>

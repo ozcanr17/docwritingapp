@@ -44,9 +44,8 @@ describe("AppBar", () => {
     expect(props.onOpenSearch).toHaveBeenCalledOnce();
   });
 
-  it("shows the organization and workspace context", () => {
-    renderBar({ organizationName: "DocSys Demo", workspaceName: "Main Workspace" });
-    expect(screen.getByText("DocSys Demo")).toBeInTheDocument();
+  it("shows the workspace context without a demo organization label", () => {
+    renderBar({ workspaceName: "Main Workspace" });
     expect(screen.getByText("Main Workspace")).toBeInTheDocument();
   });
 

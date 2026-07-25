@@ -66,6 +66,7 @@ import {
   useAuthoringPreferencesStore,
   WorkspaceFocus,
 } from "../stores/authoringPreferences";
+import { useLayoutStore } from "../stores/layout";
 
 type Project = Omit<ManagedProject, "access"> & { access?: { canManage: boolean } };
 type HubTab = "dashboard" | "items" | "board" | "plans";
@@ -253,6 +254,7 @@ export function WorkManagementPage({
     onSuccess: refreshWork,
     onError: (error) => pushToast("error", userFacingError(error, t)),
   });
+  const sideNavWidth = useLayoutStore((s) => s.treeWidth);
   const projectViews = views.filter((view) => view.projectId === activeProjectId);
   const applyView = (viewId: string) => {
     setActiveViewId(viewId);
@@ -271,7 +273,7 @@ export function WorkManagementPage({
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden bg-editorBackground">
-      <nav aria-label={t("workHub.navigation")} className="flex w-60 shrink-0 flex-col border-r border-border bg-surface">
+      <nav aria-label={t("workHub.navigation")} className="flex shrink-0 flex-col border-r border-border bg-surface" style={{ width: sideNavWidth }}>
         <div className="space-y-2 border-b border-border/70 p-2.5">
           {projects.data && projects.data.length > 0 && (
             <label className="block">
