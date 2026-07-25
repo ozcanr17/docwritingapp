@@ -4,7 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
-import { AppBar } from "../components/AppBar";
+import { AppTopNav } from "../components/AppTopNav";
 import { AppSidebar } from "../components/AppSidebar";
 import { DocumentActionsMenu } from "../components/DocumentActionsMenu";
 import { DocumentTabsBar } from "../components/DocumentTabsBar";
@@ -24,6 +24,8 @@ import { useOnboardingStore } from "../stores/onboarding";
 import { SaveStatusIndicator } from "../components/SaveStatusIndicator";
 import { Avatar, AvatarGroup, SidebarGroup, SidebarItem } from "../components/ui";
 import { ADMIN_SECTIONS, AdminSection, resolveSection, SETTINGS_SECTIONS, SettingsSection, WORK_SECTIONS, WorkSection } from "../lib/appSections";
+import { useWorkViewsStore } from "../stores/workViews";
+import { CreateDocumentDialog } from "../components/CreateDocumentDialog";
 import { useAuthoringPreferencesStore, WorkspaceFocus } from "../stores/authoringPreferences";
 import { recordPilotEvent } from "../lib/pilotTelemetry";
 import { resolveResponsiveLayout } from "../lib/responsiveLayout";
@@ -96,6 +98,7 @@ export function ShellPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [documentAccessOpen, setDocumentAccessOpen] = useState(false);
+  const [createDocumentType, setCreateDocumentType] = useState<"requirement" | "test" | null>(null);
   const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
   const [historyMode, setHistoryMode] = useState<"row" | "document" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -358,6 +361,13 @@ export function ShellPage() {
   });
 
   const workspaceId = workspaces.data?.[0]?.id ?? null;
+  const projects = useQuery({
+    queryKey: ["projects", workspaceId],
+    queryFn: () => api<Array<{ id: string; code: string; name: string }>>(`/workspaces/${workspaceId}/projects`),
+    enabled: workspaceId !== null,
+  });
+  const activeWorkProjectId = projects.data?.[0]?.id ?? null;
+  const savedWorkViews = useWorkViewsStore((s) => s.views);
   useEffect(() => {
     if (workspaceId && !onboardingCompleted) setOnboardingOpen(true);
   }, [onboardingCompleted, workspaceId]);
@@ -534,43 +544,70 @@ export function ShellPage() {
   return (
     <div className="app-shell flex h-screen overflow-hidden bg-background">
       <AppSidebar
-        view={view}
         collapsed={effectiveSidebarCollapsed}
         collapseDisabled={responsiveLayout.compactSidebar}
         responsiveCollapsed={responsiveLayout.compactSidebar}
         width={treeWidth}
-        canManage={Boolean(organizationAccess.data?.canManage)}
-        profile={{ displayName: profile.data.displayName, email: profile.data.email, isAdmin: Boolean(organizationAccess.data?.canManage) }}
-        contextLabel={contextLabel}
-        context={sidebarContext}
-        onNavigate={setView}
-        onToggleCollapse={toggleSidebar}
-        onOpenProfile={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
-        onLogout={() => { void handleLogout(); }}
-      />
-      {!effectiveSidebarCollapsed && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={220} max={420} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <AppBar
         title={areaMeta[view].title}
         subtitle={workspaces.data?.[0]?.name}
         icon={areaMeta[view].icon}
-        workspaceId={workspaceId}
+        onToggleCollapse={toggleSidebar}
+      >
+        {contextLabel && <div className="px-4 pb-1 pt-3 text-[11px] font-medium text-mutedForeground">{contextLabel}</div>}
+        {sidebarContext}
+      </AppSidebar>
+      {!effectiveSidebarCollapsed && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={220} max={420} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <AppTopNav
+        area={view}
+        canManage={Boolean(organizationAccess.data?.canManage)}
+        profile={{ displayName: profile.data.displayName, email: profile.data.email, isAdmin: Boolean(organizationAccess.data?.canManage) }}
+        projects={projects.data ?? []}
+        activeProjectId={activeWorkProjectId}
+        recentDocuments={recentDocuments.map((document) => ({ id: document.id, title: document.title }))}
+        favoriteDocuments={favoriteDocuments.map((document) => ({ id: document.id, title: document.title }))}
+        savedViewNames={savedWorkViews.map((view) => ({ id: view.id, name: view.name }))}
+        searchQuery={searchQuery}
+        searchOpen={searchOpen}
+        searchShortcut={formatShortcut(shortcutBindings.globalSearch)}
+        commandPaletteShortcut={formatShortcut(shortcutBindings.commandPalette)}
+        onSearchQueryChange={setSearchQuery}
         onOpenSearch={() => setSearchOpen(true)}
         onCloseSearch={() => setSearchOpen(false)}
-        searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
-        searchOpen={searchOpen}
+        onNavigate={(path) => navigate(path)}
+        onSelectProject={(projectId) => {
+          window.sessionStorage.setItem("docsys.activeProjectId", projectId);
+          window.dispatchEvent(new CustomEvent("docsys:select-project", { detail: { projectId } }));
+          navigate("/work/summary");
+        }}
+        onOpenDocument={(documentId) => {
+          const known = [...recentDocuments, ...favoriteDocuments].find((document) => document.id === documentId);
+          if (known) openDocument(known);
+          else navigate(`/docs/${documentId}`);
+        }}
+        onApplySavedView={(viewId) => {
+          window.sessionStorage.setItem("docsys.applyWorkView", viewId);
+          navigate("/work/list");
+          window.dispatchEvent(new CustomEvent("docsys:apply-work-view", { detail: { viewId } }));
+        }}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
-        commandPaletteShortcut={formatShortcut(shortcutBindings.commandPalette)}
-        searchShortcut={formatShortcut(shortcutBindings.globalSearch)}
         onOpenOnboarding={() => setOnboardingOpen(true)}
         onOpenFeedback={() => setPilotFeedbackOpen(true)}
         onOpenPilotChecklist={() => setPilotChecklistOpen(true)}
-        onDocumentCreated={(document) => {
-          void queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] });
-          openDocument({ id: document.id, title: document.title, documentType: document.documentType });
-        }}
+        onOpenProfile={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
+        onLogout={() => { void handleLogout(); }}
+        onCreateDocument={(documentType) => setCreateDocumentType(documentType)}
         onCreateWorkItem={openWorkItemCreate}
+        onCreateProject={() => {
+          window.sessionStorage.setItem("docsys.openProjectCreate", "1");
+          navigate("/work/summary");
+          window.dispatchEvent(new Event("docsys:open-project-create"));
+        }}
+        onCreateTestPlan={() => {
+          window.sessionStorage.setItem("docsys.openPlanCreate", "1");
+          navigate("/work/plans");
+          window.dispatchEvent(new Event("docsys:open-plan-create"));
+        }}
       />
       <Suspense fallback={null}>
         {onboardingOpen && <OnboardingDialog onComplete={() => { completeOnboarding(); setOnboardingOpen(false); }} />}
@@ -597,10 +634,27 @@ export function ShellPage() {
               setSearchOpen(false);
               if (rowId) window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0);
             }}
+            onSelectWorkItem={(workItem) => {
+              setSearchOpen(false);
+              setSearchQuery("");
+              navigate(`/work/item/${workItem.key}`, { state: { workItemId: workItem.id, from: "/work/list" } });
+            }}
           />
         )}
         {documentAccessOpen && selectedDocumentId && <DocumentAccessDialog documentId={selectedDocumentId} title={selectedDocument.data?.title ?? ""} onClose={() => setDocumentAccessOpen(false)} />}
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
+        {createDocumentType && workspaceId && (
+          <CreateDocumentDialog
+            workspaceId={workspaceId}
+            documentType={createDocumentType}
+            onClose={() => setCreateDocumentType(null)}
+            onCreated={(document) => {
+              setCreateDocumentType(null);
+              void queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] });
+              openDocument({ id: document.id, title: document.title, documentType: document.documentType });
+            }}
+          />
+        )}
         {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
       </Suspense>
       <div className="relative flex min-h-0 flex-1 overflow-hidden">

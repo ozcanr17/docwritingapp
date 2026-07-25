@@ -32,7 +32,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -102,9 +102,16 @@ export function WorkManagementPage({
   useEffect(() => {
     if (location.pathname === "/work" || location.pathname === "/work/") navigate("/work/summary", { replace: true });
   }, [location.pathname, navigate]);
+  const searchParams = new URLSearchParams(location.search);
   const [query, setQuery] = useState("");
-  const [mine, setMine] = useState(false);
-  const [bugsOnly, setBugsOnly] = useState(false);
+  const [mine, setMine] = useState(searchParams.get("assignee") === "me");
+  const [bugsOnly, setBugsOnly] = useState(searchParams.get("type") === "bug");
+  const filterSignature = `${searchParams.get("assignee") ?? ""}|${searchParams.get("type") ?? ""}`;
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    setMine(params.get("assignee") === "me");
+    setBugsOnly(params.get("type") === "bug");
+  }, [filterSignature, location.search]);
   const [createOpen, setCreateOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
@@ -140,9 +147,45 @@ export function WorkManagementPage({
       window.sessionStorage.removeItem("docsys.openWorkCreate");
       setCreateOpen(true);
     };
+    const maybeOpenPlan = () => {
+      if (window.sessionStorage.getItem("docsys.openPlanCreate") !== "1" || !activeProjectId) return;
+      window.sessionStorage.removeItem("docsys.openPlanCreate");
+      setPlanOpen(true);
+    };
+    const maybeOpenProject = () => {
+      if (window.sessionStorage.getItem("docsys.openProjectCreate") !== "1") return;
+      window.sessionStorage.removeItem("docsys.openProjectCreate");
+      setCreateProjectOpen(true);
+    };
+    const maybeSelectProject = () => {
+      const requested = window.sessionStorage.getItem("docsys.activeProjectId");
+      if (!requested) return;
+      window.sessionStorage.removeItem("docsys.activeProjectId");
+      setSelectedProjectId(requested);
+    };
+    const maybeApplyView = () => {
+      const requested = window.sessionStorage.getItem("docsys.applyWorkView");
+      if (!requested) return;
+      window.sessionStorage.removeItem("docsys.applyWorkView");
+      applyViewRef.current(requested);
+    };
+    maybeSelectProject();
     maybeOpenCreate();
+    maybeOpenPlan();
+    maybeOpenProject();
+    maybeApplyView();
     window.addEventListener("docsys:open-work-create", maybeOpenCreate);
-    return () => window.removeEventListener("docsys:open-work-create", maybeOpenCreate);
+    window.addEventListener("docsys:open-plan-create", maybeOpenPlan);
+    window.addEventListener("docsys:open-project-create", maybeOpenProject);
+    window.addEventListener("docsys:select-project", maybeSelectProject);
+    window.addEventListener("docsys:apply-work-view", maybeApplyView);
+    return () => {
+      window.removeEventListener("docsys:open-work-create", maybeOpenCreate);
+      window.removeEventListener("docsys:open-plan-create", maybeOpenPlan);
+      window.removeEventListener("docsys:open-project-create", maybeOpenProject);
+      window.removeEventListener("docsys:select-project", maybeSelectProject);
+      window.removeEventListener("docsys:apply-work-view", maybeApplyView);
+    };
   }, [activeProjectId]);
   useEffect(() => {
     if (activeProjectId && activeProjectId !== selectedProjectId)
@@ -252,6 +295,7 @@ export function WorkManagementPage({
     onError: (error) => pushToast("error", userFacingError(error, t)),
   });
   const projectViews = views.filter((view) => view.projectId === activeProjectId);
+  const applyViewRef = useRef<(viewId: string) => void>(() => undefined);
   const applyView = (viewId: string) => {
     setActiveViewId(viewId);
     const view = projectViews.find((candidate) => candidate.id === viewId);
@@ -266,6 +310,7 @@ export function WorkManagementPage({
     setMine(view.mine);
     setBugsOnly(view.bugsOnly);
   };
+  applyViewRef.current = applyView;
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden bg-editorBackground">
@@ -463,6 +508,7 @@ export function WorkManagementPage({
             dashboard={dashboard.data}
             items={items.data ?? []}
             workflow={workflow.data}
+            onDrillDown={(destination) => navigate(destination)}
             onOpen={openItemById}
             onMove={(item, targetStatus, anchorId, position) =>
               move.mutate({ item, targetStatus, anchorId, position })
@@ -650,12 +696,14 @@ function WorkDashboardView({
   workflow,
   onOpen,
   onMove,
+  onDrillDown,
 }: {
   dashboard?: WorkDashboard;
   items: WorkItemSummary[];
   workflow?: WorkItemWorkflow;
   onOpen: (id: string) => void;
   onMove: (item: WorkItemSummary, status: WorkItemStatus, anchorId: string | null, position: "before" | "after") => void;
+  onDrillDown: (destination: string) => void;
 }) {
   const { t } = useTranslation();
   const workspaceFocus = useAuthoringPreferencesStore(
@@ -665,28 +713,46 @@ function WorkDashboardView({
   return (
     <div className="space-y-4">
       <MetricStrip testId="work-metrics">
-        <Metric label={t("workHub.openItems")} value={dashboard.metrics.open} caption={`${dashboard.metrics.total} ${t("workHub.totalItems")}`} icon={<AlertCircle size={14} />} tone="primary" />
+        <Metric testId="metric-open-items" label={t("workHub.openItems")} value={dashboard.metrics.open} caption={`${dashboard.metrics.total} ${t("workHub.totalItems")}`} icon={<AlertCircle size={14} />} tone="primary" onClick={() => onDrillDown("/work/list")} />
         <Metric
+          testId="metric-my-open-bugs"
           label={t("workHub.myOpenBugs")}
           value={dashboard.metrics.myOpenBugCount}
           caption={`${dashboard.metrics.criticalOpen} ${t("workHub.criticalOpen")}`}
-          delta={dashboard.metrics.criticalOpen > 0 ? t("workHub.criticalOpen") : undefined}
-          deltaTone="negative"
           icon={<Bug size={14} />}
           tone="danger"
+          onClick={() => onDrillDown("/work/list?assignee=me&type=bug")}
         />
-        <Metric label={t("workHub.activePlans")} value={dashboard.metrics.activePlans} caption={`${dashboard.metrics.executions} ${t("workHub.lifecycleExecutions")}`} icon={<CheckCircle2 size={14} />} tone="success" />
-        <Metric label={t("workHub.completionRate")} value={`${dashboard.metrics.completionRate}%`} caption={`${dashboard.metrics.completed} / ${dashboard.metrics.total}`} icon={<Activity size={14} />} tone="info" />
-        <Metric label={t("workHub.unassignedOpen")} value={dashboard.metrics.unassigned} caption={`${dashboard.metrics.linkedEvidence} ${t("workHub.linkedEvidence")}`} icon={<UserRound size={14} />} tone="purple" />
+        <Metric testId="metric-active-plans" label={t("workHub.activePlans")} value={dashboard.metrics.activePlans} caption={`${dashboard.metrics.executions} ${t("workHub.lifecycleExecutions")}`} icon={<CheckCircle2 size={14} />} tone="success" onClick={() => onDrillDown("/work/plans")} />
+        <Metric testId="metric-completion" label={t("workHub.completionRate")} value={`${dashboard.metrics.completionRate}%`} caption={`${dashboard.metrics.completed} / ${dashboard.metrics.total}`} icon={<Activity size={14} />} tone="info" onClick={() => onDrillDown("/work/list")} />
+        <Metric testId="metric-unassigned" label={t("workHub.unassignedOpen")} value={dashboard.metrics.unassigned} caption={`${dashboard.metrics.linkedEvidence} ${t("workHub.linkedEvidence")}`} icon={<UserRound size={14} />} tone="purple" onClick={() => onDrillDown("/work/list?assignee=none")} />
       </MetricStrip>
       <RoleFocusSummary focus={workspaceFocus} metrics={dashboard.metrics} />
       <div className="grid gap-4 xl:grid-cols-3">
         <Card>
-          <CardHeader title={t("workHub.myOpenBugs")} icon={<Bug size={15} className="text-destructive" />} badge={<Lozenge appearance={dashboard.myOpenBugs.length ? "danger" : "neutral"}>{dashboard.myOpenBugs.length}</Lozenge>} />
+          <CardHeader
+            title={t("workHub.myOpenBugs")}
+            icon={<Bug size={15} className="text-destructive" />}
+            badge={<Lozenge appearance={dashboard.myOpenBugs.length ? "danger" : "neutral"}>{dashboard.myOpenBugs.length}</Lozenge>}
+            actions={
+              <Button size="sm" variant="subtle" data-testid="drill-my-open-bugs" onClick={() => onDrillDown("/work/list?assignee=me&type=bug")}>
+                {t("viewAll")}
+              </Button>
+            }
+          />
           <div className="py-1"><DashboardItemList items={dashboard.myOpenBugs} empty={t("workHub.noMyOpenBugs")} onOpen={onOpen} /></div>
         </Card>
         <Card>
-          <CardHeader title={t("workHub.recentItems")} icon={<ClipboardList size={15} className="text-primary" />} badge={<Lozenge>{dashboard.recentItems.length}</Lozenge>} />
+          <CardHeader
+            title={t("workHub.recentItems")}
+            icon={<ClipboardList size={15} className="text-primary" />}
+            badge={<Lozenge>{dashboard.recentItems.length}</Lozenge>}
+            actions={
+              <Button size="sm" variant="subtle" data-testid="drill-recent-items" onClick={() => onDrillDown("/work/list")}>
+                {t("viewAll")}
+              </Button>
+            }
+          />
           <div className="py-1"><DashboardItemList items={dashboard.recentItems} empty={t("workHub.noRecentItems")} onOpen={onOpen} /></div>
         </Card>
         <Card>

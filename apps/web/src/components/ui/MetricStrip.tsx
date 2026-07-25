@@ -29,13 +29,18 @@ export interface MetricProps {
   icon?: React.ReactNode;
   tone?: MetricTone;
   testId?: string;
+  onClick?: () => void;
 }
 
-export function Metric({ label, value, caption, delta, deltaTone = "neutral", icon, tone = "primary", testId }: MetricProps) {
+export function Metric({ label, value, caption, delta, deltaTone = "neutral", icon, tone = "primary", testId, onClick }: MetricProps) {
+  const Element = onClick ? "button" : "div";
   return (
-    <div
+    <Element
+      {...(onClick ? { type: "button" as const, onClick } : {})}
       data-testid={testId}
-      className="rounded-xl border border-border bg-surface p-4 xl:rounded-none xl:border-0 xl:bg-transparent"
+      className={`rounded-xl border border-border bg-surface p-4 text-left xl:rounded-none xl:border-0 xl:bg-transparent ${
+        onClick ? "outline-none transition-colors hover:bg-muted/60" : ""
+      }`}
     >
       <div className="flex items-start justify-between gap-2">
         <span className="min-w-0 truncate text-sm font-medium text-mutedForeground">{label}</span>
@@ -58,6 +63,6 @@ export function Metric({ label, value, caption, delta, deltaTone = "neutral", ic
         )}
       </div>
       {caption && <p className="mt-1.5 truncate text-xs text-mutedForeground">{caption}</p>}
-    </div>
+    </Element>
   );
 }

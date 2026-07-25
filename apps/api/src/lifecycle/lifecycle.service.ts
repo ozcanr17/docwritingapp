@@ -270,10 +270,25 @@ export class LifecycleService {
     await this.access.assertPermission(actorId, "row.read", { organizationId: workspace.organizationId, workspaceId });
     const normalized = query.trim().toLocaleLowerCase("en");
     if (normalized.length < 2 && !/^\d+$/.test(normalized)) return [];
-    const [documents, candidates] = await Promise.all([
+    const [documents, workItems, candidates] = await Promise.all([
       this.prisma.document.findMany({
         where: { workspaceId, deletedAt: null, title: { contains: query.trim(), mode: "insensitive" } },
         select: { id: true, title: true, documentType: true, updatedAt: true },
+        orderBy: { updatedAt: "desc" },
+        take: Math.min(limit, 50),
+      }),
+      this.prisma.workItem.findMany({
+        where: {
+          project: { workspaceId, deletedAt: null },
+          deletedAt: null,
+          OR: [
+            { key: { contains: query.trim(), mode: "insensitive" } },
+            { title: { contains: query.trim(), mode: "insensitive" } },
+            { description: { contains: query.trim(), mode: "insensitive" } },
+            { labels: { has: query.trim() } },
+          ],
+        },
+        select: { id: true, key: true, title: true, description: true, type: true, status: true, updatedAt: true, project: { select: { id: true, name: true, code: true } } },
         orderBy: { updatedAt: "desc" },
         take: Math.min(limit, 50),
       }),
@@ -339,7 +354,19 @@ export class LifecycleService {
           : null;
       })
       .filter((row): row is NonNullable<typeof row> => row !== null);
-    return [...documentResults, ...rowResults]
+    const workItemResults = workItems.map((item) => ({
+      id: `work-item:${item.id}`,
+      rowId: null,
+      rowType: "work_item",
+      title: item.title,
+      description: item.description,
+      requirementNo: null,
+      objectNumber: null,
+      document: null,
+      workItem: { id: item.id, key: item.key, type: item.type, status: item.status, project: item.project },
+      updatedAt: item.updatedAt,
+    }));
+    return [...documentResults, ...rowResults, ...workItemResults]
       .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
       .slice(0, limit);
   }

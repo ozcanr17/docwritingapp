@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Search } from "lucide-react";
+import { ClipboardCheck, FileText, Search } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
@@ -14,17 +14,19 @@ interface SearchResult {
   description: string | null;
   requirementNo: string | null;
   objectNumber: number | null;
-  document: { id: string; title: string; documentType: string };
+  document: { id: string; title: string; documentType: string } | null;
+  workItem?: { id: string; key: string; type: string; status: string; project: { id: string; name: string; code: string } } | null;
 }
 
 interface GlobalSearchDialogProps {
   workspaceId: string;
   query: string;
   onClose: () => void;
-  onSelect: (document: SearchResult["document"], rowId: string | null) => void;
+  onSelect: (document: NonNullable<SearchResult["document"]>, rowId: string | null) => void;
+  onSelectWorkItem?: (workItem: NonNullable<SearchResult["workItem"]>) => void;
 }
 
-export function GlobalSearchDialog({ workspaceId, query, onClose, onSelect }: GlobalSearchDialogProps) {
+export function GlobalSearchDialog({ workspaceId, query, onClose, onSelect, onSelectWorkItem }: GlobalSearchDialogProps) {
   const { t } = useTranslation();
   useEscapeClose(onClose);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -70,16 +72,39 @@ export function GlobalSearchDialog({ workspaceId, query, onClose, onSelect }: Gl
       className={`fixed ${transientLayers.popover} max-h-[min(32rem,70vh)] overflow-auto rounded-b-xl border border-t-0 border-border bg-surfaceElevated p-2 shadow-2xl`}
     >
       {results.isFetching && <div className="p-5 text-center text-sm text-mutedForeground">{t("loading")}</div>}
-      {!results.isFetching && results.data?.map((result) => (
-        <button key={result.id} className="flex w-full gap-3 rounded-lg p-3 text-left hover:bg-muted" onClick={() => onSelect(result.document, result.rowId)}>
+      {!results.isFetching && (results.data ?? []).some((result) => result.workItem) && (
+        <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-mutedForeground">{t("workItemsGroup")}</div>
+      )}
+      {!results.isFetching && (results.data ?? []).filter((result) => result.workItem).map((result) => (
+        <button
+          key={result.id}
+          data-testid={`search-work-item-${result.workItem?.key}`}
+          className="flex w-full gap-3 rounded-lg p-3 text-left hover:bg-muted"
+          onClick={() => result.workItem && onSelectWorkItem?.(result.workItem)}
+        >
+          <ClipboardCheck size={16} className="mt-0.5 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">
+              <span className="font-mono text-xs text-primary">{result.workItem?.key}</span> {result.title}
+            </span>
+            <span className="block truncate text-xs text-mutedForeground">{result.workItem?.project.name} · {result.workItem?.type} · {result.workItem?.status}</span>
+            {result.description && <span className="mt-1 block line-clamp-2 text-xs text-mutedForeground">{result.description}</span>}
+          </span>
+        </button>
+      ))}
+      {!results.isFetching && (results.data ?? []).some((result) => result.workItem) && (results.data ?? []).some((result) => result.document) && (
+        <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-mutedForeground">{t("documentsGroup")}</div>
+      )}
+      {!results.isFetching && (results.data ?? []).filter((result) => result.document).map((result) => (
+        <button key={result.id} className="flex w-full gap-3 rounded-lg p-3 text-left hover:bg-muted" onClick={() => result.document && onSelect(result.document, result.rowId)}>
           <FileText size={16} className="mt-0.5 shrink-0 text-primary" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">
               {result.rowId === null
-                ? result.document.title
+                ? result.document?.title
                 : [result.requirementNo, result.objectNumber ? `ID ${result.objectNumber}` : null, result.title].filter(Boolean).join(" · ") || "-"}
             </span>
-            <span className="block truncate text-xs text-mutedForeground">{result.document.title} · {result.rowId === null ? t("document") : result.rowType}</span>
+            <span className="block truncate text-xs text-mutedForeground">{result.document?.title} · {result.rowId === null ? t("document") : result.rowType}</span>
             {result.description && <span className="mt-1 block line-clamp-2 text-xs text-mutedForeground">{result.description}</span>}
           </span>
         </button>
