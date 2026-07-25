@@ -149,6 +149,18 @@ Kullanici, yeni proje olusturmanin herkese acik olmamasini ve Jira'daki gibi bir
 - [x] Is kaydi alanlari: etiket, veri turu (metin, uzun metin, tam sayi, ondalik, mantiksal, tarih, tarih-saat, tek/cok secim, baglanti), zorunluluk, secim listesi ve hangi turlere uygulanacagi. Sunucu tarafi dogrulama zorunlu alani, gecersiz secenegi ve turu uymayan degeri reddeder.
 - [x] Yetkisi olmayan uyeler tablolari salt okunur gorur; tum kurallar sunucuda dogrulanir.
 
+## Asama 13 - Test kosumu olusturma ve kosum raporu
+
+Kullanici, test kosumlarinin olusturulabilmesini ve paylastigi Test Plan Execution Report gorsellerindeki gecen/basarisiz/acik ozetinin ilerleme cubuguyla birlikte uygulanmasini istedi.
+
+- [x] Her test kosumu artik diger tum kayitlar gibi proje anahtari aliyor; hem plansiz hem plana bagli kosum yollari ayni sayaci kullaniyor.
+- [x] `/tests/kosumlar` alani: calisma alanindaki tum kosumlar; proje ve duruma gore filtre, dagilim cubugu, adim sonuclari, plan bilgisi ve kosan kisi.
+- [x] Kosum olusturma penceresi: adimlari olan bir test secilir, ortam, yapi referansi ve yineleme girilir.
+- [x] Test plani kosum raporu: metrik seridi, bolumlu ilerleme cubugu ve aciklamasi, yinelemeye ve atanan kisiye gore dagilim, planlanan testler tablosu (son kosum, adim sonucu, hatalar) ve hata tablosu.
+- [x] Rapor satirlarindan dogrudan kosum baslatilabilir; daha once kosulmus bir test icin buton "Yeniden test et" olur.
+- [x] Gecme orani yalnizca sonuclanan kosumlar uzerinden, tamamlanma orani ise planin tamami uzerinden hesaplanir; alti durum kovasi her zaman planlanan sayisina eslenir.
+- [x] Ortak `StatusBar` bileseni eklendi: sifir olan durumlar cubukta gosterilmez, aciklamada kalir.
+
 ## Asama tamamlanma olcutu
 
 Bir asama ancak ilgili maddeler isaretlendiginde, regresyon testleri gectiginde, Mac uzerinde `pnpm dev` ile gorsel olarak dogrulandiginda ve degisiklikler `main` dalina gonderildiginde tamamlanmis sayilir.

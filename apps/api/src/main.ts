@@ -21,7 +21,7 @@ export async function createApp(): Promise<NestFastifyApplication> {
   await app.register(fastifyCookie as never, { secret: env.JWT_SECRET } as never);
   await app.register(fastifyHelmet as never, (env.NODE_ENV === "production" ? {} : { contentSecurityPolicy: false }) as never);
   await app.register(fastifyRateLimit as never, {
-    max: (request: { url: string }) => /^\/auth\/(login|register)$/.test(request.url) ? 20 : 600,
+    max: (request: { url: string }) => /^\/auth\/(login|register)$/.test(request.url) ? 20 : env.RATE_LIMIT_GENERAL_PER_MINUTE,
     timeWindow: (request: { url: string }) => /^\/auth\/(login|register)$/.test(request.url) ? 15 * 60 * 1000 : 60 * 1000,
     keyGenerator: (request: { ip: string; url: string }) => `${request.ip}:${/^\/auth\/(login|register)$/.test(request.url) ? "auth" : "general"}`,
   } as never);

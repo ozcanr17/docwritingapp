@@ -17,6 +17,7 @@ import { resolveTestScenario } from "../common/test-scenarios";
 import { RowsService, TemplateRowSnapshot, UpdateRowInput } from "../rows/rows.service";
 import { StorageService } from "../storage/storage.service";
 import { createHash, randomUUID } from "crypto";
+import { ProjectKeyService } from "../tenancy/project-key.service";
 
 interface SavedViewInput {
   name: string;
@@ -101,6 +102,7 @@ export class LifecycleService {
     private readonly audit: AuditService,
     private readonly rows: RowsService,
     private readonly storage: StorageService,
+    private readonly projectKeys: ProjectKeyService,
   ) {}
 
   async listViews(actorId: string, documentId: string) {
@@ -1240,9 +1242,15 @@ export class LifecycleService {
         });
     if (steps.length === 0) throw new UnprocessableEntityException("The test heading does not contain test steps");
     return this.prisma.$transaction(async (tx) => {
+      const issued = context.document.projectId
+        ? await this.projectKeys.allocate(tx, context.document.projectId, "test_execution")
+        : null;
       const execution = await tx.testExecution.create({
         data: {
           organizationId: context.document.organizationId,
+          projectId: context.document.projectId,
+          sequence: issued?.sequence,
+          key: issued?.key,
           testCaseRowId,
           executedById: actorId,
           retestPackageItemId: packageItem?.id,

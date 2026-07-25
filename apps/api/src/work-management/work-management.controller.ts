@@ -5,6 +5,8 @@ import { SessionUser } from "../auth/auth.types";
 import { ZodBodyPipe } from "../common/zod-body.pipe";
 import { WorkManagementService } from "./work-management.service";
 import { WorkItemSchemaService } from "./work-item-schema.service";
+import { ExecutionStatus } from "@docsys/database";
+import { EXECUTION_STATUSES, TestExecutionReportService } from "./test-execution-report.service";
 
 const workItemType = z.enum(["epic", "story", "task", "bug", "risk"]);
 const workItemStatus = z.enum(["backlog", "ready", "in_progress", "in_review", "done", "canceled"]);
@@ -157,6 +159,7 @@ export class WorkManagementController {
   constructor(
     private readonly service: WorkManagementService,
     private readonly schema: WorkItemSchemaService,
+    private readonly reports: TestExecutionReportService,
   ) {}
 
   @Get("workspaces/:workspaceId/work-items")
@@ -278,6 +281,35 @@ export class WorkManagementController {
   @Post("test-plan-items/:itemId/executions")
   startPlannedExecution(@CurrentUser() user: SessionUser, @Param("itemId", ParseUUIDPipe) itemId: string) {
     return this.service.startPlannedExecution(user.userId, itemId);
+  }
+
+  @Get("workspaces/:workspaceId/test-executions")
+  listWorkspaceExecutions(
+    @CurrentUser() user: SessionUser,
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    const statuses = (query.status ?? "").split(",").filter((entry): entry is ExecutionStatus => EXECUTION_STATUSES.includes(entry as ExecutionStatus));
+    return this.reports.listWorkspaceExecutions(user.userId, workspaceId, {
+      projectId: query.projectId,
+      testPlanId: query.testPlanId,
+      status: statuses,
+      limit: query.limit ? Number(query.limit) : undefined,
+    });
+  }
+
+  @Get("workspaces/:workspaceId/test-scenarios")
+  listWorkspaceTestScenarios(
+    @CurrentUser() user: SessionUser,
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+    @Query("query") query = "",
+  ) {
+    return this.reports.listWorkspaceTestScenarios(user.userId, workspaceId, query);
+  }
+
+  @Get("test-plans/:testPlanId/execution-report")
+  getPlanExecutionReport(@CurrentUser() user: SessionUser, @Param("testPlanId", ParseUUIDPipe) testPlanId: string) {
+    return this.reports.getPlanExecutionReport(user.userId, testPlanId);
   }
 
   @Post("executions/:executionId/steps/:stepRowId/internal-defect")

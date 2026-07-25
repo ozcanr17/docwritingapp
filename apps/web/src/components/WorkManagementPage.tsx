@@ -347,7 +347,7 @@ export function WorkManagementPage({
           >
             {t("workHub.newItem")}
           </Button>
-          <Button size="sm" icon={<ClipboardList size={14} />} disabled={!activeProjectId} onClick={() => setPlanOpen(true)}>
+          <Button size="sm" data-testid="open-create-plan" icon={<ClipboardList size={14} />} disabled={!activeProjectId} onClick={() => setPlanOpen(true)}>
             {t("workHub.newPlan")}
           </Button>
           <div className="ml-auto flex items-center gap-2">
@@ -2059,6 +2059,7 @@ function CreatePlanDialog({
           <input
             autoFocus
             required
+            data-testid="plan-name"
             value={name}
             onChange={(event) => setName(event.target.value)}
             className="input"
@@ -2088,6 +2089,7 @@ function CreatePlanDialog({
           </button>
           <button
             type="submit"
+            data-testid="create-plan"
             disabled={!name.trim() || create.isPending}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primaryForeground disabled:opacity-50"
           >

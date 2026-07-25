@@ -18,6 +18,10 @@ export S3_SECRET_KEY="${S3_SECRET_KEY:-minioadmin}"
 export COLLAB_PORT="${COLLAB_PORT:-3002}"
 export WORKER_HEALTH_PORT="${WORKER_HEALTH_PORT:-3003}"
 export LOG_LEVEL="${LOG_LEVEL:-warn}"
+# The end-to-end suite drives a whole product tour from one address and exceeds the
+# human-shaped 600/minute default. Only the throughput guard is raised here; the
+# authentication limit stays at its production value of 20 per 15 minutes.
+export RATE_LIMIT_GENERAL_PER_MINUTE="${RATE_LIMIT_GENERAL_PER_MINUTE:-6000}"
 
 LOG_DIR="$ROOT/.dev-logs"
 PID_FILE="$ROOT/.dev-pids"

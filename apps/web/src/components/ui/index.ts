@@ -10,6 +10,8 @@ export { Tabs } from "./Tabs";
 export type { TabItem, TabsProps } from "./Tabs";
 export { PageHeader, ProgressBar, TableHead } from "./PageHeader";
 export type { PageHeaderProps } from "./PageHeader";
+export { StatusBar } from "./StatusBar";
+export type { StatusBarProps, StatusBarSegment, StatusBarTone } from "./StatusBar";
 export { EmptyState } from "./EmptyState";
 export type { EmptyStateProps } from "./EmptyState";
 export { Card, CardBody, CardFooter, CardHeader } from "./Card";

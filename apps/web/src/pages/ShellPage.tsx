@@ -45,6 +45,8 @@ const AdminPanel = lazy(() => import("../components/AdminPanel").then((module) =
 const TestRepositoryPage = lazy(() => import("../components/TestRepositoryPage").then((module) => ({ default: module.TestRepositoryPage })));
 const TestCoveragePage = lazy(() => import("../components/TestCoveragePage").then((module) => ({ default: module.TestCoveragePage })));
 const TraceabilityMatrixPage = lazy(() => import("../components/TraceabilityMatrixPage").then((module) => ({ default: module.TraceabilityMatrixPage })));
+const TestExecutionsPage = lazy(() => import("../components/TestExecutionsPage").then((module) => ({ default: module.TestExecutionsPage })));
+const TestPlanExecutionReportPage = lazy(() => import("../components/TestPlanExecutionReportPage").then((module) => ({ default: module.TestPlanExecutionReportPage })));
 const DocumentAccessDialog = lazy(() => import("../components/DocumentAccessDialog").then((module) => ({ default: module.DocumentAccessDialog })));
 const PilotFeedbackDialog = lazy(() => import("../components/PilotFeedbackDialog").then((module) => ({ default: module.PilotFeedbackDialog })));
 const PilotChecklistDialog = lazy(() => import("../components/PilotChecklistDialog").then((module) => ({ default: module.PilotChecklistDialog })));
@@ -787,13 +789,10 @@ export function ShellPage() {
               <Suspense fallback={<PanelLoading />}><TestCoveragePage workspaceId={workspaceId} /></Suspense>
             ) : testSection === "traceability" ? (
               <Suspense fallback={<PanelLoading />}><TraceabilityMatrixPage workspaceId={workspaceId} /></Suspense>
+            ) : testSection === "executions" ? (
+              <Suspense fallback={<PanelLoading />}><TestExecutionsPage workspaceId={workspaceId} /></Suspense>
             ) : (
-              <div className="p-6">
-                <div className="mx-auto max-w-xl rounded-xl border border-dashed border-border bg-surfaceSubtle p-6 text-center">
-                  <h2 className="text-sm font-semibold">{t("sectionNotAvailable")}</h2>
-                  <p className="mt-1.5 text-sm leading-5 text-mutedForeground">{t("sectionNotAvailableHelp")}</p>
-                </div>
-              </div>
+              <Suspense fallback={<PanelLoading />}><TestPlanExecutionReportPage workspaceId={workspaceId} /></Suspense>
             )
           ) : <PanelLoading />
         ) : view === "settings" && organizationId && workspaceId ? (

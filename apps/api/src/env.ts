@@ -11,6 +11,13 @@ const apiEnvSchema = z.object({
   API_PUBLIC_URL: z.string().url().default("http://localhost:3001"),
   COLLAB_PUBLIC_URL: z.string().url().default("ws://localhost:3002"),
   CORS_ALLOWED_ORIGINS: z.string().default("http://localhost:5173"),
+  /**
+   * Throughput guard for ordinary requests, per client address per minute. Raise it
+   * only for local automation: an end-to-end suite drives a whole product tour from
+   * one address and legitimately exceeds a human-shaped ceiling. The authentication
+   * limit is deliberately NOT configurable.
+   */
+  RATE_LIMIT_GENERAL_PER_MINUTE: z.coerce.number().int().positive().max(20000).default(600),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   COOKIE_SECURE: z.enum(["true", "false"]).transform((value) => value === "true").default("false"),
   ALLOW_PUBLIC_REGISTRATION: z.enum(["true", "false"]).transform((value) => value === "true").default("false"),

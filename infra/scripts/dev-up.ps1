@@ -23,6 +23,9 @@ DefaultEnv "S3_SECRET_KEY" "minioadmin"
 DefaultEnv "COLLAB_PORT" "3002"
 DefaultEnv "WORKER_HEALTH_PORT" "3003"
 DefaultEnv "LOG_LEVEL" "warn"
+# See dev-up.sh: only the throughput guard is raised for local automation; the
+# authentication limit keeps its production value.
+DefaultEnv "RATE_LIMIT_GENERAL_PER_MINUTE" "6000"
 
 $LogDir = Join-Path $Root ".dev-logs"
 $PidFile = Join-Path $Root ".dev-pids"

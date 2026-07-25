@@ -574,3 +574,86 @@ export interface TestExecution {
     testStepRow: { id: string; title: string; testStepDetail: { action: string | null; expectedResult: string | null } | null };
   }>;
 }
+
+export interface ProjectSummary {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export type ExecutionStatusKey = TestExecution["status"];
+
+export interface ExecutionStatusTotals {
+  planned: number;
+  executed: number;
+  passed: number;
+  failed: number;
+  blocked: number;
+  skipped: number;
+  running: number;
+  notRun: number;
+  passRate: number;
+  completionRate: number;
+}
+
+export interface ExecutionSummary {
+  id: string;
+  key: string | null;
+  status: ExecutionStatusKey;
+  environment: string | null;
+  buildReference: string | null;
+  iteration: string | null;
+  notes: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  executedBy: { id: string; displayName: string } | null;
+  testCaseRow: { id: string; title: string; objectNumber: number; document: { id: string; title: string; key: string | null } };
+  project: { id: string; code: string; name: string } | null;
+  testPlan: { id: string; key: string; name: string } | null;
+  stepTotals: { total: number; passed: number; failed: number; blocked: number; skipped: number; notRun: number };
+}
+
+export interface ExecutionListResponse {
+  executions: ExecutionSummary[];
+  totals: ExecutionStatusTotals;
+}
+
+export interface TestScenarioCandidate {
+  id: string;
+  title: string;
+  objectNumber: number;
+  stepCount: number;
+  document: { id: string; title: string; key: string | null };
+}
+
+export interface PlanExecutionReport {
+  plan: {
+    id: string;
+    key: string;
+    name: string;
+    description: string | null;
+    status: "draft" | "active" | "completed" | "canceled";
+    environment: string | null;
+    buildReference: string | null;
+    startsAt: string | null;
+    endsAt: string | null;
+    owner: { id: string; displayName: string } | null;
+    project: { id: string; code: string; name: string } | null;
+  };
+  totals: ExecutionStatusTotals;
+  iterations: Array<{ iteration: string } & ExecutionStatusTotals>;
+  assignees: Array<{ id: string | null; displayName: string | null; totals: ExecutionStatusTotals }>;
+  items: Array<{
+    id: string;
+    iteration: string | null;
+    environment: string | null;
+    assignee: { id: string; displayName: string } | null;
+    testCaseRow: { id: string; title: string; objectNumber: number; document: { id: string; title: string; key: string | null } };
+    status: ExecutionStatusKey | null;
+    executionCount: number;
+    latestExecution: ExecutionSummary | null;
+    defects: Array<{ id: string; key: string; title: string; status: string; priority: string; type: string }>;
+  }>;
+  defects: Array<{ id: string; key: string; title: string; status: string; priority: string; type: string }>;
+}

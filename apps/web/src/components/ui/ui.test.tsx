@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Avatar, AvatarGroup, initialsOf } from "./Avatar";
 import { Button, IconButton } from "./Button";
 import { EmptyState } from "./EmptyState";
+import { StatusBar } from "./StatusBar";
 import { Lozenge } from "./Lozenge";
 import { PageHeader } from "./PageHeader";
 import { Tabs } from "./Tabs";
@@ -74,5 +75,31 @@ describe("ui primitives", () => {
     expect(screen.getByRole("heading", { name: "Board" })).toBeInTheDocument();
     expect(screen.getByText("Nothing here")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+  });
+
+  it("sizes status bar segments proportionally and skips empty outcomes", () => {
+    render(
+      <StatusBar
+        testId="bar"
+        total={4}
+        segments={[
+          { key: "passed", label: "Passed", value: 1, appearance: "success" },
+          { key: "failed", label: "Failed", value: 1, appearance: "danger" },
+          { key: "blocked", label: "Blocked", value: 0, appearance: "warning" },
+          { key: "not_run", label: "Not run", value: 2, appearance: "neutral" },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("bar-passed")).toHaveStyle({ width: "25%" });
+    expect(screen.getByTestId("bar-not_run")).toHaveStyle({ width: "50%" });
+    expect(screen.queryByTestId("bar-blocked")).not.toBeInTheDocument();
+    expect(screen.getByTestId("bar-legend-blocked")).toHaveTextContent("Blocked");
+    expect(screen.getByRole("img")).toHaveAccessibleName("Passed: 1, Failed: 1, Blocked: 0, Not run: 2");
+  });
+
+  it("renders an empty status bar without segments when nothing is counted", () => {
+    render(<StatusBar testId="empty" segments={[{ key: "passed", label: "Passed", value: 0, appearance: "success" }]} />);
+    expect(screen.queryByTestId("empty-passed")).not.toBeInTheDocument();
+    expect(screen.getByTestId("empty-legend-passed")).toHaveTextContent("0");
   });
 });
