@@ -16,10 +16,10 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
   await page.getByTestId("bootstrap-submit").click();
   await dismissOnboarding(page);
 
-  for (const menu of ["file", "edit"]) {
-    await page.getByTestId(`menu-${menu}`).click();
-    await expect(page.getByTestId(`menu-${menu}-popover`)).toBeVisible();
-    await page.getByTestId(`menu-${menu}`).click();
+  for (const menu of ["global-create", "appbar-help", "open-profile"]) {
+    await page.getByTestId(menu).click();
+    await expect(page.getByTestId(`${menu}-popover`)).toBeVisible();
+    await page.getByTestId(menu).click();
   }
 
   await expect(page.getByTestId("tree-empty")).toBeVisible();
@@ -57,7 +57,7 @@ test("register, bootstrap tenant, create document, edit hierarchical rows", asyn
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("grid-row-1.1").getByTestId("cell-value-title")).toHaveText("System requirement");
 
-  await page.getByTestId("menu-file").click();
+  await page.getByTestId("document-actions").click();
   await page.getByTestId("menuitem-analysis").click();
   await page.getByTestId("menuitem-readiness").click();
   await expect(page.getByTestId("release-readiness-panel")).toBeVisible();

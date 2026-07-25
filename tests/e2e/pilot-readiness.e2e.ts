@@ -15,14 +15,12 @@ test("pilot guide, consent and administrator feedback inbox work end to end", as
   await page.getByTestId("bootstrap-submit").click();
   await expect(page.getByTestId("tree-empty")).toBeVisible();
 
-  await page.getByTestId("menu-file").click();
-  await page.getByTestId("menuitem-help").click();
+  await page.getByTestId("appbar-help").click();
   await page.getByTestId("menuitem-pilot-checklist").click();
   await page.getByTestId("pilot-check-roles").click();
   await page.keyboard.press("Escape");
 
-  await page.getByTestId("menu-file").click();
-  await page.getByTestId("menuitem-help").click();
+  await page.getByTestId("appbar-help").click();
   await page.getByTestId("menuitem-pilot-feedback").click();
   await page.getByTestId("feedback-category").selectOption("usability");
   await page.getByTestId("feedback-title").fill("First project flow");

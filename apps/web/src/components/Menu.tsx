@@ -16,7 +16,7 @@ export interface MenuEntry {
   children?: MenuEntry[];
 }
 
-export function Menu({ label, entries, testId }: { label: string; entries: MenuEntry[]; testId?: string }) {
+export function Menu({ label, entries, testId, icon, triggerClassName }: { label: string; entries: MenuEntry[]; testId?: string; icon?: React.ReactNode; triggerClassName?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -55,10 +55,16 @@ export function Menu({ label, entries, testId }: { label: string; entries: MenuE
     <div ref={ref} className="relative">
       <button
         data-testid={testId}
-        className={`rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-muted ${open ? "bg-muted" : ""}`}
+        aria-label={icon ? label : undefined}
+        title={icon ? label : undefined}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={triggerClassName ?? (icon
+          ? `inline-flex h-8 w-8 items-center justify-center rounded-md text-mutedForeground transition-colors hover:bg-muted hover:text-foreground ${open ? "bg-muted text-foreground" : ""}`
+          : `rounded-md px-2.5 py-1.5 text-sm transition-colors hover:bg-muted ${open ? "bg-muted" : ""}`)}
         onClick={() => setOpen((v) => !v)}
       >
-        {label}
+        {icon ?? label}
       </button>
       {open && createPortal(
         <div

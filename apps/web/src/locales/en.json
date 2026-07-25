@@ -26,6 +26,7 @@
   "workspaceArea": "Workspace",
   "workspaceTools": "Tools",
   "explorer": "Explorer",
+  "documentActions": "Document actions",
   "collapseSidebar": "Collapse sidebar",
   "expandSidebar": "Expand sidebar",
   "openDocuments": "Open documents",

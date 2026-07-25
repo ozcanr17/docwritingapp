@@ -66,7 +66,7 @@ test("suspect links and baseline diff", async ({ page }) => {
   await expect(page.getByTestId("open-linked")).toBeVisible();
   await expect(page.getByTestId("grid-row-1").getByTestId("cell-value-linkedRequirements")).toHaveText("REQ-001");
 
-  await page.getByTestId("menu-file").click();
+  await page.getByTestId("document-actions").click();
   await page.getByTestId("menuitem-baselines").click();
   await expect(page.getByTestId("reports-dialog")).toBeVisible();
   await page.getByTestId("create-baseline").click();
@@ -83,7 +83,7 @@ test("suspect links and baseline diff", async ({ page }) => {
   await page.getByTestId("cell-input-title").fill("Requirement A (changed)");
   await page.keyboard.press("Enter");
 
-  await page.getByTestId("menu-file").click();
+  await page.getByTestId("document-actions").click();
   await page.getByTestId("menuitem-analysis").click();
   await page.getByTestId("menuitem-readiness").click();
   await expect(page.getByTestId("retest-package-name")).toBeVisible();
@@ -92,7 +92,7 @@ test("suspect links and baseline diff", async ({ page }) => {
   await page.getByTestId("create-retest-package").click();
   await expect(page.getByTestId("toast-success")).toHaveCount(successToastCount + 1);
   await page.getByTestId("close-reports").click();
-  await page.getByTestId("menu-file").click();
+  await page.getByTestId("document-actions").click();
   await page.getByTestId("menuitem-analysis").click();
   await page.getByTestId("menuitem-runs").click();
   await expect(page.locator('[data-testid^="retest-package-"]')).toHaveCount(1);

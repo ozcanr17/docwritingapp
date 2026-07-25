@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, ClipboardCheck, Clock3, FileKey2, FileText, FlaskConical, LogOut, PanelLeftClose, PanelLeftOpen, PenLine, Settings, ShieldCheck, Star, Trash2, Users } from "lucide-react";
+import { Building2, ClipboardCheck, Clock3, FileKey2, FlaskConical, PenLine, Star, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
-import { MenuBar } from "../components/MenuBar";
+import { AppBar } from "../components/AppBar";
+import { AppRail } from "../components/AppRail";
+import { DocumentActionsMenu } from "../components/DocumentActionsMenu";
 import { DocumentTabsBar } from "../components/DocumentTabsBar";
 import { ResizeHandle } from "../components/ResizeHandle";
 import { TrashPanel } from "../components/TrashPanel";
@@ -35,7 +37,6 @@ const ProfileDialog = lazy(() => import("../components/ProfileDialog").then((mod
 const HistoryDialog = lazy(() => import("../components/HistoryDialog").then((module) => ({ default: module.HistoryDialog })));
 const CommandPalette = lazy(() => import("../components/CommandPalette").then((module) => ({ default: module.CommandPalette })));
 const OnboardingDialog = lazy(() => import("../components/OnboardingDialog").then((module) => ({ default: module.OnboardingDialog })));
-const RecentDocumentsDialog = lazy(() => import("../components/RecentDocumentsDialog").then((module) => ({ default: module.RecentDocumentsDialog })));
 const DocumentOverviewPanel = lazy(() => import("../components/DocumentOverviewPanel").then((module) => ({ default: module.DocumentOverviewPanel })));
 const AdminPanel = lazy(() => import("../components/AdminPanel").then((module) => ({ default: module.AdminPanel })));
 const DocumentAccessDialog = lazy(() => import("../components/DocumentAccessDialog").then((module) => ({ default: module.DocumentAccessDialog })));
@@ -89,7 +90,6 @@ export function ShellPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [documentAccessOpen, setDocumentAccessOpen] = useState(false);
-  const [recentDocumentsOpen, setRecentDocumentsOpen] = useState(false);
   const [profileTarget, setProfileTarget] = useState<{ userId: string; allowEdit: boolean } | null>(null);
   const [historyMode, setHistoryMode] = useState<"row" | "document" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -176,6 +176,21 @@ export function ShellPage() {
     setSelectedDocumentId(nextId);
     navigate(nextId ? `/docs/${nextId}` : "/docs", { replace: true });
   }, [clearEditHistory, closeDocumentTab, navigate, setSelectedDocumentId]);
+
+  const handleLogout = useCallback(async () => {
+    await api("/auth/logout", { method: "POST" });
+    setSessionToken(null);
+    resetDocumentTabs();
+    resetEditHistory();
+    queryClient.clear();
+    navigate("/login");
+  }, [navigate, queryClient, resetDocumentTabs, resetEditHistory]);
+
+  const openWorkItemCreate = useCallback(() => {
+    window.sessionStorage.setItem("docsys.openWorkCreate", "1");
+    navigate("/work");
+    window.dispatchEvent(new Event("docsys:open-work-create"));
+  }, [navigate]);
 
   useEffect(() => {
     if (focusedDocumentId !== selectedDocumentId) setSelectedDocumentId(focusedDocumentId);
@@ -414,15 +429,12 @@ export function ShellPage() {
 
   return (
     <div className="app-shell flex h-screen flex-col overflow-hidden bg-background">
-      <MenuBar
+      <AppBar
         organizationName={organizations.data?.[0]?.name}
         workspaceName={workspaces.data?.[0]?.name}
-        documentId={view === "documents" ? selectedDocumentId : null}
-        documentType={view === "documents" ? selectedDocument.data?.documentType ?? null : null}
-        view={view}
-        setView={setView}
-        onOpenReport={setReport}
-        onOpenHistory={setHistoryMode}
+        workspaceId={workspaceId}
+        profile={{ id: profile.data.id, displayName: profile.data.displayName, email: profile.data.email }}
+        isAdmin={Boolean(organizationAccess.data?.canManage)}
         onOpenSearch={() => setSearchOpen(true)}
         onCloseSearch={() => setSearchOpen(false)}
         searchQuery={searchQuery}
@@ -434,6 +446,14 @@ export function ShellPage() {
         onOpenOnboarding={() => setOnboardingOpen(true)}
         onOpenFeedback={() => setPilotFeedbackOpen(true)}
         onOpenPilotChecklist={() => setPilotChecklistOpen(true)}
+        onOpenProfile={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onLogout={() => { void handleLogout(); }}
+        onDocumentCreated={(document) => {
+          void queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] });
+          openDocument({ id: document.id, title: document.title, documentType: document.documentType });
+        }}
+        onCreateWorkItem={openWorkItemCreate}
       />
       <Suspense fallback={null}>
         {onboardingOpen && <OnboardingDialog onComplete={() => { completeOnboarding(); setOnboardingOpen(false); }} />}
@@ -465,7 +485,6 @@ export function ShellPage() {
         {settingsOpen && organizationId && workspaceId && <WorkspaceSettingsDialog organizationId={organizationId} workspaceId={workspaceId} documentId={selectedDocumentId} onClose={() => setSettingsOpen(false)} />}
         {adminOpen && organizationId && <AdminPanel organizationId={organizationId} currentUserId={profile.data.id} onClose={() => setAdminOpen(false)} />}
         {documentAccessOpen && selectedDocumentId && <DocumentAccessDialog documentId={selectedDocumentId} title={selectedDocument.data?.title ?? ""} onClose={() => setDocumentAccessOpen(false)} />}
-        {recentDocumentsOpen && <RecentDocumentsDialog documents={recentDocuments} onClose={() => setRecentDocumentsOpen(false)} onOpen={(document) => { openDocument(document); setRecentDocumentsOpen(false); }} />}
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
         {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
       </Suspense>
@@ -474,104 +493,52 @@ export function ShellPage() {
         aria-label={t("primaryNavigation")}
         data-collapsed={effectiveSidebarCollapsed}
         data-responsive-collapsed={responsiveLayout.compactSidebar}
-        className="app-sidebar flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebarBackground text-sidebarForeground"
-        style={{ width: effectiveSidebarCollapsed ? 64 : treeWidth }}
+        className="app-sidebar flex shrink-0 overflow-hidden bg-sidebarBackground text-sidebarForeground"
       >
-        <div className={`flex min-h-16 items-center border-b border-border/70 ${effectiveSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"}`}>
-          {!effectiveSidebarCollapsed && (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
-              <Building2 size={17} />
-            </span>
-          )}
-          {!effectiveSidebarCollapsed && (
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-mutedForeground">{t("workspaceArea")}</div>
-              <div className="truncate text-sm font-semibold">{workspaces.data?.[0]?.name ?? "—"}</div>
+        <AppRail
+          view={view}
+          canManage={Boolean(organizationAccess.data?.canManage)}
+          panelCollapsed={effectiveSidebarCollapsed}
+          panelToggleDisabled={responsiveLayout.compactSidebar}
+          onNavigate={setView}
+          onTogglePanel={toggleSidebar}
+          onOpenAdmin={() => setAdminOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+        {!effectiveSidebarCollapsed && (
+          <div className="flex flex-col overflow-hidden border-r border-border" style={{ width: treeWidth }}>
+            <div className="flex min-h-12 items-center gap-2.5 border-b border-border/70 px-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
+                <Building2 size={14} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-mutedForeground">{t("workspaceArea")}</div>
+                <div className="truncate text-sm font-semibold">{workspaces.data?.[0]?.name ?? "—"}</div>
+              </div>
             </div>
-          )}
-          {!responsiveLayout.compactSidebar && <button
-            type="button"
-            data-testid="toggle-sidebar"
-            className="icon-button shrink-0"
-            aria-label={effectiveSidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
-            title={effectiveSidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
-            onClick={toggleSidebar}
-          >
-            {effectiveSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          </button>}
-        </div>
-        <nav aria-label={t("primaryNavigation")} className="px-2 py-2 text-sm">
-          {!effectiveSidebarCollapsed && <div className="section-label px-2 pb-1.5">{t("primaryNavigation")}</div>}
-          <SidebarItem
-            icon={<FileText size={15} />}
-            label={t("documents")}
-            active={view === "documents"}
-            onClick={() => setView("documents")}
-            testId="nav-documents"
-            collapsed={effectiveSidebarCollapsed}
-          />
-          <SidebarItem
-            icon={<ClipboardCheck size={15} />}
-            label={t("workHub.navigation")}
-            active={view === "work"}
-            onClick={() => setView("work")}
-            testId="nav-work"
-            collapsed={effectiveSidebarCollapsed}
-          />
-        </nav>
-        <section data-testid="tree-section" aria-label={t("documentTree")} className={`min-h-0 flex-1 overflow-hidden border-y border-border/70 bg-surface text-foreground ${effectiveSidebarCollapsed ? "hidden" : ""}`}>
-          <div className="section-label border-b border-border/60 px-3 py-2">{t("explorer")}</div>
-          {workspaceId &&
-            (view === "trash" ? (
-              <TrashPanel workspaceId={workspaceId} />
-            ) : view === "work" ? (
-              <div className="p-4 text-xs leading-5 text-mutedForeground">{t("workHub.sidebarHelp")}</div>
-            ) : (
-              <TreePanel
-                workspaceId={workspaceId}
-                selectedDocumentId={selectedDocumentId}
-                onSelectDocument={openDocument}
-              />
-            ))}
-        </section>
-        <div className={`p-2 text-sm ${effectiveSidebarCollapsed ? "mt-auto" : ""}`}>
-          {!effectiveSidebarCollapsed && <div className="section-label px-2 pb-1.5">{t("workspaceTools")}</div>}
-          <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<Clock3 size={15} />} label={t("recentDocuments")} onClick={() => setRecentDocumentsOpen(true)} testId="nav-recent-documents" />
-          {organizationAccess.data?.canManage && <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<ShieldCheck size={15} />} label={t("adminPanel")} onClick={() => setAdminOpen(true)} testId="nav-admin" />}
-          {selectedDocumentId && <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<FileKey2 size={15} />} label={t("documentPermissions")} onClick={() => setDocumentAccessOpen(true)} testId="nav-document-access" />}
-          <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<Trash2 size={15} />} label={t("trash")} active={view === "trash"} onClick={() => setView("trash")} testId="nav-trash" />
-          <SidebarItem collapsed={effectiveSidebarCollapsed} icon={<Settings size={15} />} label={t("settings")} onClick={() => setSettingsOpen(true)} testId="nav-settings" />
-        </div>
-        <div className={`border-t border-border/70 p-2 text-sm ${effectiveSidebarCollapsed ? "" : "px-3 py-2.5"}`}>
-          <div className={`flex items-center gap-1 ${effectiveSidebarCollapsed ? "flex-col" : ""}`}>
-            <button
-              data-testid="open-profile"
-              title={profile.data.displayName}
-              aria-label={profile.data.displayName}
-              className={`group min-w-0 flex-1 items-center rounded-xl text-left transition-colors hover:bg-muted ${effectiveSidebarCollapsed ? "flex justify-center p-1.5" : "flex gap-2.5 px-2 py-1.5"}`}
-              onClick={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
-            >
-              <Avatar name={profile.data.displayName} size="md" />
-              {!effectiveSidebarCollapsed && <span className="min-w-0"><span className="flex items-center gap-1.5 truncate text-sm font-medium">{profile.data.displayName}{organizationAccess.data?.canManage && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">{t("administratorBadge")}</span>}</span><span className="block truncate text-[10px] text-mutedForeground">{profile.data.email}</span></span>}
-            </button>
-          <button
-            data-testid="logout"
-            aria-label={t("logout")}
-            title={t("logout")}
-            className="icon-button shrink-0"
-            onClick={async () => {
-              await api("/auth/logout", { method: "POST" });
-              setSessionToken(null);
-              resetDocumentTabs();
-              resetEditHistory();
-              queryClient.clear();
-              navigate("/login");
-            }}
-          >
-            <LogOut size={15} />
-          </button>
+            {view === "documents" && (favoriteDocuments.length > 0 || recentDocuments.length > 0) && (
+              <div className="space-y-3 border-b border-border/70 px-2.5 py-2.5">
+                <WorkspaceDocumentList title={t("favorites")} icon="favorite" documents={favoriteDocuments.slice(0, 5)} onOpen={openDocument} />
+                <WorkspaceDocumentList title={t("recentDocuments")} icon="recent" documents={recentDocuments.filter((document) => !favoriteDocuments.some((favorite) => favorite.id === document.id)).slice(0, 5)} onOpen={openDocument} />
+              </div>
+            )}
+            <section data-testid="tree-section" aria-label={t("documentTree")} className="min-h-0 flex-1 overflow-hidden bg-surface text-foreground">
+              <div className="section-label border-b border-border/60 px-3 py-2">{view === "trash" ? t("trash") : t("explorer")}</div>
+              {workspaceId &&
+                (view === "trash" ? (
+                  <TrashPanel workspaceId={workspaceId} />
+                ) : view === "work" ? (
+                  <div className="p-4 text-xs leading-5 text-mutedForeground">{t("workHub.sidebarHelp")}</div>
+                ) : (
+                  <TreePanel
+                    workspaceId={workspaceId}
+                    selectedDocumentId={selectedDocumentId}
+                    onSelectDocument={openDocument}
+                  />
+                ))}
+            </section>
           </div>
-        </div>
+        )}
       </aside>
       {!effectiveSidebarCollapsed && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
       <main id="main-content" tabIndex={-1} className="app-main-surface flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
@@ -605,6 +572,14 @@ export function ShellPage() {
           </div>
           {selectedDocumentId && view === "documents" && (
             <div className="flex shrink-0 items-center gap-2 text-mutedForeground">
+              <DocumentActionsMenu
+                documentId={selectedDocumentId}
+                documentType={selectedDocument.data?.documentType ?? null}
+                canManageAccess={Boolean(selectedDocument.data?.access?.canManage)}
+                onOpenReport={setReport}
+                onOpenHistory={setHistoryMode}
+                onOpenAccess={() => setDocumentAccessOpen(true)}
+              />
               <SaveStatusIndicator documentId={selectedDocumentId} />
               <Users size={14} />
               <div
@@ -894,39 +869,6 @@ function ShellLoading({ label }: { label: string }) {
       </div>
       <span className="sr-only">{label}</span>
     </div>
-  );
-}
-
-function SidebarItem({
-  icon,
-  label,
-  active,
-  onClick,
-  testId,
-  collapsed = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-  testId?: string;
-  collapsed?: boolean;
-}) {
-  return (
-    <button
-      data-testid={testId}
-      onClick={onClick}
-      title={collapsed ? label : undefined}
-      aria-label={collapsed ? label : undefined}
-      className={`sidebar-item mb-0.5 flex w-full items-center rounded-lg text-left ${
-        collapsed ? "justify-center px-2 py-2.5" : "gap-2.5 px-2.5 py-2"
-      } ${
-        active ? "is-active" : ""
-      }`}
-    >
-      {icon}
-      {!collapsed && <span className="truncate">{label}</span>}
-    </button>
   );
 }
 

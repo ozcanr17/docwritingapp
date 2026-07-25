@@ -53,7 +53,7 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
   await page.keyboard.press("Enter");
   await expect(page.getByText("Passed")).toBeVisible();
 
-  await page.getByTestId("menu-edit").click();
+  await page.getByTestId("document-actions").click();
   await page.getByTestId("menuitem-insert").click();
   await page.getByTestId("menuitem-add-column").click();
   await page.getByTestId("column-name-input").fill("Coverage");
@@ -61,7 +61,7 @@ test("test document: add rows, edit test step fields, add a custom column", asyn
   await page.getByTestId("column-create-submit").click();
   await expect(page.getByRole("columnheader", { name: "Coverage" })).toBeVisible();
 
-  await page.getByTestId("menu-edit").click();
+  await page.getByTestId("document-actions").click();
   await page.getByTestId("menuitem-insert").click();
   await page.getByTestId("menuitem-add-column").click();
   await page.getByTestId("column-name-input").fill("Platforms");

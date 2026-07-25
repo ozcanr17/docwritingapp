@@ -118,6 +118,16 @@ export function WorkManagementPage({
     ? { ...activeProject, access: { canManage: canManageActiveProject } }
     : null;
   useEffect(() => {
+    const maybeOpenCreate = () => {
+      if (window.sessionStorage.getItem("docsys.openWorkCreate") !== "1" || !activeProjectId) return;
+      window.sessionStorage.removeItem("docsys.openWorkCreate");
+      setCreateOpen(true);
+    };
+    maybeOpenCreate();
+    window.addEventListener("docsys:open-work-create", maybeOpenCreate);
+    return () => window.removeEventListener("docsys:open-work-create", maybeOpenCreate);
+  }, [activeProjectId]);
+  useEffect(() => {
     if (activeProjectId && activeProjectId !== selectedProjectId)
       setSelectedProjectId(activeProjectId);
   }, [activeProjectId, selectedProjectId]);

@@ -101,9 +101,9 @@ Gercek pilot degerlendirmesi, mevcut arayuzun Jira ve DOORS sinifi ticari urun b
 
 ### Faz 1 - Kabuk ve gezinme
 
-- [ ] Ust bari urun cubugu olarak yeniden duzenlemek: global Olustur dugmesi, bildirimler, yardim ve profil sag ustte.
-- [ ] Dosya/Duzen menu cubugunu kaldirip islemleri dokuman arac cubugu, uc nokta menusu ve komut paletine tasimak.
-- [ ] Alan bazli iki seviyeli gezinme: ince ikon rayi (Dokumanlar, Is, Yonetim) ve alana ozel baglamsal kenar cubugu.
+- [x] Ust bari urun cubugu olarak yeniden duzenlemek: global Olustur dugmesi, bildirimler, yardim ve profil sag ustte.
+- [x] Dosya/Duzen menu cubugunu kaldirip islemleri dokuman uc nokta menusune, yardim menusune ve komut paletine tasimak.
+- [x] Alan bazli iki seviyeli gezinme: ince ikon rayi (Dokumanlar, Is, Cop kutusu, Yonetim, Ayarlar) ve alana ozel baglamsal kenar cubugu; favoriler ve son dokumanlar kenar cubugunda satir ici.
 
 ### Faz 2 - Jira seviyesinde is alani
 
