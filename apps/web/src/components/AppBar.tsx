@@ -1,25 +1,20 @@
 import { useMutation } from "@tanstack/react-query";
-import { HelpCircle, Plus, Search, X } from "lucide-react";
+import { HelpCircle, Moon, Plus, Search, Sun, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, DocumentSummary, DocumentType } from "../lib/api";
+import { useThemeStore } from "../stores/theme";
 import { useToastStore } from "../stores/toasts";
 import { Menu } from "./Menu";
 import { NotificationCenter } from "./NotificationCenter";
 import { ModalSurface } from "./TransientSurface";
-import { Avatar, Button } from "./ui";
-
-export interface AppBarProfile {
-  id: string;
-  displayName: string;
-  email: string;
-}
+import { Button } from "./ui";
 
 interface AppBarProps {
-  workspaceName?: string;
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
   workspaceId: string | null;
-  profile: AppBarProfile;
-  isAdmin?: boolean;
   onOpenSearch: () => void;
   onCloseSearch: () => void;
   searchQuery: string;
@@ -31,18 +26,16 @@ interface AppBarProps {
   onOpenOnboarding?: () => void;
   onOpenFeedback?: () => void;
   onOpenPilotChecklist?: () => void;
-  onOpenProfile: () => void;
-  onOpenSettings: () => void;
-  onLogout: () => void;
   onDocumentCreated: (document: DocumentSummary) => void;
   onCreateWorkItem: () => void;
+  actions?: React.ReactNode;
 }
 
 export function AppBar({
-  workspaceName = "",
+  title,
+  subtitle,
+  icon,
   workspaceId,
-  profile,
-  isAdmin = false,
   onOpenSearch,
   onCloseSearch,
   searchQuery,
@@ -54,32 +47,36 @@ export function AppBar({
   onOpenOnboarding = () => undefined,
   onOpenFeedback = () => undefined,
   onOpenPilotChecklist = () => undefined,
-  onOpenProfile,
-  onOpenSettings,
-  onLogout,
   onDocumentCreated,
   onCreateWorkItem,
+  actions,
 }: AppBarProps) {
   const { t } = useTranslation();
   const pushToast = useToastStore((s) => s.push);
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
   const [createDocumentType, setCreateDocumentType] = useState<DocumentType | null>(null);
+  const isDark =
+    themeMode === "dark" ||
+    (themeMode === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   return (
     <>
-      <div className="app-topbar relative z-50 flex min-h-12 items-center px-2.5 py-1.5">
-        <div data-testid="menubar-leading-actions" className="flex min-w-0 items-center gap-1">
-          <span className="app-wordmark shrink-0 px-2 text-sm font-semibold">{t("appName")}</span>
-          {workspaceName && (
-            <div className="workspace-crumb hidden min-w-0 items-center gap-2 border-l border-border pl-3 md:flex">
-              <span className="max-w-48 truncate text-sm font-medium text-foreground">{workspaceName}</span>
-            </div>
-          )}
+      <header className="app-topbar relative z-50 flex min-h-14 shrink-0 items-center gap-3 border-b border-border px-4">
+        {icon && (
+          <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-surfaceSubtle text-mutedForeground">
+            {icon}
+          </span>
+        )}
+        <div className="min-w-0 shrink-0">
+          <h1 className="truncate text-[15px] font-semibold leading-5 tracking-tight text-foreground">{title}</h1>
+          {subtitle && <p className="truncate text-xs leading-4 text-mutedForeground">{subtitle}</p>}
         </div>
         <div
           id="docsys-global-search"
           data-testid="global-search-trigger"
           title={t("globalSearchHelp")}
-          className={`global-search-trigger absolute left-1/2 flex w-[clamp(11rem,34vw,32rem)] min-w-0 -translate-x-1/2 items-center gap-2 border border-border bg-editorBackground/80 px-3 py-1.5 text-xs text-mutedForeground shadow-sm transition-[border-color,background-color,width] focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15 hover:border-primary/40 hover:bg-muted ${searchOpen ? "rounded-t-lg rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-md"}`}
+          className={`global-search-trigger ml-auto flex w-[clamp(9rem,26vw,22rem)] min-w-0 items-center gap-2 border border-border bg-editorBackground px-3 py-1.5 text-xs text-mutedForeground transition-colors focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15 hover:border-primary/40 ${searchOpen ? "rounded-t-md rounded-b-none border-b-transparent bg-surfaceElevated" : "rounded-md"}`}
         >
           <Search size={14} className="shrink-0" />
           <input
@@ -87,7 +84,7 @@ export function AppBar({
             data-testid="global-search-input"
             className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-mutedForeground"
             value={searchQuery}
-            placeholder={t("globalSearchHelp")}
+            placeholder={t("searchPlaceholder")}
             onFocus={onOpenSearch}
             onChange={(event) => {
               onSearchQueryChange(event.target.value);
@@ -100,9 +97,10 @@ export function AppBar({
               }
             }}
           />
-          {!searchQuery && <span className="shrink-0 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px]">{searchShortcut}</span>}
+          {!searchQuery && <span className="hidden shrink-0 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] lg:block">{searchShortcut}</span>}
         </div>
-        <div data-testid="menubar-trailing-actions" className="ml-auto flex min-w-0 items-center justify-end gap-1.5">
+        {actions}
+        <div data-testid="menubar-trailing-actions" className="flex shrink-0 items-center gap-1.5">
           <Menu
             testId="global-create"
             label={t("create")}
@@ -129,22 +127,18 @@ export function AppBar({
             ]}
           />
           <NotificationCenter />
-          <Menu
-            testId="open-profile"
-            label={profile.displayName}
-            triggerClassName="inline-flex h-8 w-8 items-center justify-center rounded-full outline-none transition-shadow hover:ring-2 hover:ring-primary/35"
-            icon={<Avatar name={profile.displayName} size="md" />}
-            entries={[
-              { key: "account-name", label: profile.email, disabled: true },
-              { key: "account-sep", label: "", separator: true },
-              { key: "profile", label: `${t("profile")}${isAdmin ? ` · ${t("administratorBadge")}` : ""}`, onSelect: onOpenProfile },
-              { key: "settings", label: t("settings"), onSelect: onOpenSettings },
-              { key: "logout-sep", label: "", separator: true },
-              { key: "logout", label: t("logout"), danger: true, onSelect: onLogout },
-            ]}
-          />
+          <button
+            type="button"
+            data-testid="toggle-theme"
+            aria-label={isDark ? t("themeLight") : t("themeDark")}
+            title={isDark ? t("themeLight") : t("themeDark")}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-mutedForeground transition-colors hover:bg-muted hover:text-foreground"
+            onClick={() => setThemeMode(isDark ? "light" : "dark")}
+          >
+            {isDark ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
         </div>
-      </div>
+      </header>
       {createDocumentType && workspaceId && (
         <CreateDocumentDialog
           workspaceId={workspaceId}

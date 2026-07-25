@@ -1310,5 +1310,7 @@
   "version": "Sürüm",
   "moduleOutline": "İçindekiler",
   "moduleOutlineEmpty": "Bu dokümanda henüz bölüm yok. Başlık ekledikçe burada görünür.",
-  "untitledSection": "Adsız bölüm"
+  "untitledSection": "Adsız bölüm",
+  "searchPlaceholder": "Ara",
+  "views": "Görünümler"
 }

@@ -1311,5 +1311,7 @@
   "version": "Version",
   "moduleOutline": "Outline",
   "moduleOutlineEmpty": "This document has no sections yet. Headings appear here as you add them.",
-  "untitledSection": "Untitled section"
+  "untitledSection": "Untitled section",
+  "searchPlaceholder": "Search",
+  "views": "Views"
 }

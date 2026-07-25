@@ -4,7 +4,8 @@ import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api";
 import { ConfirmDialog, ModalSurface } from "./TransientSurface";
-import { useLayoutStore } from "../stores/layout";
+import { AdminSection } from "../lib/appSections";
+import { Card, CardBody, CardHeader, Metric, MetricStrip } from "./ui";
 
 type RoleKey = "organization_admin" | "workspace_admin" | "project_manager" | "editor" | "reviewer" | "viewer";
 interface Member { id: string; email: string; displayName: string; isActive: boolean; roleKey: RoleKey; }
@@ -16,13 +17,14 @@ interface AdminSummary {
 
 const roles: RoleKey[] = ["organization_admin", "workspace_admin", "project_manager", "editor", "reviewer", "viewer"];
 
-export function AdminPanel({ organizationId, currentUserId, onClose, variant = "dialog" }: { organizationId: string; currentUserId: string; onClose: () => void; variant?: "dialog" | "page" }) {
+export function AdminPanel({ organizationId, currentUserId, onClose, variant = "dialog", section, onSectionChange }: { organizationId: string; currentUserId: string; onClose: () => void; variant?: "dialog" | "page"; section?: AdminSection; onSectionChange?: (section: AdminSection) => void }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ displayName: "", email: "", password: "", roleKey: "editor" as RoleKey });
   const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
-  const [tab, setTab] = useState<"overview" | "users" | "audit" | "feedback">("overview");
-  const sideNavWidth = useLayoutStore((s) => s.treeWidth);
+  const [internalTab, setInternalTab] = useState<AdminSection>("overview");
+  const tab = section ?? internalTab;
+  const setTab = onSectionChange ?? setInternalTab;
   const members = useQuery({ queryKey: ["organization-members", organizationId], queryFn: () => api<Member[]>(`/organizations/${organizationId}/members`) });
   const feedback = useQuery({ queryKey: ["pilot-feedback", organizationId], queryFn: () => api<PilotFeedback[]>(`/organizations/${organizationId}/pilot-feedback`) });
   const summary = useQuery({ queryKey: ["administration-summary", organizationId], queryFn: () => api<AdminSummary>(`/organizations/${organizationId}/administration-summary`) });
@@ -43,28 +45,37 @@ export function AdminPanel({ organizationId, currentUserId, onClose, variant = "
   const body = <>
       {variant === "dialog" && <header className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><span className="rounded-lg bg-primary/10 p-2 text-primary"><ShieldCheck size={20} /></span><div><h2 id="admin-panel-title" className="font-semibold">{t("adminPanel")}</h2><p className="text-xs text-mutedForeground">{t("adminPanelDescription")}</p></div></div><button aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></header>}
       <div className={variant === "page" ? "flex min-h-0 flex-1" : "flex min-h-0 flex-1 flex-col"}>
-      <nav style={variant === "page" ? { width: sideNavWidth } : undefined} className={variant === "page" ? "flex shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-surface p-3 [&_button]:w-full [&_button]:justify-start" : "flex gap-1 overflow-x-auto border-b border-border bg-muted/25 px-4 py-2"} aria-label={t("adminPanel")}>
-        {variant === "page" && <div id="admin-panel-title" className="section-label px-2 pb-2 pt-1">{t("adminPanel")}</div>}
+      {variant === "dialog" && <nav className="flex gap-1 overflow-x-auto border-b border-border bg-muted/25 px-4 py-2" aria-label={t("adminPanel")}>
         <AdminTab testId="admin-tab-overview" active={tab === "overview"} onClick={() => setTab("overview")} icon={<Building2 size={15} />} label={t("adminOverview")} />
         <AdminTab testId="admin-tab-users" active={tab === "users"} onClick={() => setTab("users")} icon={<Users size={15} />} label={t("usersAndRoles")} />
         <AdminTab testId="admin-tab-audit" active={tab === "audit"} onClick={() => setTab("audit")} icon={<Activity size={15} />} label={t("auditLog")} />
         <AdminTab testId="admin-tab-feedback" active={tab === "feedback"} onClick={() => setTab("feedback")} icon={<MessageSquareWarning size={15} />} label={t("pilotFeedbackInbox")} />
-      </nav>
+      </nav>}
       <div className="min-h-0 flex-1 overflow-auto">
-      {tab === "overview" && <section className="space-y-5 p-5">
-        <div>
-          <h3 className="text-sm font-semibold">{t("organizationScope")}</h3>
-          <p className="mt-1 text-xs text-mutedForeground">{t("organizationScopeHelp")}</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <AdminMetric label={t("workspaces")} value={summary.data?.scope.workspaces ?? 0} />
-          <AdminMetric label={t("projects")} value={summary.data?.scope.projects ?? 0} />
-          <AdminMetric label={t("documents")} value={summary.data?.scope.documents ?? 0} />
-          <AdminMetric label={t("restrictedDocuments")} value={summary.data?.scope.restrictedDocuments ?? 0} />
-        </div>
+      {tab === "overview" && <section className="space-y-4 p-4">
+        <MetricStrip testId="admin-scope-metrics">
+          <Metric label={t("workspaces")} value={summary.data?.scope.workspaces ?? 0} icon={<Building2 size={14} />} tone="primary" />
+          <Metric label={t("projects")} value={summary.data?.scope.projects ?? 0} icon={<FolderKanban size={14} />} tone="purple" />
+          <Metric label={t("documents")} value={summary.data?.scope.documents ?? 0} icon={<Building2 size={14} />} tone="info" />
+          <Metric label={t("restrictedDocuments")} value={summary.data?.scope.restrictedDocuments ?? 0} icon={<ShieldCheck size={14} />} tone="warning" />
+          <Metric label={t("activeUsers")} value={members.data?.filter((member) => member.isActive).length ?? 0} icon={<Users size={14} />} tone="success" />
+        </MetricStrip>
         <div className="grid gap-4 lg:grid-cols-2">
-          <section className="rounded-xl border border-border p-4"><h3 className="text-sm font-semibold">{t("roleDistribution")}</h3><div className="mt-3 space-y-2">{roles.map((role) => { const count = members.data?.filter((member) => member.roleKey === role).length ?? 0; return <div key={role} className="flex items-center justify-between rounded-lg bg-editorBackground px-3 py-2 text-xs"><span>{t(`adminRole.${role}`)}</span><span className="rounded-full bg-muted px-2 py-0.5 font-semibold">{count}</span></div>; })}</div></section>
-          <section className="rounded-xl border border-border p-4"><h3 className="text-sm font-semibold">{t("governanceStatus")}</h3><div className="mt-3 space-y-2"><GovernanceRow label={t("activeUsers")} value={members.data?.filter((member) => member.isActive).length ?? 0} /><GovernanceRow label={t("administrators")} value={members.data?.filter((member) => member.roleKey === "organization_admin" && member.isActive).length ?? 0} /><GovernanceRow label={t("recentAuditEvents")} value={summary.data?.recentAudit.length ?? 0} /></div><p className="mt-3 rounded-lg border border-info/25 bg-info/10 p-3 text-xs leading-5 text-info">{t("adminPermissionNotice")}</p></section>
+          <Card>
+            <CardHeader title={t("roleDistribution")} />
+            <CardBody className="space-y-1.5">
+              {roles.map((role) => { const count = members.data?.filter((member) => member.roleKey === role).length ?? 0; return <div key={role} className="flex items-center justify-between rounded-md border border-border bg-surfaceSubtle px-3 py-2 text-xs"><span>{t(`adminRole.${role}`)}</span><span className="font-semibold tabular-nums">{count}</span></div>; })}
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader title={t("governanceStatus")} />
+            <CardBody className="space-y-1.5">
+              <GovernanceRow label={t("activeUsers")} value={members.data?.filter((member) => member.isActive).length ?? 0} />
+              <GovernanceRow label={t("administrators")} value={members.data?.filter((member) => member.roleKey === "organization_admin" && member.isActive).length ?? 0} />
+              <GovernanceRow label={t("recentAuditEvents")} value={summary.data?.recentAudit.length ?? 0} />
+              <p className="mt-1 rounded-md border border-info/25 bg-info/10 p-3 text-xs leading-5 text-info">{t("adminPermissionNotice")}</p>
+            </CardBody>
+          </Card>
         </div>
       </section>}
       {tab === "users" && <div className="grid min-h-0 lg:grid-cols-[20rem_1fr]">
@@ -112,10 +123,6 @@ export function AdminPanel({ organizationId, currentUserId, onClose, variant = "
 
 function AdminTab({ testId, active, onClick, icon, label }: { testId: string; active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return <button type="button" data-testid={testId} aria-current={active ? "page" : undefined} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm ${active ? "bg-surface text-primary shadow-sm" : "text-mutedForeground hover:bg-muted hover:text-foreground"}`} onClick={onClick}>{icon}{label}</button>;
-}
-
-function AdminMetric({ label, value }: { label: string; value: number }) {
-  return <div className="rounded-xl border border-border bg-editorBackground p-4"><FolderKanban size={16} className="text-primary" /><div className="mt-3 text-2xl font-semibold tabular-nums">{value}</div><div className="mt-1 text-xs text-mutedForeground">{label}</div></div>;
 }
 
 function GovernanceRow({ label, value }: { label: string; value: number }) {

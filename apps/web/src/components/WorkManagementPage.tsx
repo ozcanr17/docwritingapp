@@ -15,12 +15,10 @@ import {
   ChevronsDown,
   ChevronsUp,
   ClipboardList,
-  Columns3,
   Equal,
   ExternalLink,
   FolderPlus,
   Layers,
-  LayoutList,
   Link2,
   MessageSquare,
   Play,
@@ -57,7 +55,7 @@ import {
   WorkUser,
 } from "../lib/api";
 import { ModalSurface } from "./TransientSurface";
-import { Avatar, Button, Lozenge, LozengeAppearance } from "./ui";
+import { Avatar, Button, Card, CardBody, CardHeader, Lozenge, LozengeAppearance, Metric, MetricStrip, TableHead } from "./ui";
 import { ManagedProject, ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { useWorkViewsStore, WorkViewTab } from "../stores/workViews";
 import { useToastStore } from "../stores/toasts";
@@ -66,7 +64,6 @@ import {
   useAuthoringPreferencesStore,
   WorkspaceFocus,
 } from "../stores/authoringPreferences";
-import { useLayoutStore } from "../stores/layout";
 
 type Project = Omit<ManagedProject, "access"> & { access?: { canManage: boolean } };
 type HubTab = "dashboard" | "items" | "board" | "plans";
@@ -254,7 +251,6 @@ export function WorkManagementPage({
     onSuccess: refreshWork,
     onError: (error) => pushToast("error", userFacingError(error, t)),
   });
-  const sideNavWidth = useLayoutStore((s) => s.treeWidth);
   const projectViews = views.filter((view) => view.projectId === activeProjectId);
   const applyView = (viewId: string) => {
     setActiveViewId(viewId);
@@ -273,14 +269,15 @@ export function WorkManagementPage({
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden bg-editorBackground">
-      <nav aria-label={t("workHub.navigation")} className="flex shrink-0 flex-col border-r border-border bg-surface" style={{ width: sideNavWidth }}>
-        <div className="space-y-2 border-b border-border/70 p-2.5">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      {!routeItemKey && (
+        <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2">
           {projects.data && projects.data.length > 0 && (
-            <label className="block">
+            <label className="min-w-0">
               <span className="sr-only">{t("workHub.activeProject")}</span>
               <select
                 data-testid="project-selector"
-                className="w-full rounded-md border border-border bg-editorBackground px-2 py-2 text-sm outline-none"
+                className="max-w-56 rounded-md border border-border bg-editorBackground px-2 py-1.5 text-sm outline-none"
                 value={activeProjectId ?? ""}
                 onChange={(event) => {
                   setSelectedProjectId(event.target.value);
@@ -297,31 +294,32 @@ export function WorkManagementPage({
           )}
           <Button
             variant="primary"
-            className="w-full"
+            size="sm"
             data-testid="open-create-item"
-            icon={<Plus size={15} />}
+            icon={<Plus size={14} />}
             disabled={!activeProjectId}
             onClick={() => setCreateOpen(true)}
           >
             {t("workHub.newItem")}
           </Button>
+          <Button size="sm" icon={<ClipboardList size={14} />} disabled={!activeProjectId} onClick={() => setPlanOpen(true)}>
+            {t("workHub.newPlan")}
+          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="sm" icon={<Settings2 size={14} />} data-testid="open-workflow-editor" disabled={!workflow.data || !canManageActiveProject} onClick={() => setWorkflowOpen(true)}>
+              {t("workHub.workflow")}
+            </Button>
+            {projectAccess.data?.canManage && (
+              <Button size="sm" icon={<Settings2 size={14} />} data-testid="open-project-settings" onClick={() => setProjectSettingsOpen(true)}>
+                {t("workHub.projectSettings")}
+              </Button>
+            )}
+            <Button size="sm" icon={<FolderPlus size={14} />} data-testid="open-create-project" onClick={() => setCreateProjectOpen(true)}>
+              {t("workHub.newProject")}
+            </Button>
+          </div>
         </div>
-        <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
-          <WorkNavLink icon={<Activity size={15} />} label={t("workHub.dashboard")} active={!routeItemKey && tab === "dashboard"} onClick={() => setTab("dashboard")} testId="work-nav-summary" />
-          <WorkNavLink icon={<Columns3 size={15} />} label={t("workHub.board")} active={!routeItemKey && tab === "board"} onClick={() => setTab("board")} testId="work-nav-board" />
-          <WorkNavLink icon={<LayoutList size={15} />} label={t("workHub.list")} active={!routeItemKey && tab === "items"} onClick={() => setTab("items")} testId="work-nav-list" />
-          <WorkNavLink icon={<ClipboardList size={15} />} label={t("workHub.testPlans")} active={!routeItemKey && tab === "plans"} onClick={() => setTab("plans")} testId="work-nav-plans" />
-        </div>
-        <div className="space-y-0.5 border-t border-border/70 p-2">
-          <WorkNavLink icon={<ClipboardList size={15} />} label={t("workHub.newPlan")} onClick={() => setPlanOpen(true)} disabled={!activeProjectId} />
-          <WorkNavLink icon={<Settings2 size={15} />} label={t("workHub.workflow")} onClick={() => setWorkflowOpen(true)} disabled={!workflow.data || !canManageActiveProject} testId="open-workflow-editor" />
-          {projectAccess.data?.canManage && (
-            <WorkNavLink icon={<Settings2 size={15} />} label={t("workHub.projectSettings")} onClick={() => setProjectSettingsOpen(true)} testId="open-project-settings" />
-          )}
-          <WorkNavLink icon={<FolderPlus size={15} />} label={t("workHub.newProject")} onClick={() => setCreateProjectOpen(true)} testId="open-create-project" />
-        </div>
-      </nav>
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      )}
       {(contextRowId || contextDocumentId) && !routeItemKey && (
         <div className="flex items-center gap-2 border-b border-border bg-primary/5 px-4 py-2 text-xs text-primary">
           <Link2 size={14} />
@@ -646,70 +644,6 @@ function SaveWorkViewDialog({
   );
 }
 
-function Metric({
-  icon,
-  label,
-  value,
-  tone = "normal",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  tone?: "normal" | "danger" | "success";
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-editorBackground px-4 py-3">
-      <span
-        className={
-          tone === "danger"
-            ? "text-destructive"
-            : tone === "success"
-              ? "text-success"
-              : "text-primary"
-        }
-      >
-        {icon}
-      </span>
-      <div>
-        <div className="text-xl font-semibold leading-none">{value}</div>
-        <div className="mt-1 text-xs text-mutedForeground">{label}</div>
-      </div>
-    </div>
-  );
-}
-
-function WorkNavLink({
-  icon,
-  label,
-  active = false,
-  disabled = false,
-  onClick,
-  testId,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  testId?: string;
-}) {
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      disabled={disabled}
-      aria-current={active ? "page" : undefined}
-      className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm outline-none transition-colors disabled:pointer-events-none disabled:opacity-40 ${
-        active ? "bg-primary/10 font-medium text-primary" : "text-foreground/80 hover:bg-muted hover:text-foreground"
-      }`}
-      onClick={onClick}
-    >
-      <span aria-hidden="true" className={active ? "text-primary" : "text-mutedForeground"}>{icon}</span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-    </button>
-  );
-}
-
 function WorkDashboardView({
   dashboard,
   items,
@@ -730,41 +664,52 @@ function WorkDashboardView({
   if (!dashboard) return <Empty title={t("workHub.loadingDashboard")} detail={t("workHub.loadingDashboardHelp")} />;
   return (
     <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Metric icon={<AlertCircle size={16} />} label={t("workHub.openItems")} value={dashboard.metrics.open} />
-        <Metric icon={<Bug size={16} />} label={t("workHub.myOpenBugs")} value={dashboard.metrics.myOpenBugCount} tone="danger" />
-        <Metric icon={<CheckCircle2 size={16} />} label={t("workHub.activePlans")} value={dashboard.metrics.activePlans} tone="success" />
-      </div>
+      <MetricStrip testId="work-metrics">
+        <Metric label={t("workHub.openItems")} value={dashboard.metrics.open} caption={`${dashboard.metrics.total} ${t("workHub.totalItems")}`} icon={<AlertCircle size={14} />} tone="primary" />
+        <Metric
+          label={t("workHub.myOpenBugs")}
+          value={dashboard.metrics.myOpenBugCount}
+          caption={`${dashboard.metrics.criticalOpen} ${t("workHub.criticalOpen")}`}
+          delta={dashboard.metrics.criticalOpen > 0 ? t("workHub.criticalOpen") : undefined}
+          deltaTone="negative"
+          icon={<Bug size={14} />}
+          tone="danger"
+        />
+        <Metric label={t("workHub.activePlans")} value={dashboard.metrics.activePlans} caption={`${dashboard.metrics.executions} ${t("workHub.lifecycleExecutions")}`} icon={<CheckCircle2 size={14} />} tone="success" />
+        <Metric label={t("workHub.completionRate")} value={`${dashboard.metrics.completionRate}%`} caption={`${dashboard.metrics.completed} / ${dashboard.metrics.total}`} icon={<Activity size={14} />} tone="info" />
+        <Metric label={t("workHub.unassignedOpen")} value={dashboard.metrics.unassigned} caption={`${dashboard.metrics.linkedEvidence} ${t("workHub.linkedEvidence")}`} icon={<UserRound size={14} />} tone="purple" />
+      </MetricStrip>
       <RoleFocusSummary focus={workspaceFocus} metrics={dashboard.metrics} />
       <div className="grid gap-4 xl:grid-cols-3">
-        <DashboardCard title={t("workHub.myOpenBugs")} icon={<Bug size={17} className="text-destructive" />}>
-          <DashboardItemList items={dashboard.myOpenBugs} empty={t("workHub.noMyOpenBugs")} onOpen={onOpen} />
-        </DashboardCard>
-        <DashboardCard title={t("workHub.recentItems")} icon={<ClipboardList size={17} className="text-primary" />}>
-          <DashboardItemList items={dashboard.recentItems} empty={t("workHub.noRecentItems")} onOpen={onOpen} />
-        </DashboardCard>
-        <DashboardCard title={t("workHub.systemMetrics")} icon={<Activity size={17} className="text-success" />}>
-          <div className="grid grid-cols-2 gap-2">
+        <Card>
+          <CardHeader title={t("workHub.myOpenBugs")} icon={<Bug size={15} className="text-destructive" />} badge={<Lozenge appearance={dashboard.myOpenBugs.length ? "danger" : "neutral"}>{dashboard.myOpenBugs.length}</Lozenge>} />
+          <div className="py-1"><DashboardItemList items={dashboard.myOpenBugs} empty={t("workHub.noMyOpenBugs")} onOpen={onOpen} /></div>
+        </Card>
+        <Card>
+          <CardHeader title={t("workHub.recentItems")} icon={<ClipboardList size={15} className="text-primary" />} badge={<Lozenge>{dashboard.recentItems.length}</Lozenge>} />
+          <div className="py-1"><DashboardItemList items={dashboard.recentItems} empty={t("workHub.noRecentItems")} onOpen={onOpen} /></div>
+        </Card>
+        <Card>
+          <CardHeader title={t("workHub.systemMetrics")} icon={<Activity size={15} className="text-success" />} />
+          <CardBody className="grid grid-cols-2 gap-2">
             <DashboardMetric label={t("workHub.completionRate")} value={`${dashboard.metrics.completionRate}%`} />
             <DashboardMetric label={t("workHub.totalItems")} value={dashboard.metrics.total} />
             <DashboardMetric label={t("workHub.unassignedOpen")} value={dashboard.metrics.unassigned} tone={dashboard.metrics.unassigned ? "warning" : "success"} />
             <DashboardMetric label={t("workHub.criticalOpen")} value={dashboard.metrics.criticalOpen} tone={dashboard.metrics.criticalOpen ? "danger" : "success"} />
-          </div>
-        </DashboardCard>
+          </CardBody>
+        </Card>
       </div>
       <EngineeringLifecycle metrics={dashboard.metrics} />
-      <section className="rounded-xl border border-border bg-surface p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="font-semibold">{t("workHub.workflowBoard")}</h2>
-            <p className="mt-0.5 text-xs text-mutedForeground">{t("workHub.workflowBoardHelp")}</p>
-          </div>
-          <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-mutedForeground">{t("workHub.itemCount", { count: items.length })}</span>
-        </div>
-        <div className="overflow-x-auto pb-1">
+      <Card>
+        <CardHeader
+          title={t("workHub.workflowBoard")}
+          subtitle={t("workHub.workflowBoardHelp")}
+          badge={<Lozenge>{t("workHub.itemCount", { count: items.length })}</Lozenge>}
+        />
+        <CardBody className="overflow-x-auto">
           <Board items={items} onOpen={onOpen} workflow={workflow} onMove={onMove} embedded />
-        </div>
-      </section>
+        </CardBody>
+      </Card>
     </div>
   );
 }
@@ -796,30 +741,22 @@ function RoleFocusSummary({
             [t("workHub.linkedEvidence"), metrics.linkedEvidence],
           ];
   return (
-    <section
-      data-testid="role-focus-summary"
-      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3"
-    >
-      <div className="min-w-52">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-primary">
-          {t("workspaceFocus.label")}
+    <Card testId="role-focus-summary">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="min-w-52">
+          <div className="text-[11px] font-medium text-primary">{t("workspaceFocus.label")}</div>
+          <h2 className="mt-0.5 text-sm font-semibold text-foreground">{t(`workspaceFocus.${focus}.title`)}</h2>
         </div>
-        <h2 className="mt-1 text-sm font-semibold">
-          {t(`workspaceFocus.${focus}.title`)}
-        </h2>
+        <div className="flex flex-wrap gap-2">
+          {values.map(([label, value]) => (
+            <div key={String(label)} className="min-w-28 rounded-lg border border-border bg-surfaceSubtle px-3 py-2">
+              <div className="text-lg font-semibold tabular-nums tracking-tight">{value}</div>
+              <div className="text-[11px] text-mutedForeground">{label}</div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {values.map(([label, value]) => (
-          <div
-            key={String(label)}
-            className="min-w-28 rounded-lg border border-border bg-surface px-3 py-2"
-          >
-            <div className="text-lg font-semibold tabular-nums">{value}</div>
-            <div className="text-[10px] text-mutedForeground">{label}</div>
-          </div>
-        ))}
-      </div>
-    </section>
+    </Card>
   );
 }
 
@@ -832,45 +769,34 @@ function EngineeringLifecycle({ metrics }: { metrics: WorkDashboard["metrics"] }
     { key: "defects", label: t("workHub.lifecycleDefects"), value: metrics.openDefects ?? 0, meta: metrics.failedExecutions ? t("workHub.lifecycleFailed", { count: metrics.failedExecutions }) : t("workHub.lifecycleNoFailed"), icon: <Bug size={16} /> },
   ];
   return (
-    <section data-testid="engineering-lifecycle" className="rounded-xl border border-border bg-surface p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="font-semibold">{t("workHub.engineeringLifecycle")}</h2>
-          <p className="mt-0.5 text-xs text-mutedForeground">{t("workHub.engineeringLifecycleHelp")}</p>
-        </div>
-        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary">{t("workHub.linkedEvidenceCount", { count: metrics.linkedEvidence ?? 0 })}</span>
-      </div>
-      <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
+    <Card testId="engineering-lifecycle">
+      <CardHeader
+        title={t("workHub.engineeringLifecycle")}
+        subtitle={t("workHub.engineeringLifecycleHelp")}
+        badge={<Lozenge appearance="primary">{t("workHub.linkedEvidenceCount", { count: metrics.linkedEvidence ?? 0 })}</Lozenge>}
+      />
+      <CardBody className="grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
         {stages.map((stage, index) => (
           <div key={stage.key} className="contents">
-            <div className="rounded-xl border border-border bg-editorBackground p-3">
+            <div className="rounded-lg border border-border bg-surfaceSubtle p-3">
               <div className="flex items-center gap-2 text-xs font-medium text-mutedForeground">{stage.icon}{stage.label}</div>
-              <div className="mt-2 text-2xl font-semibold tabular-nums">{stage.value}</div>
+              <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{stage.value}</div>
               {stage.meta && <div className="mt-1 text-[11px] text-mutedForeground">{stage.meta}</div>}
             </div>
             {index < stages.length - 1 && <ArrowRight aria-hidden="true" size={15} className="mx-auto self-center text-mutedForeground max-md:rotate-90" />}
           </div>
         ))}
-      </div>
-    </section>
-  );
-}
-
-function DashboardCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-      <h2 className="flex items-center gap-2 text-sm font-semibold">{icon}{title}</h2>
-      <div className="mt-3">{children}</div>
-    </section>
+      </CardBody>
+    </Card>
   );
 }
 
 function DashboardItemList({ items, empty, onOpen }: { items: WorkItemSummary[]; empty: string; onOpen: (id: string) => void }) {
-  if (!items.length) return <p className="py-5 text-center text-xs text-mutedForeground">{empty}</p>;
+  if (!items.length) return <p className="py-6 text-center text-xs text-mutedForeground">{empty}</p>;
   return (
-    <div className="space-y-1.5">
+    <div>
       {items.map((item) => (
-        <button key={item.id} type="button" className="flex w-full items-center gap-2 rounded-lg border border-transparent bg-editorBackground px-3 py-2 text-left hover:border-primary/35 hover:bg-muted" onClick={() => onOpen(item.id)}>
+        <button key={item.id} type="button" className="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-muted" onClick={() => onOpen(item.id)}>
           <TypeIcon type={item.type} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-medium">{item.title}</span>
@@ -886,9 +812,9 @@ function DashboardItemList({ items, empty, onOpen }: { items: WorkItemSummary[];
 function DashboardMetric({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "success" | "warning" | "danger" }) {
   const toneClass = tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : tone === "danger" ? "text-destructive" : "text-foreground";
   return (
-    <div className="rounded-lg bg-editorBackground p-3">
+    <div className="rounded-lg border border-border bg-surfaceSubtle p-3">
       <div className="text-[11px] text-mutedForeground">{label}</div>
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${toneClass}`}>{value}</div>
+      <div className={`mt-1 text-xl font-semibold tabular-nums tracking-tight ${toneClass}`}>{value}</div>
     </div>
   );
 }
@@ -914,16 +840,16 @@ function ItemList({
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface">
       <table className="w-full text-left text-sm">
-        <thead className="bg-muted/40 text-xs uppercase tracking-wide text-mutedForeground">
+        <TableHead className="border-b border-border bg-surfaceSubtle">
           <tr>
-            <th className="w-20 px-3 py-3"><span className="sr-only">{t("workHub.order")}</span></th>
-            <th className="px-4 py-3">{t("workHub.key")}</th>
-            <th className="px-4 py-3">{t("workHub.summary")}</th>
-            <th className="px-4 py-3">{t("workHub.priority")}</th>
-            <th className="px-4 py-3">{t("workHub.assignee")}</th>
-            <th className="px-4 py-3">{t("workHub.status")}</th>
+            <th className="w-20 px-3 py-2.5"><span className="sr-only">{t("workHub.order")}</span></th>
+            <th className="px-4 py-2.5">{t("workHub.key")}</th>
+            <th className="px-4 py-2.5">{t("workHub.summary")}</th>
+            <th className="px-4 py-2.5">{t("workHub.priority")}</th>
+            <th className="px-4 py-2.5">{t("workHub.assignee")}</th>
+            <th className="px-4 py-2.5">{t("workHub.status")}</th>
           </tr>
-        </thead>
+        </TableHead>
         <tbody>
           {items.map((item, index) => (
             <tr
@@ -1114,38 +1040,37 @@ function PlanList({
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {plans.map((plan) => (
-        <article
+        <button
           key={plan.id}
-          className="cursor-pointer rounded-xl border border-border bg-surface p-4 hover:border-primary/50"
+          type="button"
+          className="overflow-hidden rounded-xl border border-border bg-surface text-left transition-colors hover:border-primary/50"
           onClick={() => onOpen(plan.id)}
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
+          <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
+            <div className="min-w-0">
               <div className="font-mono text-xs text-primary">{plan.key}</div>
-              <h2 className="mt-1 font-semibold">{plan.name}</h2>
+              <h2 className="mt-0.5 truncate text-sm font-semibold">{plan.name}</h2>
             </div>
-            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+            <Lozenge appearance={plan.status === "completed" ? "success" : plan.status === "active" ? "primary" : "neutral"}>
               {t(`workHub.planStatuses.${plan.status}`)}
-            </span>
+            </Lozenge>
           </div>
-          <p className="mt-3 line-clamp-2 text-sm text-mutedForeground">
-            {plan.description || t("workHub.noDescription")}
-          </p>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-lg bg-muted/40 p-2">
-              <div className="text-mutedForeground">{t("workHub.tests")}</div>
-              <div className="mt-1 font-semibold">{plan._count.items}</div>
-            </div>
-            <div className="rounded-lg bg-muted/40 p-2">
-              <div className="text-mutedForeground">
-                {t("workHub.environment")}
+          <div className="p-4">
+            <p className="line-clamp-2 text-sm text-mutedForeground">
+              {plan.description || t("workHub.noDescription")}
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-lg border border-border bg-surfaceSubtle p-2.5">
+                <div className="text-mutedForeground">{t("workHub.tests")}</div>
+                <div className="mt-1 text-base font-semibold tabular-nums">{plan._count.items}</div>
               </div>
-              <div className="mt-1 truncate font-semibold">
-                {plan.environment || "-"}
+              <div className="rounded-lg border border-border bg-surfaceSubtle p-2.5">
+                <div className="text-mutedForeground">{t("workHub.environment")}</div>
+                <div className="mt-1 truncate text-base font-semibold">{plan.environment || "-"}</div>
               </div>
             </div>
           </div>
-        </article>
+        </button>
       ))}
     </div>
   );

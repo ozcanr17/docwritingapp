@@ -7,21 +7,22 @@ import { setLanguage, storedLanguage } from "../lib/i18n";
 import { useToastStore } from "../stores/toasts";
 import { useThemeStore } from "../stores/theme";
 import { DocumentFontFamily, documentFontFamilies, useAuthoringPreferencesStore } from "../stores/authoringPreferences";
-import { useLayoutStore } from "../stores/layout";
+import { SettingsSection as SettingsSectionId } from "../lib/appSections";
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
 import { RoleGuide } from "./RoleGuide";
 import { pilotTelemetryEnabled, setPilotTelemetryEnabled } from "../lib/pilotTelemetry";
 import { ModalSurface } from "./TransientSurface";
 import { userFacingError } from "../lib/userFacingError";
 
-export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentId, onClose, variant = "dialog" }: { organizationId: string; workspaceId: string; documentId: string | null; onClose: () => void; variant?: "dialog" | "page" }) {
+export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentId, onClose, variant = "dialog", section, onSectionChange }: { organizationId: string; workspaceId: string; documentId: string | null; onClose: () => void; variant?: "dialog" | "page"; section?: SettingsSectionId; onSectionChange?: (section: SettingsSectionId) => void }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const toast = useToastStore((state) => state.push);
   const themeMode = useThemeStore((state) => state.mode);
   const setThemeMode = useThemeStore((state) => state.setMode);
-  const [tab, setTab] = useState<"document" | "appearance" | "authoring" | "keyboard" | "accessibility" | "notifications" | "roles" | "integrations">("appearance");
-  const sideNavWidth = useLayoutStore((s) => s.treeWidth);
+  const [internalTab, setInternalTab] = useState<SettingsSectionId>("appearance");
+  const tab = section ?? internalTab;
+  const setTab = onSectionChange ?? setInternalTab;
   const [pilotTelemetry, setPilotTelemetry] = useState(pilotTelemetryEnabled());
   const [name, setName] = useState("");
   const [kind, setKind] = useState("variant");
@@ -67,8 +68,7 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
     <>
         {variant === "dialog" && <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 id="workspace-settings-title" className="font-semibold">{t("workspaceSettings")}</h2><p className="mt-0.5 text-xs text-mutedForeground">{t("workspaceSettingsDescription")}</p></div><button data-testid="close-workspace-settings" aria-label={t("close")} className="rounded-lg p-2 hover:bg-muted" onClick={onClose}><X size={17} /></button></div>}
         <div className={variant === "page" ? "flex min-h-0 flex-1" : "grid min-h-0 flex-1 md:grid-cols-[13rem_minmax(0,1fr)]"}>
-        <nav aria-label={t("workspaceSettings")} style={variant === "page" ? { width: sideNavWidth } : undefined} className={`flex gap-1 overflow-x-auto border-b border-border bg-surface p-3 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r ${variant === "page" ? "shrink-0 flex-col overflow-y-auto" : ""}`}>
-          {variant === "page" && <div className="section-label px-2 pb-2 pt-1">{t("workspaceSettings")}</div>}
+        {variant === "dialog" && <nav aria-label={t("workspaceSettings")} className="flex gap-1 overflow-x-auto border-b border-border bg-surface p-3 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r">
           {document.data?.documentType === "requirement" && <Tab testId="settings-tab-document" active={tab === "document"} onClick={() => setTab("document")} icon={<FileCog size={15} />} label={t("documentSettings")} />}
           <Tab testId="settings-tab-appearance" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette size={15} />} label={t("appearanceSettings")} />
           <Tab testId="settings-tab-authoring" active={tab === "authoring"} onClick={() => setTab("authoring")} icon={<PenLine size={15} />} label={t("authoringSettings")} />
@@ -77,8 +77,8 @@ export function WorkspaceSettingsDialog({ organizationId, workspaceId, documentI
           <Tab testId="settings-tab-notifications" active={tab === "notifications"} onClick={() => setTab("notifications")} icon={<Bell size={15} />} label={t("notifications")} />
           <Tab testId="settings-tab-roles" active={tab === "roles"} onClick={() => setTab("roles")} icon={<Users size={15} />} label={t("rolesAndAccess")} />
           <Tab testId="settings-tab-integrations" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<Plug size={15} />} label={t("integrations")} />
-        </nav>
-        <div className="min-h-0 overflow-auto p-5">
+        </nav>}
+        <div className="mx-auto min-h-0 w-full max-w-4xl overflow-auto p-5">
         {tab === "document" && document.data?.documentType === "requirement" && <SettingsSection title={t("requirementNumberingSettings")} description={t("requirementNumberingSettingsHelp")}>
           <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); if (/^[A-Za-z][A-Za-z0-9]{0,19}$/.test(requirementPrefix)) updateDocument.mutate(); }}>
             <label className="block text-sm"><span className="font-medium">{t("requirementPrefix")}</span><span className="mt-0.5 block text-xs text-mutedForeground">{t("requirementPrefixHelp")}</span><div className="mt-2 flex items-center gap-2"><input data-testid="requirement-prefix" className="w-40 rounded-lg border border-border bg-editorBackground px-3 py-2 uppercase" maxLength={20} value={requirementPrefix} onChange={(event) => setRequirementPrefix(event.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase())} /><span className="font-mono text-sm text-mutedForeground">{`${requirementPrefix || "REQ"}-001`}</span></div></label>

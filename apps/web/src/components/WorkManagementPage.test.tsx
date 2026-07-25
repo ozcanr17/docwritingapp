@@ -252,12 +252,11 @@ describe("WorkManagementPage projects", () => {
     });
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/work/summary"]}><WorkManagementPage workspaceId="workspace" /></MemoryRouter>
+        <MemoryRouter initialEntries={["/work/list"]}><WorkManagementPage workspaceId="workspace" /></MemoryRouter>
       </QueryClientProvider>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: i18n.t("workHub.list") }));
-    fireEvent.change(screen.getByPlaceholderText(i18n.t("workHub.search")), {
+    fireEvent.change(await screen.findByPlaceholderText(i18n.t("workHub.search")), {
       target: { value: "release" },
     });
     fireEvent.click(screen.getByRole("button", { name: i18n.t("workHub.assignedToMe") }));

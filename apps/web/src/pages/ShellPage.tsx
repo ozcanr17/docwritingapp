@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, ClipboardCheck, Clock3, FileKey2, FlaskConical, PenLine, Star, Users } from "lucide-react";
+import { Accessibility, Activity, Bell, ClipboardCheck, ClipboardList, Clock3, Columns3, FileCog, FileKey2, FileText, FlaskConical, FolderKanban, Keyboard, LayoutList, MessageSquareWarning, Palette, PenLine, Plug, Settings, ShieldCheck, Star, Trash2, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { AppBar } from "../components/AppBar";
-import { AppRail } from "../components/AppRail";
+import { AppSidebar } from "../components/AppSidebar";
 import { DocumentActionsMenu } from "../components/DocumentActionsMenu";
 import { DocumentTabsBar } from "../components/DocumentTabsBar";
 import { ResizeHandle } from "../components/ResizeHandle";
@@ -22,7 +22,8 @@ import { useLayoutStore } from "../stores/layout";
 import { useSelectionStore } from "../stores/selection";
 import { useOnboardingStore } from "../stores/onboarding";
 import { SaveStatusIndicator } from "../components/SaveStatusIndicator";
-import { Avatar, AvatarGroup } from "../components/ui";
+import { Avatar, AvatarGroup, SidebarGroup, SidebarItem } from "../components/ui";
+import { ADMIN_SECTIONS, AdminSection, resolveSection, SETTINGS_SECTIONS, SettingsSection, WORK_SECTIONS, WorkSection } from "../lib/appSections";
 import { useAuthoringPreferencesStore, WorkspaceFocus } from "../stores/authoringPreferences";
 import { recordPilotEvent } from "../lib/pilotTelemetry";
 import { resolveResponsiveLayout } from "../lib/responsiveLayout";
@@ -70,6 +71,10 @@ export function ShellPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const view = viewForPath(location.pathname);
+  const pathSegments = location.pathname.split("/").filter(Boolean);
+  const settingsSection = resolveSection<SettingsSection>(pathSegments[1], SETTINGS_SECTIONS, "appearance");
+  const adminSection = resolveSection<AdminSection>(pathSegments[1], ADMIN_SECTIONS, "overview");
+  const workSection = resolveSection<WorkSection>(pathSegments[1], WORK_SECTIONS, "summary");
   const routeDocumentId = useMemo(
     () => /^\/docs\/([0-9a-fA-F-]{36})(?:\/|$)/.exec(location.pathname)?.[1] ?? null,
     [location.pathname],
@@ -428,13 +433,128 @@ export function ShellPage() {
     return <BootstrapForm onSubmit={(orgName, workspaceName) => bootstrap.mutate({ orgName, workspaceName })} />;
   }
 
+  const areaMeta: Record<typeof view, { title: string; icon: React.ReactNode }> = {
+    documents: { title: t("documents"), icon: <FileText size={16} /> },
+    work: { title: t("workHub.title"), icon: <ClipboardCheck size={16} /> },
+    trash: { title: t("trash"), icon: <Trash2 size={16} /> },
+    settings: { title: t("workspaceSettings"), icon: <Settings size={16} /> },
+    admin: { title: t("adminPanel"), icon: <ShieldCheck size={16} /> },
+  };
+  const settingsSectionMeta: Array<{ id: SettingsSection; label: string; icon: React.ReactNode }> = [
+    { id: "document", label: t("documentSettings"), icon: <FileCog size={16} /> },
+    { id: "appearance", label: t("appearanceSettings"), icon: <Palette size={16} /> },
+    { id: "authoring", label: t("authoringSettings"), icon: <PenLine size={16} /> },
+    { id: "keyboard", label: t("keyboardShortcuts"), icon: <Keyboard size={16} /> },
+    { id: "accessibility", label: t("accessibilitySettings"), icon: <Accessibility size={16} /> },
+    { id: "notifications", label: t("notifications"), icon: <Bell size={16} /> },
+    { id: "roles", label: t("rolesAndAccess"), icon: <Users size={16} /> },
+    { id: "integrations", label: t("integrations"), icon: <Plug size={16} /> },
+  ];
+  const adminSectionMeta: Array<{ id: AdminSection; label: string; icon: React.ReactNode }> = [
+    { id: "overview", label: t("adminOverview"), icon: <FolderKanban size={16} /> },
+    { id: "users", label: t("usersAndRoles"), icon: <Users size={16} /> },
+    { id: "audit", label: t("auditLog"), icon: <Activity size={16} /> },
+    { id: "feedback", label: t("pilotFeedbackInbox"), icon: <MessageSquareWarning size={16} /> },
+  ];
+  const workSectionMeta: Array<{ id: WorkSection; label: string; icon: React.ReactNode }> = [
+    { id: "summary", label: t("workHub.dashboard"), icon: <Activity size={16} /> },
+    { id: "board", label: t("workHub.board"), icon: <Columns3 size={16} /> },
+    { id: "list", label: t("workHub.list"), icon: <LayoutList size={16} /> },
+    { id: "plans", label: t("workHub.testPlans"), icon: <ClipboardList size={16} /> },
+  ];
+
+  const sidebarContext =
+    view === "documents" || view === "trash" ? (
+      <>
+        {view === "documents" && (favoriteDocuments.length > 0 || recentDocuments.length > 0) && (
+          <div className="space-y-2 px-2 pb-2">
+            <WorkspaceDocumentList title={t("favorites")} documents={favoriteDocuments.slice(0, 4)} icon="favorite" onOpen={openDocument} />
+            <WorkspaceDocumentList title={t("recentDocuments")} documents={recentDocuments.filter((document) => !favoriteDocuments.some((favorite) => favorite.id === document.id)).slice(0, 4)} icon="recent" onOpen={openDocument} />
+          </div>
+        )}
+        <div className="px-4 pb-1 pt-2 text-[11px] font-medium text-mutedForeground">{view === "trash" ? t("trash") : t("explorer")}</div>
+        <section data-testid="tree-section" aria-label={t("documentTree")} className="min-h-0 flex-1 overflow-y-auto">
+          {workspaceId &&
+            (view === "trash" ? (
+              <TrashPanel workspaceId={workspaceId} />
+            ) : (
+              <TreePanel workspaceId={workspaceId} selectedDocumentId={selectedDocumentId} onSelectDocument={openDocument} />
+            ))}
+        </section>
+      </>
+    ) : view === "work" ? (
+      <SidebarGroup>
+        {workSectionMeta.map((item) => (
+          <SidebarItem
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            active={pathSegments[1] !== "item" && workSection === item.id}
+            onClick={() => navigate(`/work/${item.id}`)}
+            testId={`work-nav-${item.id}`}
+          />
+        ))}
+      </SidebarGroup>
+    ) : view === "settings" ? (
+      <SidebarGroup>
+        {settingsSectionMeta
+          .filter((item) => item.id !== "document" || selectedDocument.data?.documentType === "requirement")
+          .map((item) => (
+            <SidebarItem
+              key={item.id}
+              icon={item.icon}
+              label={item.label}
+              active={settingsSection === item.id}
+              onClick={() => navigate(`/settings/${item.id}`)}
+              testId={`settings-tab-${item.id}`}
+            />
+          ))}
+      </SidebarGroup>
+    ) : (
+      <SidebarGroup>
+        {adminSectionMeta.map((item) => (
+          <SidebarItem
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            active={adminSection === item.id}
+            onClick={() => navigate(`/admin/${item.id}`)}
+            testId={`admin-tab-${item.id}`}
+          />
+        ))}
+      </SidebarGroup>
+    );
+
+  const contextLabel =
+    view === "work" ? t("views")
+    : view === "settings" ? t("workspaceSettings")
+    : view === "admin" ? t("adminPanel")
+    : undefined;
+
   return (
-    <div className="app-shell flex h-screen flex-col overflow-hidden bg-background">
+    <div className="app-shell flex h-screen overflow-hidden bg-background">
+      <AppSidebar
+        view={view}
+        collapsed={effectiveSidebarCollapsed}
+        collapseDisabled={responsiveLayout.compactSidebar}
+        responsiveCollapsed={responsiveLayout.compactSidebar}
+        width={treeWidth}
+        canManage={Boolean(organizationAccess.data?.canManage)}
+        profile={{ displayName: profile.data.displayName, email: profile.data.email, isAdmin: Boolean(organizationAccess.data?.canManage) }}
+        contextLabel={contextLabel}
+        context={sidebarContext}
+        onNavigate={setView}
+        onToggleCollapse={toggleSidebar}
+        onOpenProfile={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
+        onLogout={() => { void handleLogout(); }}
+      />
+      {!effectiveSidebarCollapsed && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={220} max={420} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <AppBar
-        workspaceName={workspaces.data?.[0]?.name}
+        title={areaMeta[view].title}
+        subtitle={workspaces.data?.[0]?.name}
+        icon={areaMeta[view].icon}
         workspaceId={workspaceId}
-        profile={{ id: profile.data.id, displayName: profile.data.displayName, email: profile.data.email }}
-        isAdmin={Boolean(organizationAccess.data?.canManage)}
         onOpenSearch={() => setSearchOpen(true)}
         onCloseSearch={() => setSearchOpen(false)}
         searchQuery={searchQuery}
@@ -446,9 +566,6 @@ export function ShellPage() {
         onOpenOnboarding={() => setOnboardingOpen(true)}
         onOpenFeedback={() => setPilotFeedbackOpen(true)}
         onOpenPilotChecklist={() => setPilotChecklistOpen(true)}
-        onOpenProfile={() => setProfileTarget({ userId: profile.data.id, allowEdit: true })}
-        onOpenSettings={() => setView("settings")}
-        onLogout={() => { void handleLogout(); }}
         onDocumentCreated={(document) => {
           void queryClient.invalidateQueries({ queryKey: ["tree", workspaceId] });
           openDocument({ id: document.id, title: document.title, documentType: document.documentType });
@@ -486,57 +603,7 @@ export function ShellPage() {
         {profileTarget && <ProfileDialog userId={profileTarget.userId} currentUserId={profile.data.id} allowEdit={profileTarget.allowEdit} onClose={() => setProfileTarget(null)} />}
         {historyMode && selectedDocumentId && <HistoryDialog documentId={selectedDocumentId} rowId={useSelectionStore.getState().selectedRowId} mode={historyMode} onClose={() => setHistoryMode(null)} onOpenRow={(rowId) => { setHistoryMode(null); window.setTimeout(() => useSelectionStore.getState().openDetail(rowId), 0); }} />}
       </Suspense>
-      <div className="relative flex flex-1 overflow-hidden">
-      <aside
-        aria-label={t("primaryNavigation")}
-        data-collapsed={effectiveSidebarCollapsed}
-        data-responsive-collapsed={responsiveLayout.compactSidebar}
-        className="app-sidebar flex shrink-0 overflow-hidden bg-sidebarBackground text-sidebarForeground"
-      >
-        <AppRail
-          view={view}
-          canManage={Boolean(organizationAccess.data?.canManage)}
-          panelCollapsed={effectiveSidebarCollapsed}
-          panelToggleDisabled={responsiveLayout.compactSidebar}
-          onNavigate={setView}
-          onTogglePanel={toggleSidebar}
-          onOpenAdmin={() => setView("admin")}
-          onOpenSettings={() => setView("settings")}
-        />
-        {!effectiveSidebarCollapsed && (view === "documents" || view === "trash") && (
-          <div className="flex flex-col overflow-hidden border-r border-border" style={{ width: treeWidth }}>
-            <div className="flex min-h-12 items-center gap-2.5 border-b border-border/70 px-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
-                <Building2 size={14} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-mutedForeground">{t("workspaceArea")}</div>
-                <div className="truncate text-sm font-semibold">{workspaces.data?.[0]?.name ?? "—"}</div>
-              </div>
-            </div>
-            {view === "documents" && (favoriteDocuments.length > 0 || recentDocuments.length > 0) && (
-              <div className="space-y-3 border-b border-border/70 px-2.5 py-2.5">
-                <WorkspaceDocumentList title={t("favorites")} icon="favorite" documents={favoriteDocuments.slice(0, 5)} onOpen={openDocument} />
-                <WorkspaceDocumentList title={t("recentDocuments")} icon="recent" documents={recentDocuments.filter((document) => !favoriteDocuments.some((favorite) => favorite.id === document.id)).slice(0, 5)} onOpen={openDocument} />
-              </div>
-            )}
-            <section data-testid="tree-section" aria-label={t("documentTree")} className="min-h-0 flex-1 overflow-hidden bg-surface text-foreground">
-              <div className="section-label border-b border-border/60 px-3 py-2">{view === "trash" ? t("trash") : t("explorer")}</div>
-              {workspaceId &&
-                (view === "trash" ? (
-                  <TrashPanel workspaceId={workspaceId} />
-                ) : (
-                  <TreePanel
-                    workspaceId={workspaceId}
-                    selectedDocumentId={selectedDocumentId}
-                    onSelectDocument={openDocument}
-                  />
-                ))}
-            </section>
-          </div>
-        )}
-      </aside>
-      {!effectiveSidebarCollapsed && (view === "documents" || view === "trash") && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
       <main id="main-content" tabIndex={-1} className="app-main-surface flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
         {tabs.length > 0 && view === "documents" && <DocumentTabsBar
           tabs={tabs}
@@ -630,6 +697,8 @@ export function ShellPage() {
               organizationId={organizationId}
               workspaceId={workspaceId}
               documentId={selectedDocumentId}
+              section={settingsSection}
+              onSectionChange={(next) => navigate(`/settings/${next}`)}
               onClose={() => setView("documents")}
             />
           </Suspense>
@@ -640,6 +709,8 @@ export function ShellPage() {
                 variant="page"
                 organizationId={organizationId}
                 currentUserId={profile.data.id}
+                section={adminSection}
+                onSectionChange={(next) => navigate(`/admin/${next}`)}
                 onClose={() => setView("documents")}
               />
             </Suspense>
@@ -739,6 +810,7 @@ export function ShellPage() {
         </>
       )}
       </div>
+      </div>
     </div>
   );
 }
@@ -746,10 +818,10 @@ export function ShellPage() {
 function WorkspaceDocumentList({ title, icon, documents, onOpen }: { title: string; icon: "favorite" | "recent"; documents: DocumentTab[]; onOpen: (document: DocumentTab) => void }) {
   if (documents.length === 0) return null;
   return <section>
-    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-mutedForeground">{title}</div>
-    <div className="space-y-1">
-      {documents.map((document) => <button key={document.id} type="button" data-testid={`workspace-document-${document.id}`} className="flex w-full items-center gap-2 rounded-lg border border-transparent px-2.5 py-2 text-left text-sm hover:border-border hover:bg-muted" onClick={() => onOpen(document)}>
-        {icon === "favorite" ? <Star size={14} className="fill-warning text-warning" /> : <Clock3 size={14} className="text-mutedForeground" />}
+    <div className="px-2 pb-1 pt-2 text-[11px] font-medium text-mutedForeground">{title}</div>
+    <div className="space-y-0.5">
+      {documents.map((document) => <button key={document.id} type="button" data-testid={`workspace-document-${document.id}`} className="flex w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-sm text-foreground/75 hover:bg-muted hover:text-foreground" onClick={() => onOpen(document)}>
+        {icon === "favorite" ? <Star size={14} className="shrink-0 fill-warning text-warning" /> : <Clock3 size={14} className="shrink-0 text-mutedForeground" />}
         <span className="min-w-0 flex-1 truncate">{document.title}</span>
       </button>)}
     </div>

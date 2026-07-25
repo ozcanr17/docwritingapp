@@ -126,6 +126,18 @@ Gercek pilot degerlendirmesi, mevcut arayuzun Jira ve DOORS sinifi ticari urun b
 - [x] "DocSys Demo" markasi kaldirildi: ust bar yalnizca calisma alani adini gosterir, seed organizasyonu profesyonel adla olusturulur.
 - [x] WCAG kontrast duzeltmesi: bilgi (info) rengi acik temada 4.5:1 esigini karsilayacak sekilde koyulastirildi.
 
+## Asama 11 - Referans tasarim diline yakinsama
+
+Kullanici, iyi organize edilmis bir referans urun tasarimi (tek kenar cubugu, sayfa basligi, birlesik metrik seridi, tutarli kartlar) paylasti ve ayni standardin tum uygulamaya uygulanmasini istedi.
+
+- [x] Referans seviyesinde ortak bilesenler: Card/CardHeader/CardBody/CardFooter, MetricStrip+Metric (renkli ikon rozeti, buyuk deger, aciklama), ListRow, TableHead, ProgressBar, SidebarGroup/SidebarItem.
+- [x] Uc katmanli kabuk (global bar + 48px ray + ayri panel) tek tam yukseklikli kenar cubugu ile degistirildi: marka+daraltma, gruplanmis gezinme, alana ozel baglamsal bolum ve altta hesap karti.
+- [x] Icerik alani kendi sayfa basligini tasir: alan ikonu + baslik + calisma alani alt basligi, sonra arama, Olustur, yardim, bildirimler ve tema anahtari.
+- [x] Ayarlar ve yonetim bolumleri URL surumlu (`/settings/:section`, `/admin/:section`) hale getirildi; bolum gezinmeleri kenar cubuguna tasindi.
+- [x] Is alani gorunum baglantilari kenar cubuguna, proje secici ve yonetim eylemleri sayfa arac cubuguna tasindi.
+- [x] Tum gorunumlerde icerik ayni x konumunda baslar (olculen 292 piksel) ve ayni 56 piksel baslik yuksekligi kullanilir; gorunum degistirirken hicbir ogenin yeri kaymaz.
+- [x] Is panosu ozeti, yonetim genel bakisi, liste tablosu ve test plani kartlari yeni tasarim diline gecirildi.
+
 ## Asama tamamlanma olcutu
 
 Bir asama ancak ilgili maddeler isaretlendiginde, regresyon testleri gectiginde, Mac uzerinde `pnpm dev` ile gorsel olarak dogrulandiginda ve degisiklikler `main` dalina gonderildiginde tamamlanmis sayilir.

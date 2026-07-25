@@ -6,7 +6,21 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The user judged the existing interface not commercial-grade against Jira and DOORS and approved a five-phase redesign program, recorded as Stage 10 in `docs/UI-UX-DONUSUM-PLANI.md`. The phases are: 0 foundations (routing, component library, density), 1 shell/navigation, 2 Jira-grade work area, 3 DOORS-grade document area, 4 routed settings/admin/reports plus polish. Each phase must end with a full verification, documentation updates and a push to `origin/main`. All five phases (0-4) are complete and pushed. Desktop packaging remains intentionally out of scope until the user changes that direction.
+The user judged the existing interface not commercial-grade against Jira and DOORS and approved a five-phase redesign program, recorded as Stage 10 in `docs/UI-UX-DONUSUM-PLANI.md`. The phases are: 0 foundations (routing, component library, density), 1 shell/navigation, 2 Jira-grade work area, 3 DOORS-grade document area, 4 routed settings/admin/reports plus polish. Each phase must end with a full verification, documentation updates and a push to `origin/main`. All five phases (0-4) are complete and pushed, followed by Stage 11 (reference design-language convergence), also complete and pushed. Desktop packaging remains intentionally out of scope until the user changes that direction.
+
+### What was completed in Stage 11 (reference design-language convergence)
+
+The user supplied a reference product screenshot (a well-organized CRM dashboard) and asked for the same standard across the entire application. The reference's load-bearing patterns were identified and adopted.
+
+1. **One full-height sidebar replaced the three-layer chrome.** The global top bar plus 48px icon rail plus separate contextual panel became a single sidebar (`AppSidebar.tsx`): brand and collapse control, grouped navigation with small muted group labels, an area-specific contextual section, and an account card pinned at the bottom. `AppRail.tsx` was deleted. Active navigation items use the reference's "subtle white card with border" treatment rather than a heavy fill. The account card is a menu carrying profile, settings and sign out, so logout stayed reachable after the profile left the old sidebar footer.
+2. **The content area owns its page header** (`AppBar.tsx`, rewritten): area icon, area title, workspace subtitle, then workspace search, the global Create menu, help, notifications and a new one-click theme toggle. The header is 56px in every area.
+3. **New reference-grade primitives** in `components/ui`: `Card`/`CardHeader`/`CardBody`/`CardFooter`, `MetricStrip`+`Metric` (joined bordered strip on wide screens, separate cards when narrow, colored icon badge, large tabular value, optional delta, muted caption), `ListRow`, `TableHead` (uppercase letterspaced headers), `ProgressBar`, and `SidebarGroup`/`SidebarItem`.
+4. **Settings and administration sections are URL-driven** (`/settings/:section`, `/admin/:section`) via `lib/appSections.ts`, so their section navigation lives in the sidebar as plain links and every section is deep-linkable. Both components keep a `variant="dialog"` path with internal state for any remaining modal use.
+5. **The work area's view links moved to the sidebar**; the project selector and management actions moved into a page toolbar directly under the header.
+6. **Measured outcome for the user's main complaint:** content now begins at exactly the same x (292px) with the same 56px header in Documents, Work (all four views), Settings, Administration and Trash. Before this stage it was 340px in Documents/Trash and 48px in Work/Settings/Admin.
+7. **Areas restyled to the design language:** work dashboard (joined five-metric strip, cards with headers and count badges, list rows with type icons), administration overview (metric strip plus role/governance cards), work list table (uppercase headers, type icon plus key, priority icons, avatars), test plan cards, and the engineering lifecycle card.
+8. Deliberately **not** applied to the DOORS requirements grid interior: that surface needs maximum density (32/40/48px rows), so the reference's generous whitespace was applied to the chrome around it, not to the rows.
+9. The complete `pnpm verify` gate passes: **142 web + 72 API + 13 worker = 227/227 tests**, production build and bundle budget; initial gzip is **132.0 KiB**. The browser suite passes **12/12** on a restarted stack with all four visual baselines regenerated, and the axe audit reports zero WCAG A/AA violations for the new shell.
 
 ### What was completed in redesign Phase 4 (routed settings/admin/reports, consistency, polish)
 
@@ -247,6 +261,11 @@ There is **no active code blocker**. All five redesign phases are complete and v
 
 ### Pitfalls encountered in the latest task
 
+- A type import and a local component can share a name and still pass `tsc` (separate declaration spaces) while Babel fails at runtime with `Duplicate declaration`. `SettingsSection` collided this way; alias the imported type (`SettingsSection as SettingsSectionId`). Typecheck alone does not catch this, so load the page.
+- A local helper component that shadows an imported primitive of the same name (`Metric`) silently wins. When adopting shared primitives, delete the local versions rather than leaving both.
+- Machine-checkable responsive contracts live in attributes, not layout. Replacing the shell dropped `data-responsive-collapsed` and broke the accessibility spec even though the behavior was correct; carry such attributes across rewrites.
+- Do not fabricate trend deltas to fill a metric component. The work dashboard API has no historical comparison, so raw secondary numbers in the delta slot read as duplicated noise; put real context in the caption instead.
+- Moving navigation out of a component breaks its standalone component tests that clicked those controls. Prefer driving the route (`MemoryRouter initialEntries`) over re-adding UI just to satisfy a test.
 - Do not synchronize URL and tab state bidirectionally with two competing effects. User actions must navigate and a single deep-link effect must reconcile URL to state (focused pane, then existing tab, then fetch); a reverse state-to-URL effect fights the back button and loops.
 - Pane focus changes in split view must update the URL with `replace`, not `push`, or every pane click pollutes browser history.
 - White text needs a per-hue lightness ceiling: a uniform 46% lightness avatar palette failed WCAG AA on hue 190 at 2.97:1 while passing on blue/purple hues. Compute contrast per swatch; never silence the axe audit.

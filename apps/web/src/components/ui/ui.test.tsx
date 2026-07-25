@@ -67,7 +67,7 @@ describe("ui primitives", () => {
   it("renders page header and empty state content", () => {
     render(
       <div>
-        <PageHeader title="Board" description="Track work" actions={<Button>New</Button>} />
+        <PageHeader title="Board" subtitle="Track work" actions={<Button>New</Button>} />
         <EmptyState title="Nothing here" description="Create the first item" action={<Button variant="primary">Create</Button>} />
       </div>,
     );

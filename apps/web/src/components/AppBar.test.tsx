@@ -9,21 +9,16 @@ vi.mock("../lib/api", async () => {
   return { ...actual, api: vi.fn(async () => []) };
 });
 
-const profile = { id: "user-1", displayName: "Ada Lovelace", email: "ada@example.com" };
-
 function renderBar(overrides: Partial<React.ComponentProps<typeof AppBar>> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const props: React.ComponentProps<typeof AppBar> = {
+    title: "Documents",
     workspaceId: "workspace-1",
-    profile,
     onOpenSearch: vi.fn(),
     onCloseSearch: vi.fn(),
     searchQuery: "",
     onSearchQueryChange: vi.fn(),
     searchOpen: false,
-    onOpenProfile: vi.fn(),
-    onOpenSettings: vi.fn(),
-    onLogout: vi.fn(),
     onDocumentCreated: vi.fn(),
     onCreateWorkItem: vi.fn(),
     ...overrides,
@@ -37,16 +32,18 @@ function renderBar(overrides: Partial<React.ComponentProps<typeof AppBar>> = {})
 }
 
 describe("AppBar", () => {
-  it("keeps global search geometrically centered and opens it on focus", () => {
-    const props = renderBar();
-    expect(screen.getByTestId("global-search-trigger")).toHaveClass("left-1/2", "-translate-x-1/2");
-    fireEvent.focus(screen.getByTestId("global-search-input"));
-    expect(props.onOpenSearch).toHaveBeenCalledOnce();
+  it("names the current area and workspace as the page identity", () => {
+    renderBar({ title: "Documents", subtitle: "Main Workspace" });
+    expect(screen.getByRole("heading", { name: "Documents" })).toBeInTheDocument();
+    expect(screen.getByText("Main Workspace")).toBeInTheDocument();
   });
 
-  it("shows the workspace context without a demo organization label", () => {
-    renderBar({ workspaceName: "Main Workspace" });
-    expect(screen.getByText("Main Workspace")).toBeInTheDocument();
+  it("opens workspace search on focus and reports typed queries", () => {
+    const props = renderBar();
+    fireEvent.focus(screen.getByTestId("global-search-input"));
+    expect(props.onOpenSearch).toHaveBeenCalledOnce();
+    fireEvent.change(screen.getByTestId("global-search-input"), { target: { value: "REQ-42" } });
+    expect(props.onSearchQueryChange).toHaveBeenCalledWith("REQ-42");
   });
 
   it("offers document creation and work item creation under global create", () => {
@@ -63,25 +60,14 @@ describe("AppBar", () => {
   });
 
   it("exposes onboarding, checklist and feedback through the help menu", () => {
-    const props = renderBar({ onOpenOnboarding: vi.fn(), onOpenPilotChecklist: vi.fn(), onOpenFeedback: vi.fn() });
+    const props = renderBar({ onOpenPilotChecklist: vi.fn() });
     fireEvent.click(screen.getByTestId("appbar-help"));
     fireEvent.click(screen.getByTestId("menuitem-pilot-checklist"));
     expect(props.onOpenPilotChecklist).toHaveBeenCalledOnce();
   });
 
-  it("opens profile and signs out from the account menu", () => {
-    const props = renderBar();
-    fireEvent.click(screen.getByTestId("open-profile"));
-    fireEvent.click(screen.getByTestId("menuitem-profile"));
-    expect(props.onOpenProfile).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByTestId("open-profile"));
-    fireEvent.click(screen.getByTestId("menuitem-logout"));
-    expect(props.onLogout).toHaveBeenCalledOnce();
-  });
-
-  it("writes the workspace query directly in the top search field", () => {
-    const props = renderBar();
-    fireEvent.change(screen.getByTestId("global-search-input"), { target: { value: "REQ-42" } });
-    expect(props.onSearchQueryChange).toHaveBeenCalledWith("REQ-42");
+  it("offers a direct theme toggle", () => {
+    renderBar();
+    expect(screen.getByTestId("toggle-theme")).toBeInTheDocument();
   });
 });
