@@ -21,7 +21,7 @@
   "resizeDocumentTree": "Doküman ağacını yeniden boyutlandır",
   "resizeDetailPanel": "Detay panelini yeniden boyutlandır",
   "password": "Parola",
-  "displayName": "Ad Soyad",
+  "displayName": "Görünen ad",
   "documents": "Dokümanlar",
   "workspaceArea": "Çalışma alanı",
   "workspaceTools": "Araçlar",
@@ -350,7 +350,6 @@
   "column": "Sütun",
   "value": "Değer",
   "targetParentId": "Hedef üst satır ID",
-  "apply": "Uygula",
   "testExecutions": "Test yürütmeleri",
   "startExecution": "Yürütme başlat",
   "noExecutions": "Henüz yürütme yok.",
@@ -457,7 +456,6 @@
   "addTestTemplate": "Test senaryosu şablonu ekle",
   "addTestTemplateBelow": "Altına test senaryosu şablonu ekle",
   "testTemplateHelp": "Adlandırılmış bir test başlığı altında standart bölümleri ve boş bir test adımını oluşturur.",
-  "testName": "Test adı",
   "preconditions": "Ön Koşullar",
   "testInputs": "Test Girdileri",
   "assumptionsAndConstraints": "Varsayımlar ve Kısıtlamalar",
@@ -632,11 +630,9 @@
   "closeDetailsPanel": "Ayrıntılar panelini kapat",
   "totalObjects": "Toplam nesne",
   "headings": "Başlıklar",
-  "linkedObjects": "Bağlantılı nesneler",
   "coverageAndQuality": "Kapsam ve kalite",
   "coveredRequirements": "Kapsanan gereksinimler",
   "qualityIssues": "Kalite bulguları",
-  "incompleteTests": "Eksik testler",
   "saveState": {
     "saving": "Kaydediliyor",
     "saved": "Kaydedildi",
@@ -743,11 +739,9 @@
   "keyboardShortcut": "Kısayol",
   "recordShortcutFor": "{{command}} kısayolunu değiştir",
   "pressShortcut": "Tuşlara basın...",
-  "unassigned": "Atanmamış",
   "shortcutSettingsHelp": "Bir kısayolu seçip yeni tuş birleşimine basın. Delete atamayı kaldırır, Escape kaydı iptal eder.",
   "editImpactTitle": "İzlenebilirlik etkisini gözden geçirin",
   "editImpactHelp": "Bu nesnenin {{count}} bağlı referansı var. Kaydetmeden önce önerilen değişikliği gözden geçirin.",
-  "emptyValue": "Boş",
   "affectedLinkedObjects": "Etkilenebilecek bağlı nesneler",
   "editImpactWarning": "Anlamsal bir değişiklik kaydedildiğinde bağlı izlenebilirlik bağlantıları şüpheli olarak işaretlenir; böylece gözden geçirenler etkiyi değerlendirip ilgili testleri yeniden koşabilir.",
   "saveAndMarkSuspect": "Kaydet ve bağlantıları şüpheli işaretle",
@@ -904,8 +898,6 @@
   "organizationScopeLabel": "Organizasyon",
   "workspaceScope": "Çalışma alanı",
   "workspaces": "Çalışma alanları",
-  "projects": "Projeler",
-  "documents": "Dokümanlar",
   "restrictedDocuments": "Sınırlı dokümanlar",
   "roleDistribution": "Rol dağılımı",
   "governanceStatus": "Yönetişim durumu",
@@ -917,7 +909,6 @@
   "auditLogHelp": "Organizasyon kapsamındaki son yönetim ve içerik işlemlerini zaman sırasıyla inceleyin.",
   "noAuditEvents": "Henüz denetim olayı yok.",
   "createUser": "Kullanıcı oluştur",
-  "displayName": "Görünen ad",
   "role": "Rol",
   "usersAndRoles": "Kullanıcılar ve roller",
   "usersAndRolesDescription": "Hesapları etkinleştirin ve organizasyon sorumluluklarını atayın.",
@@ -927,7 +918,14 @@
   "removeUser": "Kullanıcıyı kaldır",
   "removeUserConfirm": "{{name}} bu organizasyondan kaldırılsın mı?",
   "operationFailed": "İşlem başarısız oldu. Girilen bilgileri kontrol edin.",
-  "adminRole": { "organization_admin": "Organizasyon yöneticisi", "workspace_admin": "Çalışma alanı yöneticisi", "project_manager": "Proje yöneticisi", "editor": "Düzenleyici", "reviewer": "İnceleyici", "viewer": "Görüntüleyici" },
+  "adminRole": {
+    "organization_admin": "Organizasyon yöneticisi",
+    "workspace_admin": "Çalışma alanı yöneticisi",
+    "project_manager": "Proje yöneticisi",
+    "editor": "Düzenleyici",
+    "reviewer": "İnceleyici",
+    "viewer": "Görüntüleyici"
+  },
   "documentPermissions": "Dosya erişimi",
   "restrictedDocument": "Sınırlı erişim listesi",
   "restrictedDocumentDescription": "Bu dosyayı yalnızca yöneticiler ve listelenen kullanıcılar açabilir.",
@@ -940,7 +938,11 @@
   "grantAccess": "Erişim ver",
   "revokeAccess": "Erişimi kaldır",
   "noExplicitPermissions": "Dosyaya özel izin yok. Erişim rollerden devralınıyor.",
-  "access": { "read": "Görüntüleme", "write": "Düzenleme", "manage": "Yönetme" },
+  "access": {
+    "read": "Görüntüleme",
+    "write": "Düzenleme",
+    "manage": "Yönetme"
+  },
   "fileAccessDenied": "Bu dosyayı görüntülemeye yetkiniz yok",
   "fileAccessDeniedDescription": "Bir yöneticiden veya dosya sahibinden erişim vermesini isteyin.",
   "readOnly": "Salt okunur",
@@ -961,7 +963,13 @@
   "confirmImport": "İçe aktarmayı onayla",
   "importing": "İçe aktarılıyor...",
   "importCompleted": "İçe aktarma tamamlandı",
-  "rowTypeLabel": { "heading": "Başlık", "requirement": "Gereksinim", "test_case": "Test", "test_step": "Test adımı", "note": "Not" },
+  "rowTypeLabel": {
+    "heading": "Başlık",
+    "requirement": "Gereksinim",
+    "test_case": "Test",
+    "test_step": "Test adımı",
+    "note": "Not"
+  },
   "importFinding": {
     "row_type_not_allowed": "Nesne türü bu dokümanda kullanılamaz",
     "hierarchy_level_gap": "Hiyerarşide bir üst seviye atlanmış",
@@ -978,7 +986,13 @@
   "feedbackCategoryLabel": "Kategori",
   "feedbackTitle": "Kısa özet",
   "feedbackDescription": "Ne oldu, ne bekliyordunuz ve sorun nasıl tekrarlanabilir?",
-  "feedbackCategory": { "bug": "Hata", "usability": "Kullanılabilirlik", "data_migration": "Veri geçişi", "performance": "Performans", "feature_request": "Özellik isteği" },
+  "feedbackCategory": {
+    "bug": "Hata",
+    "usability": "Kullanılabilirlik",
+    "data_migration": "Veri geçişi",
+    "performance": "Performans",
+    "feature_request": "Özellik isteği"
+  },
   "sendFeedback": "Geri bildirim gönder",
   "pilotTelemetry": "Sınırlı pilot kullanım tanılamasını paylaş",
   "pilotTelemetryHelp": "Varsayılan olarak kapalıdır. Etkinleştirildiğinde DocSys yalnızca izin verilen işlem adlarını ve sınırlı teknik değerleri organizasyonunuz içinde saklar. Doküman metni, parola, token ve ekler asla dahil edilmez.",
@@ -992,13 +1006,34 @@
   "pilotChecklist": "Pilot kurulum kontrol listesi",
   "pilotChecklistHelp": "Ölçülebilir günlük kullanım için kontrollü bir proje hazırlayın.",
   "pilotChecklistItem": {
-    "roles": { "title": "Pilot rollerini atayın", "description": "Yönetici, yazar, testçi ve inceleyiciyi belirleyin; Viewer erişimini ayrıca doğrulayın." },
-    "requirements": { "title": "Gereksinim dokümanını oluşturun", "description": "Tanımlayıcı ön ekini, başlıkları ve asgari zorunlu nitelikleri belirleyin." },
-    "tests": { "title": "Test dokümanını oluşturun", "description": "Eylem ve gözlenebilir beklenen sonuç içeren tekrarlanabilir testler ekleyin." },
-    "migration": { "title": "Kaynak veriyi önizleyip doğrulayın", "description": "Geçiş önizlemesini kullanın; onaydan önce hiyerarşi ve tekrarlı numara bulgularını giderin." },
-    "traceability": { "title": "Çift yönlü izlenebilirliği doğrulayın", "description": "Temsilî gereksinim ve test adımlarını bağlayıp kapsamı ve şüpheli bağlantıları inceleyin." },
-    "baseline": { "title": "İlk baseline'ı yayınlayın", "description": "Yayına hazırlığı inceleyin, 1.0 sürümünü oluşturun ve resmi dokümanı dışa aktarın." },
-    "backup": { "title": "Geri yükleme tatbikatını tamamlayın", "description": "Checksum doğrulamalı yedek alın ve geçici veritabanına geri yükleyin." }
+    "roles": {
+      "title": "Pilot rollerini atayın",
+      "description": "Yönetici, yazar, testçi ve inceleyiciyi belirleyin; Viewer erişimini ayrıca doğrulayın."
+    },
+    "requirements": {
+      "title": "Gereksinim dokümanını oluşturun",
+      "description": "Tanımlayıcı ön ekini, başlıkları ve asgari zorunlu nitelikleri belirleyin."
+    },
+    "tests": {
+      "title": "Test dokümanını oluşturun",
+      "description": "Eylem ve gözlenebilir beklenen sonuç içeren tekrarlanabilir testler ekleyin."
+    },
+    "migration": {
+      "title": "Kaynak veriyi önizleyip doğrulayın",
+      "description": "Geçiş önizlemesini kullanın; onaydan önce hiyerarşi ve tekrarlı numara bulgularını giderin."
+    },
+    "traceability": {
+      "title": "Çift yönlü izlenebilirliği doğrulayın",
+      "description": "Temsilî gereksinim ve test adımlarını bağlayıp kapsamı ve şüpheli bağlantıları inceleyin."
+    },
+    "baseline": {
+      "title": "İlk baseline'ı yayınlayın",
+      "description": "Yayına hazırlığı inceleyin, 1.0 sürümünü oluşturun ve resmi dokümanı dışa aktarın."
+    },
+    "backup": {
+      "title": "Geri yükleme tatbikatını tamamlayın",
+      "description": "Checksum doğrulamalı yedek alın ve geçici veritabanına geri yükleyin."
+    }
   },
   "reviewStatus": {
     "draft": "Taslak",
@@ -1097,7 +1132,11 @@
     "fromStatus": "Mevcut durum",
     "allowedTransitions": "İzin verilen sonraki durumlar",
     "requiredFields": "Geçişte zorunlu alanlar",
-    "workflowFields": { "description": "Açıklama", "assignee": "Atanan", "dueAt": "Bitiş tarihi" },
+    "workflowFields": {
+      "description": "Açıklama",
+      "assignee": "Atanan",
+      "dueAt": "Bitiş tarihi"
+    },
     "workflowSaveError": "İş akışı kaydedilemedi. Yetkinizi kontrol edin veya güncel sürümü yeniden yükleyin.",
     "order": "Sıra",
     "moveUp": "{{key}} kaydını yukarı taşı",
@@ -1157,10 +1196,35 @@
     "planName": "Plan adı",
     "type": "İş kaydı türü",
     "descriptionLabel": "Açıklama",
-    "types": { "epic": "Epic", "story": "Hikaye", "task": "Görev", "bug": "Hata", "risk": "Risk" },
-    "statuses": { "backlog": "Yapılacak", "ready": "Teste hazır", "in_progress": "Devam ediyor", "in_review": "Kod incelemesi", "done": "Tamamlandı", "canceled": "İptal edildi" },
-    "priorities": { "lowest": "En düşük", "low": "Düşük", "medium": "Orta", "high": "Yüksek", "highest": "En yüksek", "critical": "Kritik" },
-    "planStatuses": { "draft": "Taslak", "active": "Aktif", "completed": "Tamamlandı", "canceled": "İptal edildi" },
+    "types": {
+      "epic": "Epic",
+      "story": "Hikaye",
+      "task": "Görev",
+      "bug": "Hata",
+      "risk": "Risk"
+    },
+    "statuses": {
+      "backlog": "Yapılacak",
+      "ready": "Teste hazır",
+      "in_progress": "Devam ediyor",
+      "in_review": "Kod incelemesi",
+      "done": "Tamamlandı",
+      "canceled": "İptal edildi"
+    },
+    "priorities": {
+      "lowest": "En düşük",
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek",
+      "highest": "En yüksek",
+      "critical": "Kritik"
+    },
+    "planStatuses": {
+      "draft": "Taslak",
+      "active": "Aktif",
+      "completed": "Tamamlandı",
+      "canceled": "İptal edildi"
+    },
     "loading": "Yükleniyor…",
     "labels": "Etiketler",
     "labelsHelp": "Virgülle ayrılmış etiketler",
@@ -1184,7 +1248,11 @@
     "searchDocuments": "Dokümanlarda ara",
     "selectedCount": "{{count}} seçili",
     "noDocuments": "Bağlanabilecek doküman bulunamadı.",
-    "documentTypes": { "requirement": "Gereksinim dokümanı", "test": "Test dokümanı", "general_document": "Genel doküman" },
+    "documentTypes": {
+      "requirement": "Gereksinim dokümanı",
+      "test": "Test dokümanı",
+      "general_document": "Genel doküman"
+    },
     "loadingDashboard": "Dashboard yükleniyor",
     "loadingDashboardHelp": "Proje kayıtları, iş akışı ve test metrikleri hazırlanıyor.",
     "recentItems": "Son görevler",
@@ -1233,6 +1301,9 @@
     "createInternalDefect": "İç hata kaydı oluştur",
     "internalDefectTitle": "Hata özeti",
     "defectProject": "Hata projesi",
-    "internalDefectCreated": "İç hata kaydı oluşturuldu"
+    "internalDefectCreated": "İç hata kaydı oluşturuldu",
+    "backToList": "İş kayıtlarına dön",
+    "itemNotFound": "İş kaydı bulunamadı",
+    "itemNotFoundHelp": "Adresteki iş kaydı anahtarı bu çalışma alanında yok veya erişiminiz bulunmuyor."
   }
 }

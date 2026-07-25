@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../lib/api";
 import i18n from "../lib/i18n";
@@ -60,7 +61,7 @@ describe("WorkManagementPage projects", () => {
     });
     render(
       <QueryClientProvider client={client}>
-        <WorkManagementPage workspaceId="workspace" />
+        <MemoryRouter initialEntries={["/work/summary"]}><WorkManagementPage workspaceId="workspace" /></MemoryRouter>
       </QueryClientProvider>,
     );
 
@@ -125,7 +126,7 @@ describe("WorkManagementPage projects", () => {
     });
     render(
       <QueryClientProvider client={client}>
-        <WorkManagementPage workspaceId="workspace" />
+        <MemoryRouter initialEntries={["/work/summary"]}><WorkManagementPage workspaceId="workspace" /></MemoryRouter>
       </QueryClientProvider>,
     );
 
@@ -195,7 +196,7 @@ describe("WorkManagementPage projects", () => {
     });
     render(
       <QueryClientProvider client={client}>
-        <WorkManagementPage workspaceId="workspace" />
+        <MemoryRouter initialEntries={["/work/summary"]}><WorkManagementPage workspaceId="workspace" /></MemoryRouter>
       </QueryClientProvider>,
     );
 
@@ -251,7 +252,7 @@ describe("WorkManagementPage projects", () => {
     });
     render(
       <QueryClientProvider client={client}>
-        <WorkManagementPage workspaceId="workspace" />
+        <MemoryRouter initialEntries={["/work/summary"]}><WorkManagementPage workspaceId="workspace" /></MemoryRouter>
       </QueryClientProvider>,
     );
 
@@ -310,7 +311,7 @@ describe("WorkManagementPage projects", () => {
       return [];
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-    render(<QueryClientProvider client={client}><WorkManagementPage workspaceId="workspace" /></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/work/summary"]}><WorkManagementPage workspaceId="workspace" /></MemoryRouter></QueryClientProvider>);
 
     const workflowButton = await screen.findByTestId("open-workflow-editor");
     await waitFor(() => expect(workflowButton).toBeEnabled());

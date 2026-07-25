@@ -165,10 +165,10 @@ export function ProjectSettingsDialog({
               <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-mutedForeground">
                 {t("workHub.projectCodeImmutable", { code: project.code })}
               </div>
-              {updateProject.isError && <p role="alert" className="text-sm text-danger">{t("workHub.projectUpdateError")}</p>}
+              {updateProject.isError && <p role="alert" className="text-sm text-destructive">{t("workHub.projectUpdateError")}</p>}
               {updateProject.isSuccess && <p role="status" className="text-sm text-success">{t("workHub.projectUpdated")}</p>}
               <div className="flex justify-between gap-3">
-                <button type="button" className="rounded-lg border border-danger/40 px-3 py-2 text-sm text-danger hover:bg-danger/10" onClick={() => setConfirmArchive(true)}>
+                <button type="button" className="rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive hover:bg-destructive/10" onClick={() => setConfirmArchive(true)}>
                   <Archive size={15} className="mr-1.5 inline" />
                   {t("workHub.archiveProject")}
                 </button>
@@ -205,7 +205,7 @@ export function ProjectSettingsDialog({
                           {!member.roleKey && <option value="" disabled>{t("workHub.inheritedAccess")}</option>}
                           {projectRoles.map((role) => <option key={role} value={role}>{t(`workHub.projectRoles.${role}`)}</option>)}
                         </select>
-                        <button type="button" className="rounded-lg p-2 text-danger hover:bg-danger/10" aria-label={t("workHub.removeProjectMember", { name: member.displayName })} onClick={() => removeMember.mutate(member.id)}>
+                        <button type="button" className="rounded-lg p-2 text-destructive hover:bg-destructive/10" aria-label={t("workHub.removeProjectMember", { name: member.displayName })} onClick={() => removeMember.mutate(member.id)}>
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -231,7 +231,7 @@ export function ProjectSettingsDialog({
                       </button>
                     </form>
                   )}
-                  {(putMember.isError || removeMember.isError) && <p role="alert" className="mt-3 text-sm text-danger">{t("workHub.projectMemberError")}</p>}
+                  {(putMember.isError || removeMember.isError) && <p role="alert" className="mt-3 text-sm text-destructive">{t("workHub.projectMemberError")}</p>}
                 </>
               )}
             </section>
@@ -243,7 +243,7 @@ export function ProjectSettingsDialog({
               {archived.isLoading ? (
                 <p className="mt-5 text-sm text-mutedForeground">{t("workHub.loading")}</p>
               ) : archived.isError ? (
-                <p role="alert" className="mt-5 text-sm text-danger">{t("workHub.archivedProjectsError")}</p>
+                <p role="alert" className="mt-5 text-sm text-destructive">{t("workHub.archivedProjectsError")}</p>
               ) : archivedProjects.length === 0 ? (
                 <p className="mt-5 rounded-xl border border-dashed border-border p-5 text-center text-sm text-mutedForeground">{t("workHub.noArchivedProjects")}</p>
               ) : (

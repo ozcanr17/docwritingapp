@@ -107,10 +107,10 @@ Gercek pilot degerlendirmesi, mevcut arayuzun Jira ve DOORS sinifi ticari urun b
 
 ### Faz 2 - Jira seviyesinde is alani
 
-- [ ] Is alanini proje sol gezinmesiyle rotali sayfalara ayirmak: Ozet, Pano, Liste, Test planlari, Ayarlar.
-- [ ] Is kaydi gorsel dili: tur ve oncelik ikonlari, durum lozenge renkleri, atanan avatarlari ve gorunur is anahtarlari.
-- [ ] Tam yukseklik pano kolonlari, WIP sayaclari ve zengin kartlar.
-- [ ] `/work/item/:key` rotali iki sutunlu is kaydi gorunumu: solda aciklama ve etkinlik, sagda alan paneli.
+- [x] Is alanini proje sol gezinmesiyle rotali sayfalara ayirmak: `/work/summary`, `/work/board`, `/work/list`, `/work/plans`; proje secici, birincil olusturma ve yonetim eylemleri sol gezinmede.
+- [x] Is kaydi gorsel dili: bes tur ikonu, alti oncelik ikonu, durum lozenge renkleri, atanan avatarlari ve gorunur is anahtarlari liste/pano/ozet yuzeylerinde.
+- [x] Tam yukseklik pano kolonlari, kolon sayaclari ve zengin kartlar (tur, anahtar, oncelik, avatar).
+- [x] `/work/item/:key` rotali iki sutunlu is kaydi gorunumu: soguk derin baglanti anahtar cozumlemesiyle calisir, bulunamayan anahtar acik bir geri yolu sunar.
 
 ### Faz 3 - DOORS seviyesinde dokuman alani
 

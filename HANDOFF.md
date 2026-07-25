@@ -6,7 +6,18 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The user judged the existing interface not commercial-grade against Jira and DOORS and approved a five-phase redesign program, recorded as Stage 10 in `docs/UI-UX-DONUSUM-PLANI.md`. The phases are: 0 foundations (routing, component library, density), 1 shell/navigation, 2 Jira-grade work area, 3 DOORS-grade document area, 4 routed settings/admin/reports plus polish. Each phase must end with a full verification, documentation updates and a push to `origin/main`. Phases 0 and 1 are complete and pushed; Phases 2-4 remain. Desktop packaging remains intentionally out of scope until the user changes that direction.
+The user judged the existing interface not commercial-grade against Jira and DOORS and approved a five-phase redesign program, recorded as Stage 10 in `docs/UI-UX-DONUSUM-PLANI.md`. The phases are: 0 foundations (routing, component library, density), 1 shell/navigation, 2 Jira-grade work area, 3 DOORS-grade document area, 4 routed settings/admin/reports plus polish. Each phase must end with a full verification, documentation updates and a push to `origin/main`. Phases 0, 1 and 2 are complete and pushed; Phases 3-4 remain. Desktop packaging remains intentionally out of scope until the user changes that direction.
+
+### What was completed in redesign Phase 2 (Jira-grade work area)
+
+1. The work hub is now a project-scoped area with routed pages: `/work/summary` (dashboard), `/work/board`, `/work/list`, `/work/plans`, with `/work` redirecting to summary. The mid-page tab strip is gone; a 240px project navigation column carries the project selector, the primary New work item button (`open-create-item`), the four page links (`work-nav-summary/board/list/plans`) and the management actions (new test plan, workflow editor, project settings, new project) with their existing testids. The outer shell sidebar panel is hidden in the work area since the project nav replaces it; the icon rail remains.
+2. Work items now have a routed view at `/work/item/:key` replacing the detail modal. Opening from list/board/summary passes the item id through navigation state; a cold deep link resolves the key by matching the project code prefix and searching that project's items, and an unknown key renders an explicit not-found state with a back action. The view keeps every editing capability of the old dialog in a two-column page: description/QA evidence/comments left, engineering chain/linked evidence/relations right, with a sticky header (back button, type icon, key, title, status lozenge, priority, assignee avatar).
+3. Work-item visual language shipped: five distinct type icons (epic purple layers, story green bookmark, task blue check, bug red, risk amber shield), six priority chevron icons with accessible labels, semantic status lozenges and status-tinted transition selects, assignee avatars in list rows and board cards, and monospace keys everywhere.
+4. The board is full-height: tinted full-column surfaces with per-column counts, independently scrollable card stacks, and richer cards (title, type icon + key, priority icon, assignee avatar or dashed unassigned placeholder). Drag/drop and the server-authoritative transition rules are unchanged.
+5. The former always-visible header metrics moved into the summary page above the role-focus summary; the redundant page title/description block was removed.
+6. Fixed a latent styling bug: `text-danger`/`bg-danger`/`border-danger` classes were used in three components but `danger` was never a Tailwind color, so those styles silently did nothing; they now use the real `destructive` token.
+7. `WorkManagementPage` tests are wrapped in `MemoryRouter`; all testids used by e2e (`project-selector`, `open-create-project`, `open-project-settings`, `open-workflow-editor`, `open-create-item`, saved-view controls) are preserved.
+8. The complete `pnpm verify` gate passes: **136 web + 72 API + 13 worker = 221/221 tests**, production build and bundle budget; initial gzip is **131.8 KiB**. The full browser suite passes **12/12** on the first run. Live browser verification confirmed URL transitions, item deep links (warm and cold), not-found handling and back navigation.
 
 ### What was completed in redesign Phase 1 (shell and navigation)
 
@@ -208,13 +219,12 @@ The user judged the existing interface not commercial-grade against Jira and DOO
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. Redesign Phases 0 (routing, component library, density/shape) and 1 (product top bar, File/Edit removal, icon rail plus contextual sidebar) are complete and verified. The approved program continues with Phase 2 (Jira-grade work area with routed project pages, work-item visual language and `/work/item/:key`), Phase 3 (DOORS-grade document area with module outline and rebuilt detail panel) and Phase 4 (routed settings/admin/reports, dark theme audit, brand polish). WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work after the redesign.
+There is **no active code blocker**. Redesign Phases 0 (routing, component library, density/shape), 1 (product top bar, File/Edit removal, icon rail plus contextual sidebar) and 2 (Jira-grade work area with routed project pages, work-item visual language and `/work/item/:key`) are complete and verified. The approved program continues with Phase 3 (DOORS-grade document area with module outline and rebuilt detail panel) and Phase 4 (routed settings/admin/reports, dark theme audit, brand polish). WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work after the redesign.
 
 ### Next plan
 
-1. Execute redesign Phase 2: routed project pages (Summary, Board, List, Test plans, Settings) under `/work`, work-item type/priority/status/avatar/key visual language, full-height board and the two-column work-item view at `/work/item/:key`.
-2. Then Phase 3: stronger sticky grid header, column width management, module outline TOC beside the grid and the fields-plus-activity detail panel.
-3. Then Phase 4: convert settings, administration and analysis reports to routed pages, audit dark theme and polish login/branding.
+1. Execute redesign Phase 3: stronger sticky grid header, column width management, module outline TOC beside the grid and the fields-plus-activity detail panel.
+2. Then Phase 4: convert settings, administration and analysis reports to routed pages, audit dark theme and polish login/branding.
 5. After each phase: run the complete `pnpm verify` gate and the browser suite, regenerate intentionally changed visual baselines, verify Turkish and English locale coverage, update `HANDOFF.md` and `docs/UI-UX-DONUSUM-PLANI.md`, then commit and push to `origin/main` with a Conventional Commit message.
 6. Keep every increment server-authoritative: the redesign is presentation and information architecture only; permissions, audit, soft-delete and concurrency rules must not change.
 

@@ -351,7 +351,6 @@
   "column": "Column",
   "value": "Value",
   "targetParentId": "Target parent ID",
-  "apply": "Apply",
   "testExecutions": "Test executions",
   "startExecution": "Start execution",
   "noExecutions": "No executions yet.",
@@ -458,7 +457,6 @@
   "addTestTemplate": "Add test scenario template",
   "addTestTemplateBelow": "Add test scenario template below",
   "testTemplateHelp": "Creates the standard sections and one empty test step under a named test heading.",
-  "testName": "Test name",
   "preconditions": "Prerequisites",
   "testInputs": "Test Inputs",
   "assumptionsAndConstraints": "Assumptions and Constraints",
@@ -633,11 +631,9 @@
   "closeDetailsPanel": "Close details panel",
   "totalObjects": "Total objects",
   "headings": "Headings",
-  "linkedObjects": "Linked objects",
   "coverageAndQuality": "Coverage and quality",
   "coveredRequirements": "Covered requirements",
   "qualityIssues": "Quality findings",
-  "incompleteTests": "Incomplete tests",
   "saveState": {
     "saving": "Saving",
     "saved": "Saved",
@@ -744,11 +740,9 @@
   "keyboardShortcut": "Shortcut",
   "recordShortcutFor": "Change shortcut for {{command}}",
   "pressShortcut": "Press keys...",
-  "unassigned": "Unassigned",
   "shortcutSettingsHelp": "Select a shortcut and press the new key combination. Delete clears it; Escape cancels recording.",
   "editImpactTitle": "Review traceability impact",
   "editImpactHelp": "This object has {{count}} linked reference(s). Review the proposed change before saving.",
-  "emptyValue": "Empty",
   "affectedLinkedObjects": "Potentially affected linked objects",
   "editImpactWarning": "Saving a semantic change marks the connected traceability links as suspect so reviewers can assess and rerun affected tests.",
   "saveAndMarkSuspect": "Save and mark links suspect",
@@ -905,8 +899,6 @@
   "organizationScopeLabel": "Organization",
   "workspaceScope": "Workspace",
   "workspaces": "Workspaces",
-  "projects": "Projects",
-  "documents": "Documents",
   "restrictedDocuments": "Restricted documents",
   "roleDistribution": "Role distribution",
   "governanceStatus": "Governance status",
@@ -918,7 +910,6 @@
   "auditLogHelp": "Review recent administration and content operations across the organization in chronological order.",
   "noAuditEvents": "There are no audit events yet.",
   "createUser": "Create user",
-  "displayName": "Display name",
   "role": "Role",
   "usersAndRoles": "Users and roles",
   "usersAndRolesDescription": "Activate accounts and assign organization responsibilities.",
@@ -928,7 +919,14 @@
   "removeUser": "Remove user",
   "removeUserConfirm": "Remove {{name}} from this organization?",
   "operationFailed": "The operation failed. Review the entered information.",
-  "adminRole": { "organization_admin": "Organization administrator", "workspace_admin": "Workspace administrator", "project_manager": "Project manager", "editor": "Editor", "reviewer": "Reviewer", "viewer": "Viewer" },
+  "adminRole": {
+    "organization_admin": "Organization administrator",
+    "workspace_admin": "Workspace administrator",
+    "project_manager": "Project manager",
+    "editor": "Editor",
+    "reviewer": "Reviewer",
+    "viewer": "Viewer"
+  },
   "documentPermissions": "File access",
   "restrictedDocument": "Restricted access list",
   "restrictedDocumentDescription": "Only administrators and listed users can open this file.",
@@ -941,7 +939,11 @@
   "grantAccess": "Grant access",
   "revokeAccess": "Revoke access",
   "noExplicitPermissions": "No file-specific permissions. Access is inherited from roles.",
-  "access": { "read": "View", "write": "Edit", "manage": "Manage" },
+  "access": {
+    "read": "View",
+    "write": "Edit",
+    "manage": "Manage"
+  },
   "fileAccessDenied": "You do not have permission to view this file",
   "fileAccessDeniedDescription": "Ask an administrator or the file owner to grant you access.",
   "readOnly": "Read only",
@@ -962,7 +964,13 @@
   "confirmImport": "Confirm import",
   "importing": "Importing...",
   "importCompleted": "Import completed",
-  "rowTypeLabel": { "heading": "Heading", "requirement": "Requirement", "test_case": "Test case", "test_step": "Test step", "note": "Note" },
+  "rowTypeLabel": {
+    "heading": "Heading",
+    "requirement": "Requirement",
+    "test_case": "Test case",
+    "test_step": "Test step",
+    "note": "Note"
+  },
   "importFinding": {
     "row_type_not_allowed": "Object type is not allowed in this document",
     "hierarchy_level_gap": "Hierarchy skips a parent level",
@@ -979,7 +987,13 @@
   "feedbackCategoryLabel": "Category",
   "feedbackTitle": "Short summary",
   "feedbackDescription": "What happened, what did you expect and how can it be reproduced?",
-  "feedbackCategory": { "bug": "Bug", "usability": "Usability", "data_migration": "Data migration", "performance": "Performance", "feature_request": "Feature request" },
+  "feedbackCategory": {
+    "bug": "Bug",
+    "usability": "Usability",
+    "data_migration": "Data migration",
+    "performance": "Performance",
+    "feature_request": "Feature request"
+  },
   "sendFeedback": "Send feedback",
   "pilotTelemetry": "Share limited pilot usage diagnostics",
   "pilotTelemetryHelp": "Off by default. When enabled, DocSys stores only allow-listed action names and limited technical values inside your organization. Document text, passwords, tokens and attachments are never included.",
@@ -993,13 +1007,34 @@
   "pilotChecklist": "Pilot setup checklist",
   "pilotChecklistHelp": "Prepare one controlled project for measurable day-to-day use.",
   "pilotChecklistItem": {
-    "roles": { "title": "Assign pilot roles", "description": "Name an administrator, author, tester and reviewer; verify Viewer access separately." },
-    "requirements": { "title": "Create the requirements document", "description": "Define the identifier prefix, headings and minimum required attributes." },
-    "tests": { "title": "Create the test document", "description": "Add repeatable test cases with actions and observable expected results." },
-    "migration": { "title": "Preview and validate source data", "description": "Use the migration preview; resolve hierarchy and duplicate-number findings before confirmation." },
-    "traceability": { "title": "Verify bidirectional traceability", "description": "Link representative requirements and test steps, then review coverage and suspect links." },
-    "baseline": { "title": "Publish the first baseline", "description": "Review release readiness, create version 1.0 and export the formal document." },
-    "backup": { "title": "Complete a restore drill", "description": "Create a checksum-verified backup and restore it into a temporary database." }
+    "roles": {
+      "title": "Assign pilot roles",
+      "description": "Name an administrator, author, tester and reviewer; verify Viewer access separately."
+    },
+    "requirements": {
+      "title": "Create the requirements document",
+      "description": "Define the identifier prefix, headings and minimum required attributes."
+    },
+    "tests": {
+      "title": "Create the test document",
+      "description": "Add repeatable test cases with actions and observable expected results."
+    },
+    "migration": {
+      "title": "Preview and validate source data",
+      "description": "Use the migration preview; resolve hierarchy and duplicate-number findings before confirmation."
+    },
+    "traceability": {
+      "title": "Verify bidirectional traceability",
+      "description": "Link representative requirements and test steps, then review coverage and suspect links."
+    },
+    "baseline": {
+      "title": "Publish the first baseline",
+      "description": "Review release readiness, create version 1.0 and export the formal document."
+    },
+    "backup": {
+      "title": "Complete a restore drill",
+      "description": "Create a checksum-verified backup and restore it into a temporary database."
+    }
   },
   "reviewStatus": {
     "draft": "Draft",
@@ -1098,7 +1133,11 @@
     "fromStatus": "Current status",
     "allowedTransitions": "Allowed next statuses",
     "requiredFields": "Required on entry",
-    "workflowFields": { "description": "Description", "assignee": "Assignee", "dueAt": "Due date" },
+    "workflowFields": {
+      "description": "Description",
+      "assignee": "Assignee",
+      "dueAt": "Due date"
+    },
     "workflowSaveError": "The workflow could not be saved. Check your permission or reload the latest version.",
     "order": "Order",
     "moveUp": "Move {{key}} up",
@@ -1158,10 +1197,35 @@
     "planName": "Plan name",
     "type": "Work item type",
     "descriptionLabel": "Description",
-    "types": { "epic": "Epic", "story": "Story", "task": "Task", "bug": "Defect", "risk": "Risk" },
-    "statuses": { "backlog": "To do", "ready": "Ready for test", "in_progress": "In progress", "in_review": "Code review", "done": "Done", "canceled": "Canceled" },
-    "priorities": { "lowest": "Lowest", "low": "Low", "medium": "Medium", "high": "High", "highest": "Highest", "critical": "Critical" },
-    "planStatuses": { "draft": "Draft", "active": "Active", "completed": "Completed", "canceled": "Canceled" },
+    "types": {
+      "epic": "Epic",
+      "story": "Story",
+      "task": "Task",
+      "bug": "Defect",
+      "risk": "Risk"
+    },
+    "statuses": {
+      "backlog": "To do",
+      "ready": "Ready for test",
+      "in_progress": "In progress",
+      "in_review": "Code review",
+      "done": "Done",
+      "canceled": "Canceled"
+    },
+    "priorities": {
+      "lowest": "Lowest",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "highest": "Highest",
+      "critical": "Critical"
+    },
+    "planStatuses": {
+      "draft": "Draft",
+      "active": "Active",
+      "completed": "Completed",
+      "canceled": "Canceled"
+    },
     "loading": "Loading…",
     "labels": "Labels",
     "labelsHelp": "Comma-separated labels",
@@ -1185,7 +1249,11 @@
     "searchDocuments": "Search documents",
     "selectedCount": "{{count}} selected",
     "noDocuments": "No linkable documents are available.",
-    "documentTypes": { "requirement": "Requirements document", "test": "Test document", "general_document": "General document" },
+    "documentTypes": {
+      "requirement": "Requirements document",
+      "test": "Test document",
+      "general_document": "General document"
+    },
     "loadingDashboard": "Loading dashboard",
     "loadingDashboardHelp": "Project work items, workflow and test metrics are being prepared.",
     "recentItems": "Recent work",
@@ -1234,6 +1302,9 @@
     "createInternalDefect": "Create internal defect",
     "internalDefectTitle": "Defect summary",
     "defectProject": "Defect project",
-    "internalDefectCreated": "Internal defect created"
+    "internalDefectCreated": "Internal defect created",
+    "backToList": "Back to work items",
+    "itemNotFound": "Work item not found",
+    "itemNotFoundHelp": "The work item key in the address does not exist in this workspace or you do not have access to it."
   }
 }

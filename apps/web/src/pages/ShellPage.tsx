@@ -505,7 +505,7 @@ export function ShellPage() {
           onOpenAdmin={() => setAdminOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
         />
-        {!effectiveSidebarCollapsed && (
+        {!effectiveSidebarCollapsed && view !== "work" && (
           <div className="flex flex-col overflow-hidden border-r border-border" style={{ width: treeWidth }}>
             <div className="flex min-h-12 items-center gap-2.5 border-b border-border/70 px-3">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
@@ -527,8 +527,6 @@ export function ShellPage() {
               {workspaceId &&
                 (view === "trash" ? (
                   <TrashPanel workspaceId={workspaceId} />
-                ) : view === "work" ? (
-                  <div className="p-4 text-xs leading-5 text-mutedForeground">{t("workHub.sidebarHelp")}</div>
                 ) : (
                   <TreePanel
                     workspaceId={workspaceId}
@@ -540,7 +538,7 @@ export function ShellPage() {
           </div>
         )}
       </aside>
-      {!effectiveSidebarCollapsed && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
+      {!effectiveSidebarCollapsed && view !== "work" && <ResizeHandle side="left" ariaLabel={t("resizeDocumentTree")} value={treeWidth} min={200} max={520} onResize={(dx) => setTreeWidth(treeWidth + dx)} />}
       <main id="main-content" tabIndex={-1} className="app-main-surface flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
         {tabs.length > 0 && view === "documents" && <DocumentTabsBar
           tabs={tabs}

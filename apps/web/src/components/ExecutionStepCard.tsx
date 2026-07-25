@@ -297,8 +297,8 @@ export function ExecutionStepCard({
               {step.status === "failed" &&
                 projects.data &&
                 projects.data.length > 0 && (
-                  <div className="space-y-1 rounded border border-danger/30 bg-danger/5 p-2">
-                    <div className="text-[11px] font-semibold text-danger">
+                  <div className="space-y-1 rounded border border-destructive/30 bg-destructive/5 p-2">
+                    <div className="text-[11px] font-semibold text-destructive">
                       {t("workHub.createInternalDefect")}
                     </div>
                     <select

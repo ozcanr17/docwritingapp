@@ -3,16 +3,23 @@ import {
   AlertCircle,
   Activity,
   ArrowDown,
+  ArrowLeft,
   ArrowRight,
   ArrowUp,
   Bug,
   Bookmark,
   BookmarkPlus,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ChevronsDown,
+  ChevronsUp,
   ClipboardList,
   Columns3,
+  Equal,
   ExternalLink,
   FolderPlus,
+  Layers,
   LayoutList,
   Link2,
   MessageSquare,
@@ -22,12 +29,14 @@ import {
   Settings2,
   ShieldAlert,
   SlidersHorizontal,
+  SquareCheckBig,
   Trash2,
   UserRound,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   api,
   ApiError,
@@ -48,6 +57,7 @@ import {
   WorkUser,
 } from "../lib/api";
 import { ModalSurface } from "./TransientSurface";
+import { Avatar, Button, Lozenge, LozengeAppearance } from "./ui";
 import { ManagedProject, ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { useWorkViewsStore, WorkViewTab } from "../stores/workViews";
 import { useToastStore } from "../stores/toasts";
@@ -83,7 +93,17 @@ export function WorkManagementPage({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.push);
-  const [tab, setTab] = useState<HubTab>("dashboard");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const segments = location.pathname.split("/").filter(Boolean);
+  const routeItemKey = segments[0] === "work" && segments[1] === "item" ? segments[2] ?? null : null;
+  const tab: HubTab = segments[1] === "list" ? "items" : segments[1] === "board" ? "board" : segments[1] === "plans" ? "plans" : "dashboard";
+  const setTab = useCallback((next: HubTab) => {
+    navigate(`/work/${next === "dashboard" ? "summary" : next === "items" ? "list" : next}`);
+  }, [navigate]);
+  useEffect(() => {
+    if (location.pathname === "/work" || location.pathname === "/work/") navigate("/work/summary", { replace: true });
+  }, [location.pathname, navigate]);
   const [query, setQuery] = useState("");
   const [mine, setMine] = useState(false);
   const [bugsOnly, setBugsOnly] = useState(false);
@@ -93,7 +113,6 @@ export function WorkManagementPage({
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [saveViewOpen, setSaveViewOpen] = useState(false);
   const [activeViewId, setActiveViewId] = useState("");
@@ -160,6 +179,35 @@ export function WorkManagementPage({
     queryFn: () => api<WorkDashboard>(`/projects/${activeProjectId}/work-dashboard`),
     enabled: activeProjectId !== null,
   });
+  const locationState = (location.state ?? null) as { workItemId?: string; from?: string } | null;
+  const keyLookup = useQuery({
+    queryKey: ["work-item-by-key", workspaceId, routeItemKey],
+    queryFn: async () => {
+      const code = routeItemKey?.split("-")[0] ?? "";
+      const project = projects.data?.find((candidate) => candidate.code === code);
+      const results = await api<WorkItemSummary[]>(
+        `/workspaces/${workspaceId}/work-items?${project ? `projectId=${project.id}&` : ""}q=${encodeURIComponent(routeItemKey ?? "")}`,
+      );
+      return results.find((candidate) => candidate.key === routeItemKey) ?? null;
+    },
+    enabled: routeItemKey !== null && !locationState?.workItemId && projects.isSuccess,
+  });
+  const routeItemId = routeItemKey ? locationState?.workItemId ?? keyLookup.data?.id ?? null : null;
+  const openItem = useCallback((item: { id: string; key: string }) => {
+    navigate(`/work/item/${item.key}`, { state: { workItemId: item.id, from: location.pathname } });
+  }, [location.pathname, navigate]);
+  const openItemById = useCallback((id: string) => {
+    const pool: WorkItemSummary[] = [
+      ...(items.data ?? []),
+      ...(dashboard.data?.myOpenBugs ?? []),
+      ...(dashboard.data?.recentItems ?? []),
+    ];
+    const found = pool.find((candidate) => candidate.id === id);
+    if (found) openItem(found);
+  }, [dashboard.data, items.data, openItem]);
+  const closeItem = useCallback(() => {
+    navigate(locationState?.from ?? "/work/summary");
+  }, [locationState?.from, navigate]);
   const refreshWork = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["work-items", workspaceId] }),
@@ -205,14 +253,6 @@ export function WorkManagementPage({
     onSuccess: refreshWork,
     onError: (error) => pushToast("error", userFacingError(error, t)),
   });
-  const counts = useMemo(
-    () => ({
-      open: dashboard.data?.metrics.open ?? 0,
-      bugs: dashboard.data?.metrics.myOpenBugCount ?? 0,
-      plans: dashboard.data?.metrics.activePlans ?? 0,
-    }),
-    [dashboard.data],
-  );
   const projectViews = views.filter((view) => view.projectId === activeProjectId);
   const applyView = (viewId: string) => {
     setActiveViewId(viewId);
@@ -230,156 +270,66 @@ export function WorkManagementPage({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-editorBackground">
-      <header className="border-b border-border bg-surface px-5 py-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold">{t("workHub.title")}</h1>
-            <p className="mt-1 text-sm text-mutedForeground">
-              {t("workHub.description")}
-            </p>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            {projects.data && projects.data.length > 0 && (
-              <label className="flex items-center gap-2 rounded-lg border border-border bg-editorBackground px-2">
-                <span className="sr-only">{t("workHub.activeProject")}</span>
-                <select
-                  data-testid="project-selector"
-                  className="max-w-52 bg-transparent py-2 text-sm outline-none"
-                  value={activeProjectId ?? ""}
-                  onChange={(event) => {
-                    setSelectedProjectId(event.target.value);
-                    setSelectedItemId(null);
-                    setSelectedPlanId(null);
-                  }}
-                >
-                  {projects.data.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.code} · {project.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <button
-              type="button"
-              data-testid="open-create-project"
-              className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
-              onClick={() => setCreateProjectOpen(true)}
-            >
-              <FolderPlus size={15} className="mr-1.5 inline" />
-              {t("workHub.newProject")}
-            </button>
-            {projectAccess.data?.canManage && (
-              <button
-                type="button"
-                data-testid="open-project-settings"
-                className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
-                onClick={() => setProjectSettingsOpen(true)}
+    <div className="flex min-h-0 flex-1 overflow-hidden bg-editorBackground">
+      <nav aria-label={t("workHub.navigation")} className="flex w-60 shrink-0 flex-col border-r border-border bg-surface">
+        <div className="space-y-2 border-b border-border/70 p-2.5">
+          {projects.data && projects.data.length > 0 && (
+            <label className="block">
+              <span className="sr-only">{t("workHub.activeProject")}</span>
+              <select
+                data-testid="project-selector"
+                className="w-full rounded-md border border-border bg-editorBackground px-2 py-2 text-sm outline-none"
+                value={activeProjectId ?? ""}
+                onChange={(event) => {
+                  setSelectedProjectId(event.target.value);
+                  setSelectedPlanId(null);
+                }}
               >
-                <Settings2 size={15} className="mr-1.5 inline" />
-                {t("workHub.projectSettings")}
-              </button>
-            )}
-            <button
-              type="button"
-              data-testid="open-workflow-editor"
-              className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
-              onClick={() => setWorkflowOpen(true)}
-              disabled={!workflow.data || !canManageActiveProject}
-            >
-              <Settings2 size={15} className="mr-1.5 inline" />
-              {t("workHub.workflow")}
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
-              onClick={() => setPlanOpen(true)}
-              disabled={!activeProjectId}
-            >
-              <ClipboardList size={15} className="mr-1.5 inline" />
-              {t("workHub.newPlan")}
-            </button>
-            <button
-              type="button"
-              data-testid="open-create-item"
-              className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primaryForeground hover:opacity-90"
-              onClick={() => setCreateOpen(true)}
-              disabled={!activeProjectId}
-            >
-              <Plus size={15} className="mr-1.5 inline" />
-              {t("workHub.newItem")}
-            </button>
-          </div>
+                {projects.data.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.code} · {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <Button
+            variant="primary"
+            className="w-full"
+            data-testid="open-create-item"
+            icon={<Plus size={15} />}
+            disabled={!activeProjectId}
+            onClick={() => setCreateOpen(true)}
+          >
+            {t("workHub.newItem")}
+          </Button>
         </div>
-        {(contextRowId || contextDocumentId) && (
-          <div className="mt-4 flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">
-            <Link2 size={14} />
-            {contextRowId
-              ? t("workHub.rowContext")
-              : t("workHub.documentContext")}
-          </div>
-        )}
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          <Metric
-            icon={<AlertCircle size={16} />}
-            label={t("workHub.openItems")}
-            value={counts.open}
-          />
-          <Metric
-            icon={<Bug size={16} />}
-            label={t("workHub.myOpenBugs")}
-            value={counts.bugs}
-            tone="danger"
-          />
-          <Metric
-            icon={<CheckCircle2 size={16} />}
-            label={t("workHub.activePlans")}
-            value={counts.plans}
-            tone="success"
-          />
+        <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
+          <WorkNavLink icon={<Activity size={15} />} label={t("workHub.dashboard")} active={!routeItemKey && tab === "dashboard"} onClick={() => setTab("dashboard")} testId="work-nav-summary" />
+          <WorkNavLink icon={<Columns3 size={15} />} label={t("workHub.board")} active={!routeItemKey && tab === "board"} onClick={() => setTab("board")} testId="work-nav-board" />
+          <WorkNavLink icon={<LayoutList size={15} />} label={t("workHub.list")} active={!routeItemKey && tab === "items"} onClick={() => setTab("items")} testId="work-nav-list" />
+          <WorkNavLink icon={<ClipboardList size={15} />} label={t("workHub.testPlans")} active={!routeItemKey && tab === "plans"} onClick={() => setTab("plans")} testId="work-nav-plans" />
         </div>
-      </header>
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2.5">
-        <div className="flex rounded-lg border border-border bg-editorBackground p-0.5">
-          <TabButton
-            active={tab === "dashboard"}
-            onClick={() => {
-              setTab("dashboard");
-              setActiveViewId("");
-            }}
-            icon={<Activity size={14} />}
-            label={t("workHub.dashboard")}
-          />
-          <TabButton
-            active={tab === "items"}
-            onClick={() => {
-              setTab("items");
-              setActiveViewId("");
-            }}
-            icon={<LayoutList size={14} />}
-            label={t("workHub.list")}
-          />
-          <TabButton
-            active={tab === "board"}
-            onClick={() => {
-              setTab("board");
-              setActiveViewId("");
-            }}
-            icon={<Columns3 size={14} />}
-            label={t("workHub.board")}
-          />
-          <TabButton
-            active={tab === "plans"}
-            onClick={() => {
-              setTab("plans");
-              setActiveViewId("");
-            }}
-            icon={<ClipboardList size={14} />}
-            label={t("workHub.testPlans")}
-          />
+        <div className="space-y-0.5 border-t border-border/70 p-2">
+          <WorkNavLink icon={<ClipboardList size={15} />} label={t("workHub.newPlan")} onClick={() => setPlanOpen(true)} disabled={!activeProjectId} />
+          <WorkNavLink icon={<Settings2 size={15} />} label={t("workHub.workflow")} onClick={() => setWorkflowOpen(true)} disabled={!workflow.data || !canManageActiveProject} testId="open-workflow-editor" />
+          {projectAccess.data?.canManage && (
+            <WorkNavLink icon={<Settings2 size={15} />} label={t("workHub.projectSettings")} onClick={() => setProjectSettingsOpen(true)} testId="open-project-settings" />
+          )}
+          <WorkNavLink icon={<FolderPlus size={15} />} label={t("workHub.newProject")} onClick={() => setCreateProjectOpen(true)} testId="open-create-project" />
         </div>
-        {tab !== "plans" && tab !== "dashboard" && (
+      </nav>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      {(contextRowId || contextDocumentId) && !routeItemKey && (
+        <div className="flex items-center gap-2 border-b border-border bg-primary/5 px-4 py-2 text-xs text-primary">
+          <Link2 size={14} />
+          {contextRowId
+            ? t("workHub.rowContext")
+            : t("workHub.documentContext")}
+        </div>
+      )}
+      {!routeItemKey && tab !== "plans" && tab !== "dashboard" && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2">
           <>
             <label className="relative min-w-56 flex-1">
               <Search
@@ -411,7 +361,7 @@ export function WorkManagementPage({
             <button
               type="button"
               aria-pressed={bugsOnly}
-              className={`rounded-lg border px-3 py-2 text-sm ${bugsOnly ? "border-danger bg-danger/10 text-danger" : "border-border"}`}
+              className={`rounded-lg border px-3 py-2 text-sm ${bugsOnly ? "border-danger bg-destructive/10 text-destructive" : "border-border"}`}
               onClick={() => {
                 setBugsOnly((value) => !value);
                 setActiveViewId("");
@@ -451,7 +401,7 @@ export function WorkManagementPage({
               <button
                 type="button"
                 data-testid="remove-work-view"
-                className="rounded-lg border border-border px-2.5 py-2 text-danger hover:bg-danger/10"
+                className="rounded-lg border border-border px-2.5 py-2 text-destructive hover:bg-destructive/10"
                 title={t("workHub.removeView")}
                 aria-label={t("workHub.removeView")}
                 onClick={() => {
@@ -463,9 +413,31 @@ export function WorkManagementPage({
               </button>
             )}
           </>
-        )}
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+        </div>
+      )}
+      {routeItemKey ? (
+        routeItemId ? (
+          <WorkItemView
+            workItemId={routeItemId}
+            workspaceId={workspaceId}
+            workflow={workflow.data}
+            onClose={closeItem}
+          />
+        ) : keyLookup.isFetching || !projects.isSuccess ? (
+          <div className="p-8 text-sm text-mutedForeground">{t("workHub.loading")}</div>
+        ) : (
+          <Empty
+            title={t("workHub.itemNotFound")}
+            detail={t("workHub.itemNotFoundHelp")}
+            action={
+              <Button variant="primary" className="mt-4" onClick={closeItem}>
+                {t("workHub.backToList")}
+              </Button>
+            }
+          />
+        )
+      ) : (
+      <div className={`min-h-0 flex-1 ${tab === "board" ? "overflow-x-auto overflow-y-hidden p-3" : "overflow-auto p-4"}`}>
         {projects.isLoading ? (
           <Empty title={t("workHub.loadingProjects")} detail={t("workHub.loadingProjectsHelp")} />
         ) : projects.isError ? (
@@ -491,7 +463,7 @@ export function WorkManagementPage({
             dashboard={dashboard.data}
             items={items.data ?? []}
             workflow={workflow.data}
-            onOpen={setSelectedItemId}
+            onOpen={openItemById}
             onMove={(item, targetStatus, anchorId, position) =>
               move.mutate({ item, targetStatus, anchorId, position })
             }
@@ -501,7 +473,7 @@ export function WorkManagementPage({
         ) : tab === "board" ? (
           <Board
             items={items.data ?? []}
-            onOpen={setSelectedItemId}
+            onOpen={openItemById}
             workflow={workflow.data}
             onMove={(item, targetStatus, anchorId, position) =>
               move.mutate({ item, targetStatus, anchorId, position })
@@ -510,7 +482,7 @@ export function WorkManagementPage({
         ) : (
           <ItemList
             items={items.data ?? []}
-            onOpen={setSelectedItemId}
+            onOpen={openItemById}
             workflow={workflow.data}
             onStatus={(item, status) => update.mutate({ item, status })}
             onMove={(item, anchorId, position) =>
@@ -523,6 +495,8 @@ export function WorkManagementPage({
             }
           />
         )}
+      </div>
+      )}
       </div>
       {createOpen && activeProjectId && (
         <CreateItemDialog
@@ -556,7 +530,6 @@ export function WorkManagementPage({
           }}
           onProjectArchived={(projectId) => {
             setSelectedProjectId((current) => current === projectId ? null : current);
-            setSelectedItemId(null);
             setSelectedPlanId(null);
           }}
           onClose={() => setProjectSettingsOpen(false)}
@@ -573,14 +546,6 @@ export function WorkManagementPage({
           projectId={activeProjectId}
           workflow={workflow.data}
           onClose={() => setWorkflowOpen(false)}
-        />
-      )}
-      {selectedItemId && (
-        <WorkItemDetailDialog
-          workItemId={selectedItemId}
-          workspaceId={workspaceId}
-          workflow={workflow.data}
-          onClose={() => setSelectedItemId(null)}
         />
       )}
       {selectedPlanId && activeProjectId && (
@@ -695,7 +660,7 @@ function Metric({
       <span
         className={
           tone === "danger"
-            ? "text-danger"
+            ? "text-destructive"
             : tone === "success"
               ? "text-success"
               : "text-primary"
@@ -711,25 +676,34 @@ function Metric({
   );
 }
 
-function TabButton({
-  active,
-  onClick,
+function WorkNavLink({
   icon,
   label,
+  active = false,
+  disabled = false,
+  onClick,
+  testId,
 }: {
-  active: boolean;
-  onClick: () => void;
   icon: React.ReactNode;
   label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  testId?: string;
 }) {
   return (
     <button
       type="button"
-      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ${active ? "bg-surface text-primary shadow-sm" : "text-mutedForeground"}`}
+      data-testid={testId}
+      disabled={disabled}
+      aria-current={active ? "page" : undefined}
+      className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm outline-none transition-colors disabled:pointer-events-none disabled:opacity-40 ${
+        active ? "bg-primary/10 font-medium text-primary" : "text-foreground/80 hover:bg-muted hover:text-foreground"
+      }`}
       onClick={onClick}
     >
-      {icon}
-      {label}
+      <span aria-hidden="true" className={active ? "text-primary" : "text-mutedForeground"}>{icon}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>
   );
 }
@@ -754,9 +728,14 @@ function WorkDashboardView({
   if (!dashboard) return <Empty title={t("workHub.loadingDashboard")} detail={t("workHub.loadingDashboardHelp")} />;
   return (
     <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Metric icon={<AlertCircle size={16} />} label={t("workHub.openItems")} value={dashboard.metrics.open} />
+        <Metric icon={<Bug size={16} />} label={t("workHub.myOpenBugs")} value={dashboard.metrics.myOpenBugCount} tone="danger" />
+        <Metric icon={<CheckCircle2 size={16} />} label={t("workHub.activePlans")} value={dashboard.metrics.activePlans} tone="success" />
+      </div>
       <RoleFocusSummary focus={workspaceFocus} metrics={dashboard.metrics} />
       <div className="grid gap-4 xl:grid-cols-3">
-        <DashboardCard title={t("workHub.myOpenBugs")} icon={<Bug size={17} className="text-danger" />}>
+        <DashboardCard title={t("workHub.myOpenBugs")} icon={<Bug size={17} className="text-destructive" />}>
           <DashboardItemList items={dashboard.myOpenBugs} empty={t("workHub.noMyOpenBugs")} onOpen={onOpen} />
         </DashboardCard>
         <DashboardCard title={t("workHub.recentItems")} icon={<ClipboardList size={17} className="text-primary" />}>
@@ -903,7 +882,7 @@ function DashboardItemList({ items, empty, onOpen }: { items: WorkItemSummary[];
 }
 
 function DashboardMetric({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "success" | "warning" | "danger" }) {
-  const toneClass = tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : tone === "danger" ? "text-danger" : "text-foreground";
+  const toneClass = tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : tone === "danger" ? "text-destructive" : "text-foreground";
   return (
     <div className="rounded-lg bg-editorBackground p-3">
       <div className="text-[11px] text-mutedForeground">{label}</div>
@@ -978,37 +957,44 @@ function ItemList({
                   </button>
                 </span>
               </td>
-              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-primary">
-                {item.key}
-              </td>
-              <td className="min-w-64 px-4 py-3">
-                <div className="flex items-center gap-2">
+              <td className="whitespace-nowrap px-4 py-2.5">
+                <span className="inline-flex items-center gap-2">
                   <TypeIcon type={item.type} />
+                  <span className="font-mono text-xs text-primary">{item.key}</span>
+                </span>
+              </td>
+              <td className="min-w-64 px-4 py-2.5">
+                <div className="flex items-center gap-2">
                   <span className="font-medium">{item.title}</span>
-                </div>
-                <div className="mt-1 flex gap-3 text-xs text-mutedForeground">
                   {item._count.artifactLinks > 0 && (
-                    <span>
-                      <Link2 size={11} className="mr-1 inline" />
+                    <span className="text-xs text-mutedForeground">
+                      <Link2 size={11} className="mr-0.5 inline" />
                       {item._count.artifactLinks}
                     </span>
                   )}
                   {item._count.comments > 0 && (
-                    <span>
-                      <MessageSquare size={11} className="mr-1 inline" />
+                    <span className="text-xs text-mutedForeground">
+                      <MessageSquare size={11} className="mr-0.5 inline" />
                       {item._count.comments}
                     </span>
                   )}
                 </div>
               </td>
-              <td className="px-4 py-3">
+              <td className="whitespace-nowrap px-4 py-2.5">
                 <PriorityBadge priority={item.priority} />
               </td>
-              <td className="px-4 py-3 text-mutedForeground">
-                {item.assignee?.displayName ?? t("workHub.unassigned")}
+              <td className="whitespace-nowrap px-4 py-2.5">
+                {item.assignee ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-foreground/80">
+                    <Avatar name={item.assignee.displayName} size="xs" />
+                    {item.assignee.displayName}
+                  </span>
+                ) : (
+                  <span className="text-xs text-mutedForeground">{t("workHub.unassigned")}</span>
+                )}
               </td>
               <td
-                className="px-4 py-3"
+                className="whitespace-nowrap px-4 py-2.5"
                 onClick={(event) => event.stopPropagation()}
               >
                 <StatusSelect item={item} workflow={workflow} onStatus={onStatus} />
@@ -1037,35 +1023,36 @@ function Board({
   const { t } = useTranslation();
   const [draggedId, setDraggedId] = useState<string | null>(null);
   return (
-    <div className={`grid grid-cols-5 gap-3 ${embedded ? "min-w-[1120px]" : "min-w-[980px]"}`}>
-      {statuses.map((status) => (
+    <div className={`grid grid-cols-5 gap-2.5 ${embedded ? "min-w-[1120px]" : "h-full min-w-[1020px]"}`}>
+      {statuses.map((status) => {
+        const columnItems = items.filter((item) => item.status === status);
+        return (
         <section
           key={status}
-          className="rounded-xl border border-border bg-surface"
+          data-testid={`board-column-${status}`}
+          className={`flex min-h-0 flex-col rounded-lg border border-border/70 bg-surfaceSubtle ${embedded ? "" : "h-full"}`}
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
             event.preventDefault();
             const item = items.find((candidate) => candidate.id === draggedId);
-            const targetItems = items.filter((candidate) => candidate.status === status && candidate.id !== draggedId);
+            const targetItems = columnItems.filter((candidate) => candidate.id !== draggedId);
             const anchor = targetItems.at(-1);
             if (item && (item.status === status || allowedStatuses(item, workflow).includes(status))) onMove(item, status, anchor?.id ?? null, "after");
             setDraggedId(null);
           }}
         >
-          <header className="flex items-center justify-between border-b border-border px-3 py-2.5 text-xs font-semibold uppercase tracking-wide">
+          <header className="flex shrink-0 items-center justify-between px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-mutedForeground">
             <span>{t(`workHub.statuses.${status}`)}</span>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-mutedForeground">
-              {items.filter((item) => item.status === status).length}
+            <span className="rounded-full bg-muted px-2 py-0.5 tabular-nums">
+              {columnItems.length}
             </span>
           </header>
-          <div className="space-y-2 p-2">
-            {items
-              .filter((item) => item.status === status)
-              .map((item) => (
+          <div className={`space-y-1.5 px-1.5 pb-1.5 ${embedded ? "" : "min-h-0 flex-1 overflow-y-auto"}`}>
+            {columnItems.map((item) => (
                 <article
                   key={item.id}
                   draggable
-                  className="cursor-grab rounded-lg border border-border bg-editorBackground p-3 shadow-sm hover:border-primary/50 active:cursor-grabbing"
+                  className="cursor-grab rounded-md border border-border bg-surface p-2.5 shadow-sm transition-colors hover:border-primary/50 active:cursor-grabbing"
                   onDragStart={(event) => {
                     setDraggedId(item.id);
                     event.dataTransfer.effectAllowed = "move";
@@ -1081,24 +1068,31 @@ function Board({
                   }}
                   onClick={() => onOpen(item.id)}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-[11px] text-primary">
-                      {item.key}
-                    </span>
-                    <TypeIcon type={item.type} />
-                  </div>
-                  <div className="mt-2 text-sm font-medium leading-5">
+                  <div className="text-sm font-medium leading-5">
                     {item.title}
                   </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <PriorityBadge priority={item.priority} />
-                    <span className="text-[10px] text-mutedForeground">{item.assignee?.displayName ?? t("workHub.unassigned")}</span>
+                  <div className="mt-2.5 flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <TypeIcon type={item.type} />
+                      <span className="truncate font-mono text-[11px] text-primary">{item.key}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <PriorityIcon priority={item.priority} />
+                      {item.assignee ? (
+                        <Avatar name={item.assignee.displayName} size="xs" />
+                      ) : (
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-borderStrong text-mutedForeground" title={t("workHub.unassigned")} aria-label={t("workHub.unassigned")}>
+                          <UserRound size={11} />
+                        </span>
+                      )}
+                    </span>
                   </div>
                 </article>
               ))}
           </div>
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1165,11 +1159,20 @@ function StatusSelect({
   workflow?: WorkItemWorkflow;
 }) {
   const { t } = useTranslation();
+  const toneClasses: Record<WorkItemStatus, string> = {
+    backlog: "border-border bg-muted text-foreground/80",
+    ready: "border-info/30 bg-info/10 text-info",
+    in_progress: "border-primary/30 bg-primary/10 text-primary",
+    in_review: "border-warning/35 bg-warning/12 text-warning",
+    done: "border-success/30 bg-success/10 text-success",
+    canceled: "border-border bg-muted text-mutedForeground",
+  };
   return (
     <select
       value={item.status}
+      data-status={item.status}
       onChange={(event) => onStatus(item, event.target.value as WorkItemStatus)}
-      className="rounded-lg border border-border bg-editorBackground px-2 py-1.5 text-xs"
+      className={`rounded-md border px-2 py-1 text-xs font-semibold ${toneClasses[item.status]}`}
     >
       {[item.status, ...allowedStatuses(item, workflow)].filter((status, index, values) => values.indexOf(status) === index).map((status) => (
         <option key={status} value={status}>
@@ -1191,23 +1194,61 @@ function allowedStatuses(item: WorkItemSummary, workflow?: WorkItemWorkflow) {
   });
 }
 
-function TypeIcon({ type }: { type: WorkItemType }) {
-  return type === "bug" ? (
-    <Bug size={14} className="shrink-0 text-danger" />
+function TypeIcon({ type, size = 14 }: { type: WorkItemType; size?: number }) {
+  const { t } = useTranslation();
+  const label = t(`workHub.types.${type}`);
+  const icon = type === "bug" ? (
+    <Bug size={size} className="text-destructive" />
   ) : type === "risk" ? (
-    <ShieldAlert size={14} className="shrink-0 text-warning" />
+    <ShieldAlert size={size} className="text-warning" />
+  ) : type === "epic" ? (
+    <Layers size={size} className="text-[#8250DF]" />
+  ) : type === "story" ? (
+    <Bookmark size={size} className="text-[#1F845A]" />
   ) : (
-    <ClipboardList size={14} className="shrink-0 text-primary" />
+    <SquareCheckBig size={size} className="text-[#1868DB]" />
   );
+  return <span role="img" aria-label={label} title={label} className="inline-flex shrink-0 items-center">{icon}</span>;
+}
+
+function PriorityIcon({ priority, size = 14 }: { priority: WorkItemPriority; size?: number }) {
+  const { t } = useTranslation();
+  const label = t(`workHub.priorities.${priority}`);
+  const icon = priority === "critical" ? (
+    <ChevronsUp size={size} className="text-[#AE2E24]" />
+  ) : priority === "highest" ? (
+    <ChevronsUp size={size} className="text-destructive" />
+  ) : priority === "high" ? (
+    <ChevronUp size={size} className="text-[#E56910]" />
+  ) : priority === "low" ? (
+    <ChevronDown size={size} className="text-info" />
+  ) : priority === "lowest" ? (
+    <ChevronsDown size={size} className="text-info" />
+  ) : (
+    <Equal size={size} className="text-mutedForeground" />
+  );
+  return <span role="img" aria-label={label} title={label} className="inline-flex shrink-0 items-center">{icon}</span>;
+}
+
+const statusAppearances: Record<WorkItemStatus, LozengeAppearance> = {
+  backlog: "neutral",
+  ready: "info",
+  in_progress: "primary",
+  in_review: "warning",
+  done: "success",
+  canceled: "neutral",
+};
+
+function StatusLozenge({ status }: { status: WorkItemStatus }) {
+  const { t } = useTranslation();
+  return <Lozenge appearance={statusAppearances[status]}>{t(`workHub.statuses.${status}`)}</Lozenge>;
 }
 
 function PriorityBadge({ priority }: { priority: WorkItemPriority }) {
   const { t } = useTranslation();
-  const danger = ["critical", "highest", "high"].includes(priority);
   return (
-    <span
-      className={`rounded-full px-2 py-1 text-[11px] font-medium ${danger ? "bg-danger/10 text-danger" : "bg-muted text-mutedForeground"}`}
-    >
+    <span className="inline-flex items-center gap-1.5 text-xs text-foreground/80">
+      <PriorityIcon priority={priority} />
       {t(`workHub.priorities.${priority}`)}
     </span>
   );
@@ -1342,7 +1383,7 @@ function CreateProjectDialog({
         <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-mutedForeground">
           {t("workHub.projectCreationHelp")}
         </div>
-        {create.isError && <p role="alert" className="text-sm text-danger">{t(errorKey)}</p>}
+        {create.isError && <p role="alert" className="text-sm text-destructive">{t(errorKey)}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button>
           <button
@@ -1541,7 +1582,7 @@ function WorkflowDialog({
           </tbody>
         </table>
       </div>
-      {save.isError && <p role="alert" className="mt-3 text-sm text-danger">{t("workHub.workflowSaveError")}</p>}
+      {save.isError && <p role="alert" className="mt-3 text-sm text-destructive">{t("workHub.workflowSaveError")}</p>}
       <div className="mt-4 flex justify-end gap-2">
         <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button>
         <button type="button" data-testid="save-workflow" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primaryForeground disabled:opacity-50" disabled={save.isPending} onClick={() => save.mutate()}>{t("save")}</button>
@@ -1813,8 +1854,8 @@ function CreateItemDialog({
               role="tabpanel"
               className="mx-auto max-w-2xl space-y-4"
             >
-              <div className="rounded-xl border border-danger/25 bg-danger/5 p-4">
-                <h3 className="text-sm font-semibold text-danger">
+              <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-4">
+                <h3 className="text-sm font-semibold text-destructive">
                   {t("workHub.qaDetails")}
                 </h3>
                 <p className="mt-1 text-xs leading-5 text-mutedForeground">
@@ -1972,7 +2013,7 @@ function CreateItemDialog({
           {create.isError && (
             <p
               role="alert"
-              className="absolute bottom-16 left-5 right-5 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger shadow-lg"
+              className="absolute bottom-16 left-5 right-5 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive shadow-lg"
             >
               {t("workHub.createItemError")}
             </p>
@@ -2061,7 +2102,7 @@ function CreatePlanDialog({
   );
 }
 
-function WorkItemDetailDialog({
+function WorkItemView({
   workItemId,
   workspaceId,
   workflow,
@@ -2176,17 +2217,38 @@ function WorkItemDetailDialog({
   const item = detail.data;
   const linkedDocumentIds = new Set(item?.artifactLinks.flatMap((link) => link.document ? [link.document.id] : []) ?? []);
   return (
-    <DialogFrame
-      title={item ? `${item.key} - ${item.title}` : t("workHub.loading")}
-      onClose={onClose}
-      wide
-    >
+    <div data-testid="work-item-page" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface">
+      <header className="flex min-h-12 shrink-0 items-center gap-2.5 border-b border-border px-4 py-2">
+        <button
+          type="button"
+          data-testid="work-item-back"
+          aria-label={t("workHub.backToList")}
+          title={t("workHub.backToList")}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-mutedForeground hover:bg-muted hover:text-foreground"
+          onClick={onClose}
+        >
+          <ArrowLeft size={16} />
+        </button>
+        {item ? (
+          <>
+            <TypeIcon type={item.type} size={15} />
+            <span className="shrink-0 font-mono text-xs text-primary">{item.key}</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.title}</span>
+            <StatusLozenge status={item.status} />
+            <PriorityIcon priority={item.priority} />
+            {item.assignee && <Avatar name={item.assignee.displayName} size="sm" />}
+          </>
+        ) : (
+          <span className="text-sm text-mutedForeground">{t("workHub.loading")}</span>
+        )}
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
       {!item ? (
         <div className="py-12 text-center text-sm text-mutedForeground">
           {t("workHub.loading")}
         </div>
       ) : (
-        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t("workHub.type")}>
@@ -2217,9 +2279,9 @@ function WorkItemDetailDialog({
               />
             </Field>
             {type === "bug" && (
-              <section className="space-y-3 rounded-xl border border-danger/25 bg-danger/5 p-4">
+              <section className="space-y-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-danger">{t("workHub.qaDetails")}</h3>
+                  <h3 className="text-sm font-semibold text-destructive">{t("workHub.qaDetails")}</h3>
                   <p className="mt-1 text-xs text-mutedForeground">{t("workHub.qaDetailsHelp")}</p>
                 </div>
                 <Field label={t("workHub.stepsToReproduce")}>
@@ -2294,7 +2356,7 @@ function WorkItemDetailDialog({
                 />
               </Field>
             </div>
-            {save.isError && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{t("workHub.saveItemError")}</p>}
+            {save.isError && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{t("workHub.saveItemError")}</p>}
             <div className="flex justify-end">
               <button
                 type="button"
@@ -2428,7 +2490,7 @@ function WorkItemDetailDialog({
                   <Link2 size={13} className="mr-1.5 inline" />
                   {t("workHub.linkDocuments")}
                 </button>
-                {linkDocuments.isError && <p role="alert" className="mt-2 text-xs text-danger">{t("workHub.linkDocumentsError")}</p>}
+                {linkDocuments.isError && <p role="alert" className="mt-2 text-xs text-destructive">{t("workHub.linkDocumentsError")}</p>}
               </div>
             </section>
             <section className="rounded-xl border border-border p-4">
@@ -2464,7 +2526,8 @@ function WorkItemDetailDialog({
           </aside>
         </div>
       )}
-    </DialogFrame>
+      </div>
+    </div>
   );
 }
 
@@ -2654,7 +2717,7 @@ function TestPlanDetailDialog({
                       type="button"
                       title={t("workHub.removeFromPlan")}
                       onClick={() => remove.mutate(item.id)}
-                      className="rounded-lg p-2 text-danger hover:bg-danger/10"
+                      className="rounded-lg p-2 text-destructive hover:bg-destructive/10"
                     >
                       <Trash2 size={14} />
                     </button>
