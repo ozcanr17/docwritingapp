@@ -114,9 +114,9 @@ Gercek pilot degerlendirmesi, mevcut arayuzun Jira ve DOORS sinifi ticari urun b
 
 ### Faz 3 - DOORS seviyesinde dokuman alani
 
-- [ ] Guclendirilmis sabit tablo basligi, sutun genislik yonetimi ve olu bosluk temizligi.
-- [ ] Buyuk dokumanlar icin tablo yaninda modul ana hatti (bolum icindekiler paneli).
-- [ ] Ayrinti panelini alan blogu (durum, tur, tarihce) ve etkinlik akisi olarak yeniden kurmak.
+- [x] Guclendirilmis sabit tablo basligi: tiklanarak artan/azalan/temiz siralama, gorunur siralama oku, `aria-sort`; baslik ve satirlar artik tum genisligi kaplayarak olu boslugu kaldiriyor.
+- [x] Buyuk dokumanlar icin tablo yaninda modul ana hatti: acilir Icindekiler paneli basliklari hiyerarsik listeler, secim satiri secip sanal listede ortalar, kapali atalari otomatik acar; tercih cihazda kalicidir.
+- [x] Ayrinti paneli Icerik sekmesinin basina yapilandirilmis alan blogu eklendi: ID, tur, gereksinim no, durum, surum ve dokuman.
 
 ### Faz 4 - Rotali ayarlar/yonetim ve cila
 

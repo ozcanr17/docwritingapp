@@ -1305,5 +1305,10 @@
     "backToList": "İş kayıtlarına dön",
     "itemNotFound": "İş kaydı bulunamadı",
     "itemNotFoundHelp": "Adresteki iş kaydı anahtarı bu çalışma alanında yok veya erişiminiz bulunmuyor."
-  }
+  },
+  "requirementNo": "Gereksinim No",
+  "version": "Sürüm",
+  "moduleOutline": "İçindekiler",
+  "moduleOutlineEmpty": "Bu dokümanda henüz bölüm yok. Başlık ekledikçe burada görünür.",
+  "untitledSection": "Adsız bölüm"
 }

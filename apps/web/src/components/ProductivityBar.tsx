@@ -1,4 +1,4 @@
-import { ChevronsDown, ChevronsUp, CornerDownRight, Ellipsis, FilePlus2, Filter, IndentDecrease, IndentIncrease, LayoutDashboard, Layers3, Link2, ListPlus, PanelRightOpen, Plus, Redo2, Replace, Save, Search, SlidersHorizontal, Trash2, Undo2, X } from "lucide-react";
+import { ChevronsDown, ChevronsUp, CornerDownRight, Ellipsis, FilePlus2, Filter, IndentDecrease, IndentIncrease, LayoutDashboard, Layers3, Link2, ListPlus, ListTree, PanelRightOpen, Plus, Redo2, Replace, Save, Search, SlidersHorizontal, Trash2, Undo2, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -48,6 +48,8 @@ interface ProductivityBarProps {
   onAdvancedFilterChange: (config: AdvancedFilterConfig) => void;
   onToggleFindReplace: () => void;
   onToggleTemplates: () => void;
+  onToggleOutline: () => void;
+  outlineActive: boolean;
   advancedTargetId?: string;
   showAdvancedControls?: boolean;
   undoDisabled: boolean;
@@ -106,6 +108,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
     setOverflowMenu({ x: bounds.right - 220, y: bounds.bottom + 4, items });
   };
   const advancedOverflowItems: MenuItem[] = [
+    { key: "outline", label: t("moduleOutline"), onSelect: props.onToggleOutline },
     { key: "find-replace", label: t("findReplace"), shortcut: "Ctrl/Cmd+H", onSelect: props.onToggleFindReplace },
     { key: "templates", label: t("templateLibrary"), onSelect: props.onToggleTemplates },
     { key: "sort-direction", label: props.sortDirection === "asc" ? "A-Z" : "Z-A", onSelect: () => props.onSortChange(props.sortKey, props.sortDirection === "asc" ? "desc" : "asc") },
@@ -146,6 +149,7 @@ export function ProductivityBar(props: ProductivityBarProps) {
       >
         <Filter size={13} /><span className="hidden 2xl:inline">{t("filters")}</span>{props.advancedFilter.conditions.length > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primaryForeground">{props.advancedFilter.conditions.length}</span>}
       </button>
+      <button data-testid="toggle-outline" className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 hover:bg-muted ${props.outlineActive ? "border-primary/40 bg-primary/10 text-primary" : "border-border"}`} title={t("moduleOutline")} aria-pressed={props.outlineActive} onClick={props.onToggleOutline}><ListTree size={13} /><span className="hidden 2xl:inline">{t("moduleOutline")}</span></button>
       <button data-testid="find-replace-toggle" className="docsys-advanced-secondary flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2 py-1.5 hover:bg-muted" title={`${t("findReplace")} · Ctrl/Cmd+H`} onClick={props.onToggleFindReplace}><Replace size={13} /><span className="hidden 2xl:inline">{t("findReplace")}</span></button>
       <button data-testid="template-library-toggle" className="docsys-advanced-secondary flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2 py-1.5 hover:bg-muted" title={t("templateLibrary")} onClick={props.onToggleTemplates}><Layers3 size={13} /><span className="hidden 2xl:inline">{t("templates")}</span></button>
       <select

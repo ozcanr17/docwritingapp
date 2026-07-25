@@ -1,6 +1,6 @@
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDown, ChevronRight, Link2, Settings2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Link2, Settings2, Trash2, X } from "lucide-react";
 import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, CustomFieldType, DashboardSummary, DocumentTemplateSummary, DocumentType, FieldDefinition, OutlineRow, SavedView } from "../lib/api";
@@ -26,6 +26,8 @@ import { ShortcutCommandId } from "../lib/keyboardShortcuts";
 import { EditImpactDialog } from "./EditImpactDialog";
 import { useEscapeClose } from "../hooks/useEscapeClose";
 import { useSaveStatusStore } from "../stores/saveStatus";
+import { useLayoutStore } from "../stores/layout";
+import { DocumentOutlinePanel } from "./DocumentOutlinePanel";
 import { userFacingError } from "../lib/userFacingError";
 import { ModalSurface } from "./TransientSurface";
 
@@ -141,6 +143,8 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const redoCount = useEditHistoryStore((s) => s.documents[documentId]?.redo.length ?? 0);
   const historyBusy = useEditHistoryStore((s) => Boolean(s.busy[documentId]));
   const rowDensity = useAuthoringPreferencesStore((s) => s.rowDensity);
+  const outlineVisible = useLayoutStore((s) => s.outlineVisible);
+  const toggleOutline = useLayoutStore((s) => s.toggleOutline);
   const showHierarchyGuides = useAuthoringPreferencesStore((s) => s.showHierarchyGuides);
   const showChangeIndicators = useAuthoringPreferencesStore((s) => s.showChangeIndicators);
   const spellCheck = useAuthoringPreferencesStore((s) => s.spellCheck);
@@ -185,6 +189,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
   const [rowTypeFilter, setRowTypeFilter] = useState<OutlineRow["rowType"] | "">("");
   const [sortKey, setSortKey] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [outlineScrollTarget, setOutlineScrollTarget] = useState<string | null>(null);
   const [viewVisibleColumns, setViewVisibleColumns] = useState<string[] | null>(null);
   const [viewFrozenColumns, setViewFrozenColumns] = useState<string[] | null>(null);
   const [linkProjection, setLinkProjection] = useState({
@@ -995,6 +1000,26 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
     setEditing(null);
   };
 
+  const jumpToOutlineRow = (row: OutlineRow) => {
+    const byId = new Map(rows.map((candidate) => [candidate.id, candidate]));
+    const ancestors = new Set<string>();
+    let parentId = row.parentId;
+    while (parentId) {
+      ancestors.add(parentId);
+      parentId = byId.get(parentId)?.parentId ?? null;
+    }
+    setCollapsedRowIds((current) => current.filter((id) => !ancestors.has(id)));
+    selectOnly(row.id);
+    setOutlineScrollTarget(row.id);
+  };
+
+  useEffect(() => {
+    if (!outlineScrollTarget) return;
+    const index = displayedRows.findIndex((candidate) => candidate.id === outlineScrollTarget);
+    if (index >= 0) virtualizer.scrollToIndex(index, { align: "center" });
+    setOutlineScrollTarget(null);
+  }, [displayedRows, outlineScrollTarget, virtualizer]);
+
   if (isLoading) {
     return <div className="p-6 text-sm text-mutedForeground">{t("loading")}</div>;
   }
@@ -1050,6 +1075,8 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
         onAdvancedFilterChange={setAdvancedFilter}
         onToggleFindReplace={() => setFindReplaceOpen((current) => !current)}
         onToggleTemplates={() => setTemplateLibraryOpen((current) => !current)}
+        onToggleOutline={toggleOutline}
+        outlineActive={outlineVisible}
         advancedTargetId={advancedTargetId}
         showAdvancedControls={showAdvancedControls}
         undoDisabled={undoCount === 0 || historyBusy}
@@ -1103,6 +1130,15 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
           </button>
         </div>
       )}
+      <div className="flex min-h-0 flex-1">
+      {outlineVisible && (
+        <DocumentOutlinePanel
+          rows={rows}
+          selectedRowId={selectedRowId}
+          onSelect={jumpToOutlineRow}
+          onClose={toggleOutline}
+        />
+      )}
       <div
         ref={scrollRef}
         data-testid="document-grid-scroll"
@@ -1141,8 +1177,8 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
       >
         <div
           role="row"
-          className="sticky top-0 z-10 grid gap-2 border-b border-border bg-surface/95 px-4 text-xs font-medium uppercase tracking-wide text-mutedForeground backdrop-blur-xl"
-          style={{ gridTemplateColumns: gridTemplate, width: gridWidth }}
+          className="sticky top-0 z-10 grid gap-2 border-b border-borderStrong/60 bg-surface/95 px-3 text-xs font-semibold uppercase tracking-wide text-mutedForeground backdrop-blur-xl"
+          style={{ gridTemplateColumns: gridTemplate, width: gridWidth, minWidth: "100%" }}
         >
           {columns.map((column) => {
             const frozenLeft = frozenOffsets.get(column.key);
@@ -1160,10 +1196,23 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
               }}
             >
               <button
-                className="min-w-0 flex-1 truncate text-left"
+                className="flex min-w-0 flex-1 items-center gap-1 truncate text-left hover:text-foreground"
                 title={t("columnContextMenuHint")}
+                aria-sort={sortKey === column.key ? (sortDirection === "asc" ? "ascending" : "descending") : undefined}
+                onClick={() => {
+                  if (sortKey !== column.key) {
+                    setSortKey(column.key);
+                    setSortDirection("asc");
+                  } else if (sortDirection === "asc") {
+                    setSortDirection("desc");
+                  } else {
+                    setSortKey("");
+                    setSortDirection("asc");
+                  }
+                }}
               >
-                {column.kind === "custom" ? column.labelKey : t(column.labelKey)}
+                <span className="min-w-0 truncate">{column.kind === "custom" ? column.labelKey : t(column.labelKey)}</span>
+                {sortKey === column.key && (sortDirection === "asc" ? <ArrowUp size={11} className="shrink-0 text-primary" /> : <ArrowDown size={11} className="shrink-0 text-primary" />)}
               </button>
               <div
                 role="separator"
@@ -1191,7 +1240,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
             {t("emptyDocument")}
           </div>
         ) : (
-          <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: gridWidth }}>
+          <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: gridWidth, minWidth: "100%" }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const row = displayedRows[virtualRow.index];
               if (!row) return null;
@@ -1227,6 +1276,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
                     transform: `translateY(${virtualRow.start}px)`,
                     gridTemplateColumns: gridTemplate,
                     width: gridWidth,
+                    minWidth: "100%",
                     zIndex: isEditingRow ? 20 : isPrimarySelection ? 2 : isSelected ? 1 : 0,
                     fontSize: documentFontSize,
                     fontFamily: documentFontFamilies[documentFontFamily],
@@ -1340,6 +1390,7 @@ export function DocumentGrid({ documentId, documentType, advancedTargetId, showA
             })}
           </div>
         )}
+      </div>
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
       {linkPreview && (

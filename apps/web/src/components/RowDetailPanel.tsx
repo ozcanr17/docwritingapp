@@ -243,13 +243,44 @@ export function RowDetailPanel({ rowId, documentId, variant }: RowDetailPanelPro
 
       <div className="space-y-4 p-4 text-sm">
         {activeTab === "content" && <>
-        <div>
-          <div className="mb-1 text-xs uppercase text-mutedForeground">{t("rowType")}</div>
-          <div className="flex items-center gap-2">
-            <span className="rounded bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">ID {row.objectNumber}</span>
-            <span className="rounded bg-muted px-2 py-0.5 text-xs">{t(typeLabelKeys[row.rowType])}</span>
-          </div>
-        </div>
+        <section data-testid="detail-fields" className="rounded-lg border border-border bg-surfaceSubtle px-3 py-2.5">
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            <div>
+              <dt className="text-mutedForeground">{t("rowId")}</dt>
+              <dd className="mt-0.5"><span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono font-semibold text-primary">{row.objectNumber}</span></dd>
+            </div>
+            <div>
+              <dt className="text-mutedForeground">{t("rowType")}</dt>
+              <dd className="mt-0.5 font-medium text-foreground">{t(typeLabelKeys[row.rowType])}</dd>
+            </div>
+            {row.requirementDetail?.requirementNo && (
+              <div>
+                <dt className="text-mutedForeground">{t("requirementNo")}</dt>
+                <dd className="mt-0.5 font-mono font-semibold text-primary">{row.requirementDetail.requirementNo}</dd>
+              </div>
+            )}
+            {row.requirementDetail?.status && (
+              <div>
+                <dt className="text-mutedForeground">{t("status")}</dt>
+                <dd className="mt-0.5 font-medium text-foreground">{row.requirementDetail.status}</dd>
+              </div>
+            )}
+            {row.testCaseDetail?.status && (
+              <div>
+                <dt className="text-mutedForeground">{t("status")}</dt>
+                <dd className="mt-0.5 font-medium text-foreground">{row.testCaseDetail.status}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-mutedForeground">{t("version")}</dt>
+              <dd className="mt-0.5 font-medium tabular-nums text-foreground">v{row.version}</dd>
+            </div>
+            <div className="col-span-2">
+              <dt className="text-mutedForeground">{t("documents")}</dt>
+              <dd className="mt-0.5 truncate font-medium text-foreground">{row.document.title}</dd>
+            </div>
+          </dl>
+        </section>
 
         <div>
           <div className="mb-1 text-xs uppercase text-mutedForeground">{t("title")}</div>

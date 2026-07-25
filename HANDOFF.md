@@ -6,7 +6,15 @@ Written for a brand-new session with zero prior context. Read this top to bottom
 
 ### Current task
 
-The user judged the existing interface not commercial-grade against Jira and DOORS and approved a five-phase redesign program, recorded as Stage 10 in `docs/UI-UX-DONUSUM-PLANI.md`. The phases are: 0 foundations (routing, component library, density), 1 shell/navigation, 2 Jira-grade work area, 3 DOORS-grade document area, 4 routed settings/admin/reports plus polish. Each phase must end with a full verification, documentation updates and a push to `origin/main`. Phases 0, 1 and 2 are complete and pushed; Phases 3-4 remain. Desktop packaging remains intentionally out of scope until the user changes that direction.
+The user judged the existing interface not commercial-grade against Jira and DOORS and approved a five-phase redesign program, recorded as Stage 10 in `docs/UI-UX-DONUSUM-PLANI.md`. The phases are: 0 foundations (routing, component library, density), 1 shell/navigation, 2 Jira-grade work area, 3 DOORS-grade document area, 4 routed settings/admin/reports plus polish. Each phase must end with a full verification, documentation updates and a push to `origin/main`. Phases 0, 1, 2 and 3 are complete and pushed; Phase 4 remains. Desktop packaging remains intentionally out of scope until the user changes that direction.
+
+### What was completed in redesign Phase 3 (DOORS-grade document area)
+
+1. Added the module outline: a toggleable Icindekiler panel (`DocumentOutlinePanel`, testid `document-outline`) left of the grid listing heading/test-case sections with hierarchical numbers and depth indentation. Selecting a section expands any collapsed ancestors, selects the row and centers it in the virtualized grid via a deferred scroll effect keyed on the recomputed row list (a direct `scrollToIndex` after expanding would use the stale pre-expansion index). The toggle lives in the grid toolbar (`toggle-outline`) plus the toolbar overflow menu, and visibility persists per device in the layout store.
+2. Column headers are now sort controls: click cycles ascending, descending, cleared, with a visible arrow and `aria-sort`; the header right-click context menu (add/hide columns) is untouched. Header typography was strengthened and the header, virtual container and rows now stretch to `min-width: 100%`, so row borders and hover states span the full viewport instead of stopping at the last column.
+3. The row detail panel Content tab now opens with a structured fields block (`detail-fields`): ID, type, requirement number, status, version and containing document in a two-column definition list.
+4. New bilingual keys: `moduleOutline`, `moduleOutlineEmpty`, `untitledSection`, `requirementNo`, `version`. Added focused outline-panel tests (section filtering, `aria-current`, close, empty state).
+5. The complete `pnpm verify` gate passes: **138 web + 72 API + 13 worker = 223/223 tests**, production build and bundle budget; initial gzip is **131.9 KiB**. The browser suite passes **12/12** on a restarted stack, and the visual baselines did not need regeneration because the header/full-width changes stayed within the two-percent budget. Live verification confirmed outline navigation into deep sections, the three-state header sort cycle and the fields block.
 
 ### What was completed in redesign Phase 2 (Jira-grade work area)
 
@@ -219,12 +227,11 @@ The user judged the existing interface not commercial-grade against Jira and DOO
 
 ### Where work is currently stuck
 
-There is **no active code blocker**. Redesign Phases 0 (routing, component library, density/shape), 1 (product top bar, File/Edit removal, icon rail plus contextual sidebar) and 2 (Jira-grade work area with routed project pages, work-item visual language and `/work/item/:key`) are complete and verified. The approved program continues with Phase 3 (DOORS-grade document area with module outline and rebuilt detail panel) and Phase 4 (routed settings/admin/reports, dark theme audit, brand polish). WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work after the redesign.
+There is **no active code blocker**. Redesign Phases 0 (routing, component library, density/shape), 1 (product top bar, File/Edit removal, icon rail plus contextual sidebar), 2 (Jira-grade work area) and 3 (DOORS-grade document area: module outline, header sorting, full-width rows, detail fields block) are complete and verified. The approved program finishes with Phase 4 (routed settings/admin/reports, dark theme audit, brand polish). WIP limits/swimlanes, releases/iterations, shared saved work queries, bulk planning operations, watchers, automation and external synchronization remain future Jira-grade planning work after the redesign.
 
 ### Next plan
 
-1. Execute redesign Phase 3: stronger sticky grid header, column width management, module outline TOC beside the grid and the fields-plus-activity detail panel.
-2. Then Phase 4: convert settings, administration and analysis reports to routed pages, audit dark theme and polish login/branding.
+1. Execute redesign Phase 4: convert settings, administration and analysis reports to routed pages, audit dark theme and polish login/branding.
 5. After each phase: run the complete `pnpm verify` gate and the browser suite, regenerate intentionally changed visual baselines, verify Turkish and English locale coverage, update `HANDOFF.md` and `docs/UI-UX-DONUSUM-PLANI.md`, then commit and push to `origin/main` with a Conventional Commit message.
 6. Keep every increment server-authoritative: the redesign is presentation and information architecture only; permissions, audit, soft-delete and concurrency rules must not change.
 

@@ -1306,5 +1306,10 @@
     "backToList": "Back to work items",
     "itemNotFound": "Work item not found",
     "itemNotFoundHelp": "The work item key in the address does not exist in this workspace or you do not have access to it."
-  }
+  },
+  "requirementNo": "Requirement No",
+  "version": "Version",
+  "moduleOutline": "Outline",
+  "moduleOutlineEmpty": "This document has no sections yet. Headings appear here as you add them.",
+  "untitledSection": "Untitled section"
 }
