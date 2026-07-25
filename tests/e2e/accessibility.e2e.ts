@@ -35,7 +35,8 @@ test("login and primary workspace have no automated WCAG A or AA violations", as
   ).toBe(true);
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await page.getByTestId("nav-settings").click();
+  await page.getByTestId("nav-settings-menu").click();
+  await page.getByTestId("menuitem-settings-workspace").click();
   await page.getByTestId("interface-scale-125").click();
   await page.getByTestId("settings-tab-accessibility").click();
   await page.getByTestId("setting-high-contrast").check();

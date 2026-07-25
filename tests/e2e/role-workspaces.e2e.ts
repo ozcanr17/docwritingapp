@@ -34,6 +34,7 @@ test("author, tester, reviewer and administrator entry points stay task focused"
   await expect(page.getByTestId("open-create-project")).toBeVisible();
 
   await page.getByTestId("nav-documents").click();
+  await page.getByTestId("menuitem-documents-all").click();
   await page.getByTestId("workspace-focus-reviewer").click();
   await expect(page.getByTestId("workspace-focus-reviewer")).toHaveAttribute(
     "aria-selected",
@@ -42,7 +43,8 @@ test("author, tester, reviewer and administrator entry points stay task focused"
   await page.getByTestId("workspace-focus-action").click();
   await expect(page.getByTestId(`document-tab-${documentId}`)).toBeVisible();
 
-  await page.getByTestId("nav-admin").click();
+  await page.getByTestId("nav-settings-menu").click();
+  await page.getByTestId("menuitem-settings-admin").click();
   await expect(page.getByTestId("admin-panel")).toBeVisible();
   await page.getByTestId("admin-tab-users").click();
   await expect(page.getByTestId("admin-tab-users")).toHaveAttribute(
