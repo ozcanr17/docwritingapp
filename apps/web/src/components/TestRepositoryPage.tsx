@@ -63,7 +63,7 @@ export function TestRepositoryPage({ workspaceId }: { workspaceId: string }) {
   });
   const executions = useQuery({
     queryKey: ["document-executions", activeDocumentId],
-    queryFn: () => api<Array<TestExecution & { rowId: string }>>(`/documents/${activeDocumentId}/executions`),
+    queryFn: () => api<Array<TestExecution & { testCaseRowId: string }>>(`/documents/${activeDocumentId}/executions`),
     enabled: activeDocumentId !== "",
   });
 
@@ -82,15 +82,15 @@ export function TestRepositoryPage({ workspaceId }: { workspaceId: string }) {
   const latestByRow = useMemo(() => {
     const map = new Map<string, TestExecution>();
     for (const execution of executions.data ?? []) {
-      const current = map.get(execution.rowId);
-      if (!current || new Date(execution.createdAt) > new Date(current.createdAt)) map.set(execution.rowId, execution);
+      const current = map.get(execution.testCaseRowId);
+      if (!current || new Date(execution.createdAt) > new Date(current.createdAt)) map.set(execution.testCaseRowId, execution);
     }
     return map;
   }, [executions.data]);
 
   const selectedRow = rows.find((row) => row.id === selected.rowId) ?? null;
   const selectedExecution = selected.rowId ? latestByRow.get(selected.rowId) ?? null : null;
-  const rowExecutions = (executions.data ?? []).filter((execution) => execution.rowId === selected.rowId);
+  const rowExecutions = (executions.data ?? []).filter((execution) => execution.testCaseRowId === selected.rowId);
 
   const passed = [...latestByRow.values()].filter((execution) => execution.status === "passed").length;
   const failed = [...latestByRow.values()].filter((execution) => execution.status === "failed").length;

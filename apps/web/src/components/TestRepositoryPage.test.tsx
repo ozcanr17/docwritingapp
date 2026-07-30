@@ -85,6 +85,41 @@ describe("TestRepositoryPage", () => {
     expect(await screen.findByTestId("repository-step-1.1.1")).toHaveTextContent("Drive the vehicle to the gate");
   });
 
+  it("attributes executions to their scenario using the real payload field", async () => {
+    const execution = (id: string, status: string, createdAt: string) => ({
+      id,
+      status,
+      environment: "Staging",
+      buildReference: "1.0.0",
+      iteration: "Sprint 1",
+      notes: null,
+      createdAt,
+      completedAt: createdAt,
+      testCaseRowId: "scenario-1",
+      steps: [{ id: `${id}-s1`, status, actualResult: null, evidence: [], testStepRow: { id: "step-1", title: "", testStepDetail: null } }],
+    });
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === "/workspaces/workspace/work-documents") {
+        return [{ id: "doc-test", title: "Acceptance Tests", documentType: "test", updatedAt: "2026-01-01T00:00:00Z" }];
+      }
+      if (path === "/documents/doc-test/outline") return [scenario, step];
+      if (path === "/documents/doc-test/executions") {
+        return [execution("exec-old", "failed", "2026-01-01T00:00:00Z"), execution("exec-new", "passed", "2026-02-01T00:00:00Z")];
+      }
+      return [];
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><TestRepositoryPage workspaceId="workspace" /></QueryClientProvider>);
+
+    const scenarioButton = await screen.findByTestId("repository-scenario-1.1");
+    await waitFor(() => expect(scenarioButton).toHaveTextContent(i18n.t("executionStatus.passed")));
+
+    fireEvent.click(scenarioButton);
+    fireEvent.click(await screen.findByTestId("test-detail-tab-executions"));
+    expect(await screen.findByTestId("execution-row-exec-new")).toBeInTheDocument();
+    expect(screen.getByTestId("execution-row-exec-old")).toBeInTheDocument();
+  });
+
   it("explains the empty repository when no test document exists", async () => {
     vi.mocked(api).mockImplementation(async () => []);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
