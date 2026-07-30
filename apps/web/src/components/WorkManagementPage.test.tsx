@@ -7,6 +7,7 @@ import i18n from "../lib/i18n";
 import { WorkManagementPage } from "./WorkManagementPage";
 import { useWorkViewsStore } from "../stores/workViews";
 import { useAuthoringPreferencesStore } from "../stores/authoringPreferences";
+import { useLayoutStore } from "../stores/layout";
 
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
@@ -18,6 +19,7 @@ describe("WorkManagementPage projects", () => {
     vi.mocked(api).mockReset();
     useWorkViewsStore.getState().reset();
     useAuthoringPreferencesStore.getState().reset();
+    useLayoutStore.setState({ boardSwimlane: null, collapsedLanes: [] });
   });
 
   it("creates the prerequisite project and selects it", async () => {
@@ -281,6 +283,77 @@ describe("WorkManagementPage projects", () => {
     expect(screen.getByRole("button", { name: i18n.t("workHub.bugs") })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("groups the board into swimlanes and flags a column over its WIP limit", async () => {
+    const statuses = ["backlog", "ready", "in_progress", "in_review", "done", "canceled"];
+    const types = ["epic", "story", "task", "bug", "risk"];
+    const boardItem = (id: string, title: string, status: string, assignee: { id: string; displayName: string } | null) => ({
+      id,
+      key: `SYS-${id}`,
+      type: "task",
+      status,
+      priority: "medium",
+      title,
+      description: null,
+      stepsToReproduce: null,
+      expectedResult: null,
+      actualResult: null,
+      environment: null,
+      affectedVersion: null,
+      labels: [],
+      version: 1,
+      dueAt: null,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+      project: { id: "project", name: "System", code: "SYS" },
+      reporter: { id: "owner", displayName: "Owner" },
+      assignee,
+      parentId: null,
+      parent: null,
+      _count: { artifactLinks: 0, comments: 0 },
+    });
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === "/workspaces/workspace/projects") return [{ id: "project", name: "System", code: "SYS", description: "Core", access: { canManage: true } }];
+      if (path === "/workspaces/workspace/project-access") return { canManage: true, canCreate: true };
+      if (path.startsWith("/workspaces/workspace/work-items")) return [
+        boardItem("1", "Wire the importer", "in_progress", { id: "ada", displayName: "Ada Lovelace" }),
+        boardItem("2", "Fix the parser", "in_progress", { id: "kemal", displayName: "Kemal Yilmaz" }),
+        boardItem("3", "Draft the plan", "backlog", null),
+      ];
+      if (path === "/projects/project/test-plans") return [];
+      if (path === "/projects/project/workflow") return {
+        projectId: "project",
+        version: 1,
+        customized: true,
+        actorRoleKeys: ["organization_admin"],
+        board: { wipLimits: { in_progress: 1 }, defaultSwimlane: "none" },
+        schemes: Object.fromEntries(types.map((type) => [type, {
+          transitions: Object.fromEntries(statuses.map((status) => [status, []])),
+          requiredFields: Object.fromEntries(statuses.map((status) => [status, []])),
+          transitionRoles: Object.fromEntries(statuses.map((status) => [status, {}])),
+        }])),
+      };
+      return [];
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/work/board"]}><WorkManagementPage workspaceId="workspace" /></MemoryRouter></QueryClientProvider>);
+
+    const inProgressColumn = await screen.findByTestId("board-column-in_progress");
+    expect(inProgressColumn).toHaveAttribute("data-wip-state", "over");
+    expect(inProgressColumn).toHaveTextContent("2 / 1");
+    expect(screen.getByTestId("board-column-backlog")).toHaveAttribute("data-wip-state", "none");
+    expect(screen.getByTestId("board-cell-all-in_progress")).toHaveTextContent("SYS-1");
+
+    fireEvent.change(screen.getByTestId("board-swimlane"), { target: { value: "assignee" } });
+    expect(await screen.findByTestId("board-lane-ada")).toHaveTextContent("Ada Lovelace");
+    expect(screen.getByTestId("board-cell-ada-in_progress")).toHaveTextContent("SYS-1");
+    expect(screen.getByTestId("board-cell-kemal-in_progress")).toHaveTextContent("SYS-2");
+    expect(screen.getByTestId("board-lane-unassigned")).toHaveTextContent(i18n.t("workHub.unassigned"));
+
+    fireEvent.click(screen.getByTestId("board-lane-ada").querySelector("button") as HTMLElement);
+    expect(screen.queryByTestId("board-cell-ada-in_progress")).toBeNull();
+    expect(screen.getByTestId("board-cell-kemal-in_progress")).toBeInTheDocument();
+  });
+
   it("applies a workflow preset and saves transition role rules", async () => {
     const statuses = ["backlog", "ready", "in_progress", "in_review", "done", "canceled"];
     const types = ["epic", "story", "task", "bug", "risk"];
@@ -307,7 +380,7 @@ describe("WorkManagementPage projects", () => {
         return { projectId: "project", version: 2, customized: true, actorRoleKeys: ["organization_admin"], schemes: createSchemes(true) };
       }
       if (path === "/projects/project/workflow") return { projectId: "project", version: 1, customized: false, actorRoleKeys: ["organization_admin"], schemes: createSchemes(false) };
-      if (path === "/projects/project/workflow-presets") return [{ key: "controlled", schemes: createSchemes(true) }];
+      if (path === "/projects/project/workflow-presets") return [{ key: "controlled", schemes: createSchemes(true), board: { wipLimits: { in_progress: 5 }, defaultSwimlane: "none" } }];
       return [];
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -322,10 +395,14 @@ describe("WorkManagementPage projects", () => {
       to: i18n.t("workHub.statuses.done"),
     });
     expect(screen.getByLabelText(permissionLabel)).toHaveValue("manager");
+    expect(screen.getByTestId("wip-limit-in_progress")).toHaveValue(5);
+    fireEvent.change(screen.getByTestId("wip-limit-in_review"), { target: { value: "2" } });
+    fireEvent.change(screen.getByTestId("board-default-swimlane"), { target: { value: "epic" } });
     fireEvent.click(screen.getByTestId("save-workflow"));
     await waitFor(() => expect(savedBody).not.toBeNull());
     expect(savedBody).toEqual(expect.objectContaining({
       expectedVersion: 1,
+      board: { wipLimits: { in_progress: 5, in_review: 2 }, defaultSwimlane: "epic" },
       schemes: expect.objectContaining({
         task: expect.objectContaining({
           transitionRoles: expect.objectContaining({

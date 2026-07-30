@@ -2,7 +2,25 @@
 
 Written for a brand-new session with zero prior context. Read this top to bottom before touching anything.
 
-## 0. Session handover snapshot (2026-07-25)
+## 0. Session handover snapshot (2026-07-30)
+
+### What was completed in Stage 14 (Jira-grade board: swimlanes and WIP limits)
+
+This is the first slice of the deferred Jira-grade planning work. Stage 13 (test execution creation and the plan execution report) was already complete and pushed.
+
+1. **Board settings live in the existing versioned `workflowConfig` JSON**, extended exactly the way `transitionRoles` was: a new `board: { wipLimits, defaultSwimlane }`. `effectiveWorkflow` normalizes it defensively so every project saved before this change keeps working, and `effectiveBoard` is applied even on the fallback path where `schemes` is missing. WIP limits are clamped to integers 1-99; zero, negative, non-numeric and unknown-status entries are dropped rather than rejected on read, while the write path rejects them through zod (`400`).
+2. **WIP limits are deliberately advisory.** `assertWorkflowTransition` was not touched, so a column over its limit is a visual signal and never blocks a transition or a drag. This matches Jira's own behavior and keeps the server-authoritative permission/workflow rules unchanged. The API test proves two items can both enter a column whose limit is 1.
+3. **Swimlanes**: the board groups into `none | assignee | priority | type | epic`. The selector persists per device in the layout store and falls back to the project's `defaultSwimlane` when the user has not chosen one. Lanes are collapsible and the collapsed set is keyed by `swimlane:laneId`, so collapsing a lane in one grouping does not collapse an unrelated lane in another.
+4. **Epic lanes resolve the epic ancestor**, not just the direct parent: `resolveEpic` walks `parentId` through the loaded item map so a task under a story under an epic still lands in that epic's lane. `parent` and `parentId` were added to the work-item summary payload/type for this. An epic that cannot be resolved from the loaded set, and epics themselves, land in the trailing "No epic" lane, which is honest rather than wrong.
+5. **Column headers show `count / limit`** with `data-wip-state` of `none | under | at | over`, warning styling at the limit and destructive styling over it. Colour is not the only signal: the count carries a translated `title`/`aria-label` stating the count and the limit.
+6. **The workflow editor gained a Board settings section** (default swimlane plus one limit field per column), saved through the existing optimistic-version PUT. The three presets now also carry board defaults (Controlled 5/3, Verification 3/2 with assignee lanes).
+7. **Deliberate limitation:** dragging a card into another lane's cell changes only its status, not the grouping field. The card then appears in the correct cell of its own lane. Changing assignee/priority by drag would be a new mutation path and was not invented here.
+8. **A height regression was caught by looking at the rendered page**, not by tests: restructuring the board into a header row plus lane bodies made the columns collapse to content height in the flat (no-swimlane) view, leaving dead space. The flat view now stretches to full height and scrolls per column, exactly as before; swimlane mode scrolls the lane area as a whole.
+9. The complete `pnpm verify` gate passes: **170 web + 73 API + 13 worker = 256/256 tests**, production build and bundle budget; initial gzip is **137.5 KiB**. The browser suite passes **14/14** and no visual baseline needed regeneration. Verified live at 1440x900 against a freshly restarted stack: a column with three items against a limit of two renders `3 / 2` in the destructive treatment, and assignee, epic and priority lanes all group correctly.
+
+**Launcher pitfall hit again, worth reading.** The watcher rebuilt the API but the new process could not bind port 3001 because a stale process from an earlier session still held it; `.dev-logs/api.log` showed `EADDRINUSE` and `[watch] service exited (1)`. `/health/live` still answered 200, so the stack looked healthy while serving **old** code. Always check the log and the `dist/main.js` mtime before trusting a live verification, and fix it with `bash infra/scripts/dev-down.sh` followed by a fresh `dev-up.sh` rather than assuming the watcher won.
+
+### Earlier snapshot (2026-07-25)
 
 ### Current task
 
@@ -326,7 +344,7 @@ The `/tests` area exists as a real routed area with its own contextual sidebar (
 
 **Delivered: `/tests/traceability` (`TraceabilityMatrixPage.tsx`).** A real RTM-style dot matrix over `documents/:id/traceability` in both directions. Requirement rows against test columns (or the reverse), rotated column headers, a blue dot per link and amber for suspect links, per-row counts in a trailing `#` column, per-column counts in a trailing footer row, sticky row headers, document/direction/search/suspect-only controls, and link/suspect progress bars. Rows and columns both navigate to their document row on click.
 
-**Still pending in this area** (the two remaining sidebar sections render an explicit "this report is not built yet" panel rather than pretending): the cross-project executions list and the test plan execution/iterations reports from the user's TestFLO screenshots. Backend to build on: `projects/:projectId/test-plans`, `test-plans/:id` (+`/candidates`), `rows/:rowId/executions`, `executions/:id/complete|stop`, per-step evidence endpoints, `documents/:documentId/coverage`, `documents/:documentId/traceability`, `documents/:documentId/retest-packages`. A cross-project executions/plans list and iteration history need new API work; per-step evidence/defect grids exist in `ExecutionStepCard` and can be reused.
+**Since delivered (this paragraph was stale):** the cross-project executions list (`/tests/executions`) and the test plan execution report (`/tests/report`) were both built in Stage 13 and are described above. Backend they were built on: `projects/:projectId/test-plans`, `test-plans/:id` (+`/candidates`), `rows/:rowId/executions`, `executions/:id/complete|stop`, per-step evidence endpoints, `documents/:documentId/coverage`, `documents/:documentId/traceability`, `documents/:documentId/retest-packages`. A cross-project executions/plans list and iteration history need new API work; per-step evidence/defect grids exist in `ExecutionStepCard` and can be reused.
 
 **Pitfalls recorded:** i18n silently renders the key name when a key is missing, so the matrix search label shipped as a literal `search` until caught on screen; there is no top-level `search` key, only `workHub.search`. A progress bar whose value is always 100 percent communicates nothing, so the matrix column bar was replaced with a suspect-share bar. DocSys test documents nest steps under standard section headings (`Test Adımları`), so a scenario's step count must walk the whole subtree while the expandable list shows direct children. An early version filtered only direct children and reported zero steps for every scenario.
 
@@ -334,12 +352,16 @@ There is **no active code blocker**. All five redesign phases are complete and v
 
 ### Next plan
 
-1. Execute redesign Phase 4: convert settings, administration and analysis reports to routed pages, audit dark theme and polish login/branding.
+1. Continue the Jira-grade planning work now that Stage 14 has landed the board slice. The remaining items are: releases/iterations as first-class entities (the execution report currently derives iterations from a free-text field), shared saved work queries, bulk planning operations on the work list, watchers, automation and external synchronization. Changing the swimlane grouping field by drag is a natural follow-up to Stage 14.
 5. After each phase: run the complete `pnpm verify` gate and the browser suite, regenerate intentionally changed visual baselines, verify Turkish and English locale coverage, update `HANDOFF.md` and `docs/UI-UX-DONUSUM-PLANI.md`, then commit and push to `origin/main` with a Conventional Commit message.
 6. Keep every increment server-authoritative: the redesign is presentation and information architecture only; permissions, audit, soft-delete and concurrency rules must not change.
 
 ### Pitfalls encountered in the latest task
 
+- `{{count}}` is a reserved i18next pluralization variable. An interpolated label using it looks for `key_one`/`key_other` and silently fails to render as written; the WIP badge uses `{{total}}` instead. Never name an ordinary interpolation variable `count`.
+- A watcher rebuild that cannot bind its port leaves the previous process serving stale code while every health check still passes. Confirm the live build (log plus `dist` mtime), not just the port.
+- Restructuring a flex/grid board from "columns that each own a header" into "one header row plus lane bodies" silently drops the full-height behavior, because `h-full` was carried by the old column element. Re-establish the height chain explicitly for the ungrouped view.
+- WIP limits must stay advisory. They are a planning signal, not authorization; enforcing them server-side would change transition semantics that the workflow role/required-field layers already own.
 - A type import and a local component can share a name and still pass `tsc` (separate declaration spaces) while Babel fails at runtime with `Duplicate declaration`. `SettingsSection` collided this way; alias the imported type (`SettingsSection as SettingsSectionId`). Typecheck alone does not catch this, so load the page.
 - A local helper component that shadows an imported primitive of the same name (`Metric`) silently wins. When adopting shared primitives, delete the local versions rather than leaving both.
 - Machine-checkable responsive contracts live in attributes, not layout. Replacing the shell dropped `data-responsive-collapsed` and broke the accessibility spec even though the behavior was correct; carry such attributes across rewrites.

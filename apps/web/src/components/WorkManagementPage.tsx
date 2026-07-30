@@ -11,6 +11,7 @@ import {
   BookmarkPlus,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   ChevronsDown,
   ChevronsUp,
@@ -32,12 +33,13 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   api,
   ApiError,
+  BoardSwimlane,
   TestPlanCandidate,
   TestPlanDetail,
   TestPlanSummary,
@@ -58,6 +60,7 @@ import { ModalSurface } from "./TransientSurface";
 import { Avatar, Button, Card, CardBody, CardHeader, Lozenge, LozengeAppearance, Metric, MetricStrip, TableHead } from "./ui";
 import { ManagedProject, ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { useWorkViewsStore, WorkViewTab } from "../stores/workViews";
+import { useLayoutStore } from "../stores/layout";
 import { useToastStore } from "../stores/toasts";
 import { userFacingError } from "../lib/userFacingError";
 import {
@@ -67,6 +70,7 @@ import {
 
 type Project = Omit<ManagedProject, "access"> & { access?: { canManage: boolean } };
 type HubTab = "dashboard" | "items" | "board" | "plans";
+type BoardLane = { id: string; label: string; avatarName?: string; items: WorkItemSummary[] };
 
 const statuses: WorkItemStatus[] = [
   "backlog",
@@ -78,6 +82,8 @@ const statuses: WorkItemStatus[] = [
 const allStatuses: WorkItemStatus[] = [...statuses, "canceled"];
 const workTypes: WorkItemType[] = ["epic", "story", "task", "bug", "risk"];
 const requiredFields: WorkflowRequiredField[] = ["description", "assignee", "dueAt"];
+const boardSwimlanes: BoardSwimlane[] = ["none", "assignee", "priority", "type", "epic"];
+const lanePriorities: WorkItemPriority[] = ["critical", "highest", "high", "medium", "low", "lowest"];
 
 export function WorkManagementPage({
   workspaceId,
@@ -1005,6 +1011,68 @@ function ItemList({
   );
 }
 
+function resolveEpic(item: WorkItemSummary, byId: Map<string, WorkItemSummary>) {
+  if (item.type === "epic") return null;
+  if (item.parent?.type === "epic") return item.parent;
+  let current = item.parentId ? byId.get(item.parentId) : undefined;
+  for (let depth = 0; current && depth < 10; depth += 1) {
+    if (current.type === "epic") return current;
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+  }
+  return null;
+}
+
+function boardLanes(
+  items: WorkItemSummary[],
+  swimlane: BoardSwimlane,
+  label: (key: "unassigned" | "noEpic" | WorkItemType | WorkItemPriority) => string,
+): BoardLane[] {
+  if (swimlane === "none") return [{ id: "all", label: "", items }];
+  if (swimlane === "type") {
+    return workTypes
+      .map((type) => ({ id: type, label: label(type), items: items.filter((item) => item.type === type) }))
+      .filter((lane) => lane.items.length);
+  }
+  if (swimlane === "priority") {
+    return lanePriorities
+      .map((priority) => ({ id: priority, label: label(priority), items: items.filter((item) => item.priority === priority) }))
+      .filter((lane) => lane.items.length);
+  }
+  if (swimlane === "assignee") {
+    const assigned = new Map<string, BoardLane>();
+    const unassigned: WorkItemSummary[] = [];
+    for (const item of items) {
+      if (!item.assignee) {
+        unassigned.push(item);
+        continue;
+      }
+      const lane = assigned.get(item.assignee.id)
+        ?? { id: item.assignee.id, label: item.assignee.displayName, avatarName: item.assignee.displayName, items: [] };
+      lane.items.push(item);
+      assigned.set(item.assignee.id, lane);
+    }
+    const lanes = [...assigned.values()].sort((a, b) => a.label.localeCompare(b.label));
+    if (unassigned.length) lanes.push({ id: "unassigned", label: label("unassigned"), items: unassigned });
+    return lanes;
+  }
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const epics = new Map<string, BoardLane>();
+  const withoutEpic: WorkItemSummary[] = [];
+  for (const item of items) {
+    const epic = resolveEpic(item, byId);
+    if (!epic) {
+      withoutEpic.push(item);
+      continue;
+    }
+    const lane = epics.get(epic.id) ?? { id: epic.id, label: `${epic.key} ${epic.title}`, items: [] };
+    lane.items.push(item);
+    epics.set(epic.id, lane);
+  }
+  const lanes = [...epics.values()].sort((a, b) => a.label.localeCompare(b.label));
+  if (withoutEpic.length) lanes.push({ id: "no-epic", label: label("noEpic"), items: withoutEpic });
+  return lanes;
+}
+
 function Board({
   items,
   onOpen,
@@ -1020,78 +1088,177 @@ function Board({
 }) {
   const { t } = useTranslation();
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const boardSwimlane = useLayoutStore((state) => state.boardSwimlane);
+  const setBoardSwimlane = useLayoutStore((state) => state.setBoardSwimlane);
+  const collapsedLanes = useLayoutStore((state) => state.collapsedLanes);
+  const toggleLane = useLayoutStore((state) => state.toggleLane);
+  const swimlane = boardSwimlane ?? workflow?.board?.defaultSwimlane ?? "none";
+  const wipLimits = workflow?.board?.wipLimits ?? {};
+  const laneLabel = useCallback(
+    (key: "unassigned" | "noEpic" | WorkItemType | WorkItemPriority) => {
+      if (key === "unassigned") return t("workHub.unassigned");
+      if (key === "noEpic") return t("workHub.boardNoEpic");
+      if (workTypes.includes(key as WorkItemType)) return t(`workHub.types.${key}`);
+      return t(`workHub.priorities.${key}`);
+    },
+    [t],
+  );
+  const lanes = useMemo(() => boardLanes(items, swimlane, laneLabel), [items, swimlane, laneLabel]);
+  const flatFullHeight = swimlane === "none" && !embedded;
+  const dropInto = (status: WorkItemStatus, laneItems: WorkItemSummary[], anchorId: string | null, position: "before" | "after") => {
+    const source = items.find((candidate) => candidate.id === draggedId);
+    setDraggedId(null);
+    if (!source) return;
+    if (source.status !== status && !allowedStatuses(source, workflow).includes(status)) return;
+    if (anchorId) return onMove(source, status, anchorId, position);
+    const anchor = laneItems.filter((candidate) => candidate.id !== source.id).at(-1);
+    onMove(source, status, anchor?.id ?? null, "after");
+  };
   return (
-    <div className={`grid grid-cols-5 gap-2.5 ${embedded ? "min-w-[1120px]" : "h-full min-w-[1020px]"}`}>
-      {statuses.map((status) => {
-        const columnItems = items.filter((item) => item.status === status);
-        return (
-        <section
-          key={status}
-          data-testid={`board-column-${status}`}
-          className={`flex min-h-0 flex-col rounded-lg border border-border/70 bg-surfaceSubtle ${embedded ? "" : "h-full"}`}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
-            event.preventDefault();
-            const item = items.find((candidate) => candidate.id === draggedId);
-            const targetItems = columnItems.filter((candidate) => candidate.id !== draggedId);
-            const anchor = targetItems.at(-1);
-            if (item && (item.status === status || allowedStatuses(item, workflow).includes(status))) onMove(item, status, anchor?.id ?? null, "after");
-            setDraggedId(null);
-          }}
+    <div className={`flex flex-col ${embedded ? "min-w-[1120px]" : "h-full min-h-0 min-w-[1020px]"}`}>
+      <div className="mb-2 flex shrink-0 items-center gap-2">
+        <label htmlFor="board-swimlane" className="text-xs text-mutedForeground">{t("workHub.boardSwimlane")}</label>
+        <select
+          id="board-swimlane"
+          data-testid="board-swimlane"
+          className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs"
+          value={swimlane}
+          onChange={(event) => setBoardSwimlane(event.target.value as BoardSwimlane)}
         >
-          <header className="flex shrink-0 items-center justify-between px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-mutedForeground">
-            <span>{t(`workHub.statuses.${status}`)}</span>
-            <span className="rounded-full bg-muted px-2 py-0.5 tabular-nums">
-              {columnItems.length}
-            </span>
-          </header>
-          <div className={`space-y-1.5 px-1.5 pb-1.5 ${embedded ? "" : "min-h-0 flex-1 overflow-y-auto"}`}>
-            {columnItems.map((item) => (
-                <article
-                  key={item.id}
-                  draggable
-                  className="cursor-grab rounded-md border border-border bg-surface p-2.5 shadow-sm transition-colors hover:border-primary/50 active:cursor-grabbing"
-                  onDragStart={(event) => {
-                    setDraggedId(item.id);
-                    event.dataTransfer.effectAllowed = "move";
-                  }}
-                  onDragEnd={() => setDraggedId(null)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const source = items.find((candidate) => candidate.id === draggedId);
-                    if (source && (source.status === status || allowedStatuses(source, workflow).includes(status))) onMove(source, status, item.id, "before");
-                    setDraggedId(null);
-                  }}
-                  onClick={() => onOpen(item.id)}
+          {boardSwimlanes.map((value) => (
+            <option key={value} value={value}>{t(`workHub.boardSwimlanes.${value}`)}</option>
+          ))}
+        </select>
+      </div>
+      <div className="grid shrink-0 grid-cols-5 gap-2.5">
+        {statuses.map((status) => {
+          const total = items.filter((item) => item.status === status).length;
+          const limit = wipLimits[status];
+          const state = limit === undefined ? "none" : total > limit ? "over" : total === limit ? "at" : "under";
+          return (
+            <header
+              key={status}
+              data-testid={`board-column-${status}`}
+              data-wip-state={state}
+              className={`flex items-center justify-between gap-2 rounded-t-lg border-x border-t px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide ${state === "over" ? "border-destructive/40 bg-destructive/10 text-destructive" : state === "at" ? "border-warning/40 bg-warning/10 text-warning" : "border-border/70 bg-surfaceSubtle text-mutedForeground"}`}
+            >
+              <span className="truncate">{t(`workHub.statuses.${status}`)}</span>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 tabular-nums ${state === "over" || state === "at" ? "bg-surface" : "bg-muted"}`}
+                title={limit === undefined ? undefined : state === "over" ? t("workHub.wipOver", { total, limit }) : t("workHub.wipWithin", { total, limit })}
+                aria-label={limit === undefined ? undefined : state === "over" ? t("workHub.wipOver", { total, limit }) : t("workHub.wipWithin", { total, limit })}
+              >
+                {limit === undefined ? total : `${total} / ${limit}`}
+              </span>
+            </header>
+          );
+        })}
+      </div>
+      <div className={embedded ? "" : `min-h-0 flex-1 ${flatFullHeight ? "" : "overflow-y-auto"}`}>
+        {lanes.map((lane) => {
+          const collapsed = collapsedLanes.includes(`${swimlane}:${lane.id}`);
+          return (
+            <div key={lane.id} data-testid={`board-lane-${lane.id}`} className={flatFullHeight ? "h-full" : ""}>
+              {swimlane !== "none" && (
+                <button
+                  type="button"
+                  className="mt-2 flex w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-left text-xs font-medium hover:bg-muted"
+                  aria-expanded={!collapsed}
+                  onClick={() => toggleLane(`${swimlane}:${lane.id}`)}
                 >
-                  <div className="text-sm font-medium leading-5">
-                    {item.title}
-                  </div>
-                  <div className="mt-2.5 flex items-center justify-between gap-2">
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <TypeIcon type={item.type} />
-                      <span className="truncate font-mono text-[11px] text-primary">{item.key}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      <PriorityIcon priority={item.priority} />
-                      {item.assignee ? (
-                        <Avatar name={item.assignee.displayName} size="xs" />
-                      ) : (
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-borderStrong text-mutedForeground" title={t("workHub.unassigned")} aria-label={t("workHub.unassigned")}>
-                          <UserRound size={11} />
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                </article>
-              ))}
-          </div>
-        </section>
-        );
-      })}
+                  {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  {lane.avatarName && <Avatar name={lane.avatarName} size="xs" />}
+                  <span className="truncate">{lane.label}</span>
+                  <span className="ml-auto shrink-0 rounded-full bg-surface px-2 py-0.5 tabular-nums text-mutedForeground">{lane.items.length}</span>
+                </button>
+              )}
+              {!collapsed && (
+                <div className={`grid grid-cols-5 gap-2.5 ${flatFullHeight ? "h-full" : ""}`}>
+                  {statuses.map((status) => {
+                    const cellItems = lane.items.filter((item) => item.status === status);
+                    return (
+                      <section
+                        key={status}
+                        data-testid={`board-cell-${lane.id}-${status}`}
+                        className={`space-y-1.5 border-x border-b border-border/70 bg-surfaceSubtle p-1.5 ${swimlane === "none" ? "rounded-b-lg" : ""} ${flatFullHeight ? "min-h-0 overflow-y-auto" : ""}`}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          dropInto(status, cellItems, null, "after");
+                        }}
+                      >
+                        {cellItems.map((item) => (
+                          <BoardCard
+                            key={item.id}
+                            item={item}
+                            onOpen={onOpen}
+                            onDragStart={() => setDraggedId(item.id)}
+                            onDragEnd={() => setDraggedId(null)}
+                            onDropCard={() => dropInto(status, cellItems, item.id, "before")}
+                          />
+                        ))}
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
+  );
+}
+
+function BoardCard({
+  item,
+  onOpen,
+  onDragStart,
+  onDragEnd,
+  onDropCard,
+}: {
+  item: WorkItemSummary;
+  onOpen: (id: string) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDropCard: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <article
+      draggable
+      className="cursor-grab rounded-md border border-border bg-surface p-2.5 shadow-sm transition-colors hover:border-primary/50 active:cursor-grabbing"
+      onDragStart={(event) => {
+        onDragStart();
+        event.dataTransfer.effectAllowed = "move";
+      }}
+      onDragEnd={onDragEnd}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onDropCard();
+      }}
+      onClick={() => onOpen(item.id)}
+    >
+      <div className="text-sm font-medium leading-5">{item.title}</div>
+      <div className="mt-2.5 flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <TypeIcon type={item.type} />
+          <span className="truncate font-mono text-[11px] text-primary">{item.key}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <PriorityIcon priority={item.priority} />
+          {item.assignee ? (
+            <Avatar name={item.assignee.displayName} size="xs" />
+          ) : (
+            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-borderStrong text-mutedForeground" title={t("workHub.unassigned")} aria-label={t("workHub.unassigned")}>
+              <UserRound size={11} />
+            </span>
+          )}
+        </span>
+      </div>
+    </article>
   );
 }
 
@@ -1409,7 +1576,10 @@ function WorkflowDialog({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [type, setType] = useState<WorkItemType>("task");
-  const [draft, setDraft] = useState<WorkItemWorkflow>(() => structuredClone(workflow));
+  const [draft, setDraft] = useState<WorkItemWorkflow>(() => ({
+    ...structuredClone(workflow),
+    board: structuredClone(workflow.board ?? { wipLimits: {}, defaultSwimlane: "none" }),
+  }));
   const [activePreset, setActivePreset] = useState("");
   const presets = useQuery({
     queryKey: ["work-item-workflow-presets", projectId],
@@ -1422,6 +1592,7 @@ function WorkflowDialog({
         body: JSON.stringify({
           expectedVersion: draft.version,
           schemes: draft.schemes,
+          board: draft.board,
         }),
       }),
     onSuccess: (next) => {
@@ -1462,6 +1633,15 @@ function WorkflowDialog({
     if (roles[0] === "editor") return "editor";
     return "any";
   };
+  const setWipLimit = (status: WorkItemStatus, value: string) => {
+    setDraft((current) => {
+      const next = structuredClone(current);
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed) && parsed >= 1) next.board.wipLimits[status] = Math.min(parsed, 99);
+      else delete next.board.wipLimits[status];
+      return next;
+    });
+  };
   const toggleRequired = (status: WorkItemStatus, field: WorkflowRequiredField) => {
     setDraft((current) => {
       const next = structuredClone(current);
@@ -1491,7 +1671,11 @@ function WorkflowDialog({
               data-testid={`workflow-preset-${preset.key}`}
               className={`rounded-lg border p-3 text-left hover:border-primary/50 hover:bg-surface ${activePreset === preset.key ? "border-primary bg-primary/5" : "border-border bg-editorBackground"}`}
               onClick={() => {
-                setDraft((current) => ({ ...current, schemes: structuredClone(preset.schemes) }));
+                setDraft((current) => ({
+                  ...current,
+                  schemes: structuredClone(preset.schemes),
+                  board: structuredClone(preset.board ?? current.board),
+                }));
                 setActivePreset(preset.key);
               }}
             >
@@ -1579,6 +1763,45 @@ function WorkflowDialog({
           </tbody>
         </table>
       </div>
+      <section className="mt-4 rounded-xl border border-border bg-muted/20 p-3">
+        <h3 className="text-sm font-semibold">{t("workHub.boardSettings")}</h3>
+        <p className="mt-0.5 text-xs text-mutedForeground">{t("workHub.boardSettingsHelp")}</p>
+        <div className="mt-3 max-w-xs">
+          <label htmlFor="board-default-swimlane" className="block text-xs font-medium">{t("workHub.boardDefaultSwimlane")}</label>
+          <select
+            id="board-default-swimlane"
+            data-testid="board-default-swimlane"
+            className="mt-1 w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs"
+            value={draft.board.defaultSwimlane}
+            onChange={(event) => setDraft((current) => ({ ...current, board: { ...current.board, defaultSwimlane: event.target.value as BoardSwimlane } }))}
+          >
+            {boardSwimlanes.map((value) => (
+              <option key={value} value={value}>{t(`workHub.boardSwimlanes.${value}`)}</option>
+            ))}
+          </select>
+        </div>
+        <div className="mt-3">
+          <span className="block text-xs font-medium">{t("workHub.wipLimits")}</span>
+          <p className="mt-0.5 text-xs text-mutedForeground">{t("workHub.wipLimitsHelp")}</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {statuses.map((status) => (
+              <label key={status} className="rounded-lg border border-border bg-editorBackground p-2 text-xs">
+                <span className="block text-mutedForeground">{t(`workHub.statuses.${status}`)}</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  data-testid={`wip-limit-${status}`}
+                  className="mt-1 w-full rounded border border-border bg-surface px-1.5 py-1 text-xs"
+                  placeholder={t("workHub.wipLimitNone")}
+                  value={draft.board.wipLimits[status] ?? ""}
+                  onChange={(event) => setWipLimit(status, event.target.value)}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      </section>
       {save.isError && <p role="alert" className="mt-3 text-sm text-destructive">{t("workHub.workflowSaveError")}</p>}
       <div className="mt-4 flex justify-end gap-2">
         <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted" onClick={onClose}>{t("cancel")}</button>

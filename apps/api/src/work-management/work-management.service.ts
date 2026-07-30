@@ -58,15 +58,26 @@ type WorkflowScheme = {
   requiredFields: Record<WorkStatus, WorkflowRequiredField[]>;
   transitionRoles: WorkflowTransitionRoles;
 };
-type WorkflowConfiguration = { schemes: Record<WorkType, WorkflowScheme> };
+type BoardSwimlane = "none" | "assignee" | "priority" | "type" | "epic";
+type BoardConfiguration = {
+  wipLimits: Partial<Record<WorkStatus, number>>;
+  defaultSwimlane: BoardSwimlane;
+};
+type WorkflowConfiguration = { schemes: Record<WorkType, WorkflowScheme>; board: BoardConfiguration };
 type WorkflowSchemeInput = {
   transitions: Partial<Record<WorkStatus, WorkStatus[]>>;
   requiredFields: Partial<Record<WorkStatus, WorkflowRequiredField[]>>;
   transitionRoles: Partial<WorkflowTransitionRoles>;
 };
+type BoardConfigurationInput = {
+  wipLimits?: Partial<Record<WorkStatus, number | null>>;
+  defaultSwimlane?: BoardSwimlane;
+};
 
 const workStatuses: WorkStatus[] = ["backlog", "ready", "in_progress", "in_review", "done", "canceled"];
 const workTypes: WorkType[] = ["epic", "story", "task", "bug", "risk"];
+const boardSwimlanes: BoardSwimlane[] = ["none", "assignee", "priority", "type", "epic"];
+const maxWipLimit = 99;
 const defaultTransitions: Record<WorkStatus, WorkStatus[]> = {
   backlog: ["ready", "in_progress", "canceled"],
   ready: ["backlog", "in_progress", "canceled"],
@@ -83,7 +94,15 @@ function defaultWorkflow(): WorkflowConfiguration {
       requiredFields: Object.fromEntries(workStatuses.map((status) => [status, []])),
       transitionRoles: Object.fromEntries(workStatuses.map((status) => [status, {}])),
     }])) as unknown as Record<WorkType, WorkflowScheme>,
+    board: { wipLimits: {}, defaultSwimlane: "none" },
   };
+}
+
+function normalizeWipLimit(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const rounded = Math.trunc(value);
+  if (rounded < 1) return null;
+  return Math.min(rounded, maxWipLimit);
 }
 
 function workflowPreset(key: "standard" | "controlled" | "verification"): WorkflowConfiguration {
@@ -110,6 +129,9 @@ function workflowPreset(key: "standard" | "controlled" | "verification"): Workfl
       scheme.transitionRoles.in_progress.in_review = ["project_manager", "editor"];
     }
   }
+  workflow.board = key === "verification"
+    ? { wipLimits: { in_progress: 3, in_review: 2 }, defaultSwimlane: "assignee" }
+    : { wipLimits: { in_progress: 5, in_review: 3 }, defaultSwimlane: "none" };
   return workflow;
 }
 
@@ -135,6 +157,7 @@ const summaryInclude = {
   reporter: { select: { id: true, displayName: true } },
   assignee: { select: { id: true, displayName: true } },
   project: { select: { id: true, name: true, code: true } },
+  parent: { select: { id: true, key: true, title: true, type: true } },
   _count: { select: { artifactLinks: true, comments: true } },
 } satisfies Prisma.WorkItemInclude;
 
@@ -289,10 +312,10 @@ export class WorkManagementService {
     };
   }
 
-  async updateWorkflow(actorId: string, projectId: string, input: { expectedVersion: number; schemes: Record<WorkType, WorkflowSchemeInput> }) {
+  async updateWorkflow(actorId: string, projectId: string, input: { expectedVersion: number; schemes: Record<WorkType, WorkflowSchemeInput>; board?: BoardConfigurationInput }) {
     const project = await this.requireProject(projectId);
     await this.access.assertPermission(actorId, "work_item.manage", this.projectScope(project));
-    const configuration = this.normalizeWorkflow({ schemes: input.schemes });
+    const configuration = this.normalizeWorkflow({ schemes: input.schemes, board: input.board });
     await this.prisma.$transaction(async (tx) => {
       const result = await tx.project.updateMany({ where: { id: projectId, workflowVersion: input.expectedVersion, deletedAt: null }, data: { workflowConfig: configuration as unknown as Prisma.InputJsonValue, workflowVersion: { increment: 1 } } });
       if (!result.count) throw new ConflictException("Workflow was changed by another user");
@@ -709,9 +732,18 @@ export class WorkManagementService {
     return Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length);
   }
 
-  private normalizeWorkflow(configuration: { schemes: Record<WorkType, WorkflowSchemeInput> }): WorkflowConfiguration {
+  private normalizeWorkflow(configuration: { schemes: Record<WorkType, WorkflowSchemeInput>; board?: BoardConfigurationInput }): WorkflowConfiguration {
     const defaults = defaultWorkflow();
     return {
+      board: {
+        wipLimits: Object.fromEntries(workStatuses.flatMap((status) => {
+          const limit = normalizeWipLimit(configuration.board?.wipLimits?.[status]);
+          return limit === null ? [] : [[status, limit]];
+        })),
+        defaultSwimlane: boardSwimlanes.includes(configuration.board?.defaultSwimlane as BoardSwimlane)
+          ? configuration.board!.defaultSwimlane as BoardSwimlane
+          : "none",
+      },
       schemes: Object.fromEntries(workTypes.map((type) => {
         const input = configuration.schemes[type];
         return [type, {
@@ -735,7 +767,7 @@ export class WorkManagementService {
   private effectiveWorkflow(value: Prisma.JsonValue): WorkflowConfiguration {
     if (!value || typeof value !== "object" || Array.isArray(value)) return defaultWorkflow();
     const rawSchemes = "schemes" in value && value.schemes && typeof value.schemes === "object" && !Array.isArray(value.schemes) ? value.schemes : null;
-    if (!rawSchemes) return defaultWorkflow();
+    if (!rawSchemes) return { ...defaultWorkflow(), board: this.effectiveBoard(value) };
     const defaults = defaultWorkflow();
     const schemes = Object.fromEntries(workTypes.map((type) => {
       const rawScheme = type in rawSchemes && rawSchemes[type] && typeof rawSchemes[type] === "object" && !Array.isArray(rawSchemes[type]) ? rawSchemes[type] : null;
@@ -762,7 +794,25 @@ export class WorkManagementService {
       })) as WorkflowTransitionRoles;
       return [type, { transitions, requiredFields, transitionRoles }];
     })) as unknown as Record<WorkType, WorkflowScheme>;
-    return { schemes };
+    return { schemes, board: this.effectiveBoard(value) };
+  }
+
+  private effectiveBoard(value: Prisma.JsonValue): BoardConfiguration {
+    const raw = value && typeof value === "object" && !Array.isArray(value) && "board" in value && value.board && typeof value.board === "object" && !Array.isArray(value.board)
+      ? value.board as Record<string, unknown>
+      : null;
+    const rawLimits = raw && raw.wipLimits && typeof raw.wipLimits === "object" && !Array.isArray(raw.wipLimits)
+      ? raw.wipLimits as Record<string, unknown>
+      : null;
+    return {
+      wipLimits: Object.fromEntries(workStatuses.flatMap((status) => {
+        const limit = normalizeWipLimit(rawLimits?.[status]);
+        return limit === null ? [] : [[status, limit]];
+      })),
+      defaultSwimlane: boardSwimlanes.includes(raw?.defaultSwimlane as BoardSwimlane)
+        ? raw!.defaultSwimlane as BoardSwimlane
+        : "none",
+    };
   }
 
   private async assertArtifact(actorId: string, input: ArtifactInput, workspaceId: string) {

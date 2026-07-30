@@ -161,6 +161,19 @@ Kullanici, test kosumlarinin olusturulabilmesini ve paylastigi Test Plan Executi
 - [x] Gecme orani yalnizca sonuclanan kosumlar uzerinden, tamamlanma orani ise planin tamami uzerinden hesaplanir; alti durum kovasi her zaman planlanan sayisina eslenir.
 - [x] Ortak `StatusBar` bileseni eklendi: sifir olan durumlar cubukta gosterilmez, aciklamada kalir.
 
+## Asama 14 - Jira seviyesinde pano: kulvarlar ve devam eden is sinirlari
+
+Jira seviyesinde planlama yeteneklerinin ilk parcasi olarak panonun kulvarlara ayrilmasi ve kolon basina devam eden is sinirinin gorunur olmasi ele alindi.
+
+- [x] Pano kulvarlara ayrilabiliyor: kulvar yok, atanan kisi, oncelik, tur ve epik. Secim cihazda kalicidir ve bos birakildiginda projenin varsayilan kulvarini kullanir.
+- [x] Kulvar basliklari daraltilabilir; daraltma durumu kulvar gruplamasiyla birlikte cihazda saklanir. Atanan kisi kulvarinda avatar, epik kulvarinda epik anahtari ve basligi gosterilir.
+- [x] Epik kulvari, kaydin epik atasini yuklu kayitlar uzerinden cozer; epik bulunamazsa kayit "Epik yok" kulvarinda toplanir. Epiklerin kendisi de bu kulvarda yer alir.
+- [x] Kolon basliklari devam eden is sinirini `sayi / sinir` olarak gosterir; sinira ulasan kolon uyari, sinirin uzerine cikan kolon hata rengiyle isaretlenir ve durum `data-wip-state` ozniteligiyle makine tarafindan okunabilir.
+- [x] Sinirlar yalnizca uyari niteligindedir; sunucudaki gecis kurallarina dokunulmaz ve sinirin uzerindeki bir kolona kayit tasimak engellenmez. Renk tek isaret degildir, sayaca erisilebilir aciklama eklenir.
+- [x] Pano ayarlari surumlu `workflowConfig` JSON'una eklendi: kolon basina sinir ve varsayilan kulvar. Eski yapilandirmalar bu alan olmadan da calisir; gecersiz veya sifir sinir yok sayilir.
+- [x] Is akisi duzenleyicisine Pano ayarlari bolumu eklendi: varsayilan kulvar secimi ve kolon basina sinir alanlari, mevcut iyimser surum kontrolu ile kaydedilir.
+- [x] Hazir sablonlar pano ayarlarini da tasir: Kontrollu Teslim 5/3, Dogrulama Programi 3/2 sinirlari ve atanan kisi kulvari.
+
 ## Asama tamamlanma olcutu
 
 Bir asama ancak ilgili maddeler isaretlendiginde, regresyon testleri gectiginde, Mac uzerinde `pnpm dev` ile gorsel olarak dogrulandiginda ve degisiklikler `main` dalina gonderildiginde tamamlanmis sayilir.

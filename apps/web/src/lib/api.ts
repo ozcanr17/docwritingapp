@@ -111,12 +111,19 @@ export type WorkItemStatus = "backlog" | "ready" | "in_progress" | "in_review" |
 export type WorkItemPriority = "lowest" | "low" | "medium" | "high" | "highest" | "critical";
 export type WorkflowRequiredField = "description" | "assignee" | "dueAt";
 export type WorkflowRole = "project_manager" | "editor";
+export type BoardSwimlane = "none" | "assignee" | "priority" | "type" | "epic";
+
+export interface BoardConfiguration {
+  wipLimits: Partial<Record<WorkItemStatus, number>>;
+  defaultSwimlane: BoardSwimlane;
+}
 
 export interface WorkItemWorkflow {
   projectId: string;
   version: number;
   customized: boolean;
   actorRoleKeys: string[];
+  board: BoardConfiguration;
   schemes: Record<WorkItemType, {
     transitions: Record<WorkItemStatus, WorkItemStatus[]>;
     requiredFields: Record<WorkItemStatus, WorkflowRequiredField[]>;
@@ -127,6 +134,7 @@ export interface WorkItemWorkflow {
 export interface WorkItemWorkflowPreset {
   key: "standard" | "controlled" | "verification";
   schemes: WorkItemWorkflow["schemes"];
+  board: BoardConfiguration;
 }
 
 export interface WorkItemSummary {
@@ -150,6 +158,8 @@ export interface WorkItemSummary {
   project: { id: string; name: string; code: string };
   reporter: { id: string; displayName: string };
   assignee: { id: string; displayName: string } | null;
+  parentId: string | null;
+  parent: { id: string; key: string; title: string; type: WorkItemType } | null;
   _count: { artifactLinks: number; comments: number };
 }
 

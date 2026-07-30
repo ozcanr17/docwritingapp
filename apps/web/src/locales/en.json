@@ -1309,7 +1309,24 @@
     "project": "Project",
     "testPlan": "Test plan",
     "buildReference": "Build reference",
-    "titleLabel": "Summary"
+    "titleLabel": "Summary",
+    "boardSwimlane": "Swimlane",
+    "boardSwimlanes": {
+      "none": "No swimlane",
+      "assignee": "Assignee",
+      "priority": "Priority",
+      "type": "Type",
+      "epic": "Epic"
+    },
+    "boardNoEpic": "No epic",
+    "boardSettings": "Board settings",
+    "boardSettingsHelp": "Sets the board's default swimlane grouping and the work-in-progress limit per column. Limits are advisory and never block a transition.",
+    "boardDefaultSwimlane": "Default swimlane",
+    "wipLimits": "Work-in-progress limits",
+    "wipLimitsHelp": "A column left empty has no limit.",
+    "wipLimitNone": "No limit",
+    "wipWithin": "{{total}} items, within the limit of {{limit}}",
+    "wipOver": "{{total}} items, over the limit of {{limit}}"
   },
   "requirementNo": "Requirement No",
   "version": "Version",

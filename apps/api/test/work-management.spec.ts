@@ -168,6 +168,53 @@ describe("work management", () => {
     expect(events.map((event) => event.action)).toEqual(expect.arrayContaining(["work_item.workflow_updated", "work_item.moved"]));
   });
 
+  it("persists advisory board settings and rejects invalid board input", async () => {
+    const owner = await registerActor(app, "board-owner");
+    const { workspace } = await createOrgWorkspaceDocument(app, owner);
+    const projectResponse = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/projects`, headers: { cookie: owner.cookie }, payload: { name: "Board settings", code: "BRD" } });
+    const project = JSON.parse(projectResponse.body) as { id: string };
+    const initialResponse = await app.inject({ method: "GET", url: `/projects/${project.id}/workflow`, headers: { cookie: owner.cookie } });
+    const initial = JSON.parse(initialResponse.body) as {
+      version: number;
+      board: { wipLimits: Record<string, number>; defaultSwimlane: string };
+      schemes: Record<string, unknown>;
+    };
+    expect(initial.board).toEqual({ wipLimits: {}, defaultSwimlane: "none" });
+
+    const saved = await app.inject({
+      method: "PUT",
+      url: `/projects/${project.id}/workflow`,
+      headers: { cookie: owner.cookie },
+      payload: { expectedVersion: initial.version, schemes: initial.schemes, board: { wipLimits: { in_progress: 1, done: null }, defaultSwimlane: "assignee" } },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect((JSON.parse(saved.body) as { board: unknown }).board).toEqual({ wipLimits: { in_progress: 1 }, defaultSwimlane: "assignee" });
+
+    const rejectedLimit = await app.inject({
+      method: "PUT",
+      url: `/projects/${project.id}/workflow`,
+      headers: { cookie: owner.cookie },
+      payload: { expectedVersion: 2, schemes: initial.schemes, board: { wipLimits: { in_progress: 0 }, defaultSwimlane: "none" } },
+    });
+    expect(rejectedLimit.statusCode).toBe(400);
+    const rejectedSwimlane = await app.inject({
+      method: "PUT",
+      url: `/projects/${project.id}/workflow`,
+      headers: { cookie: owner.cookie },
+      payload: { expectedVersion: 2, schemes: initial.schemes, board: { wipLimits: {}, defaultSwimlane: "sprint" } },
+    });
+    expect(rejectedSwimlane.statusCode).toBe(400);
+
+    const firstResponse = await app.inject({ method: "POST", url: `/projects/${project.id}/work-items`, headers: { cookie: owner.cookie }, payload: { type: "task", title: "First board task" } });
+    const secondResponse = await app.inject({ method: "POST", url: `/projects/${project.id}/work-items`, headers: { cookie: owner.cookie }, payload: { type: "task", title: "Second board task" } });
+    const first = JSON.parse(firstResponse.body) as { id: string; version: number };
+    const second = JSON.parse(secondResponse.body) as { id: string; version: number };
+    const firstMove = await app.inject({ method: "PATCH", url: `/work-items/${first.id}`, headers: { cookie: owner.cookie }, payload: { expectedVersion: first.version, status: "in_progress" } });
+    expect(firstMove.statusCode).toBe(200);
+    const secondMove = await app.inject({ method: "PATCH", url: `/work-items/${second.id}`, headers: { cookie: owner.cookie }, payload: { expectedVersion: second.version, status: "in_progress" } });
+    expect(secondMove.statusCode).toBe(200);
+  });
+
   it("creates a test plan and starts a linked real execution", async () => {
     const owner = await registerActor(app, "plan-owner");
     const { workspace } = await createOrgWorkspaceDocument(app, owner);

@@ -1308,7 +1308,24 @@
     "project": "Proje",
     "testPlan": "Test planı",
     "buildReference": "Yapı referansı",
-    "titleLabel": "Özet"
+    "titleLabel": "Özet",
+    "boardSwimlane": "Kulvar",
+    "boardSwimlanes": {
+      "none": "Kulvar yok",
+      "assignee": "Atanan kişi",
+      "priority": "Öncelik",
+      "type": "Tür",
+      "epic": "Epik"
+    },
+    "boardNoEpic": "Epik yok",
+    "boardSettings": "Pano ayarları",
+    "boardSettingsHelp": "Panonun varsayılan kulvar gruplamasını ve kolon başına devam eden iş sınırını belirler. Sınırlar uyarı niteliğindedir, geçişleri engellemez.",
+    "boardDefaultSwimlane": "Varsayılan kulvar",
+    "wipLimits": "Devam eden iş sınırları",
+    "wipLimitsHelp": "Boş bırakılan kolon için sınır uygulanmaz.",
+    "wipLimitNone": "Sınır yok",
+    "wipWithin": "{{total}} kayıt, {{limit}} sınırında",
+    "wipOver": "{{total}} kayıt, {{limit}} sınırını aşıyor"
   },
   "requirementNo": "Gereksinim No",
   "version": "Sürüm",

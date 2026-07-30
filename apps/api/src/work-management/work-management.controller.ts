@@ -143,9 +143,23 @@ const workflowScheme = z.object({
   requiredFields: workflowRequiredFields.default({}),
   transitionRoles: workflowTransitionRoles.default({}),
 }).strict();
+const boardWipLimit = z.number().int().min(1).max(99).nullable().optional();
+const boardWipLimits = z.object({
+  backlog: boardWipLimit,
+  ready: boardWipLimit,
+  in_progress: boardWipLimit,
+  in_review: boardWipLimit,
+  done: boardWipLimit,
+  canceled: boardWipLimit,
+}).strict();
+const boardConfiguration = z.object({
+  wipLimits: boardWipLimits.default({}),
+  defaultSwimlane: z.enum(["none", "assignee", "priority", "type", "epic"]).default("none"),
+}).strict();
 const workflowConfiguration = z.object({
   expectedVersion: z.number().int().positive(),
   schemes: z.object({ epic: workflowScheme, story: workflowScheme, task: workflowScheme, bug: workflowScheme, risk: workflowScheme }).strict(),
+  board: boardConfiguration.default({ wipLimits: {}, defaultSwimlane: "none" }),
 });
 const moveWorkItem = z.object({
   expectedVersion: z.number().int().positive(),
