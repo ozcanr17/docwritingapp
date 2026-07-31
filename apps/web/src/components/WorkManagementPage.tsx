@@ -40,6 +40,8 @@ import {
   api,
   ApiError,
   BoardSwimlane,
+  ProjectIteration,
+  ProjectRelease,
   TestPlanCandidate,
   TestPlanDetail,
   TestPlanSummary,
@@ -82,7 +84,7 @@ const statuses: WorkItemStatus[] = [
 const allStatuses: WorkItemStatus[] = [...statuses, "canceled"];
 const workTypes: WorkItemType[] = ["epic", "story", "task", "bug", "risk"];
 const requiredFields: WorkflowRequiredField[] = ["description", "assignee", "dueAt"];
-const boardSwimlanes: BoardSwimlane[] = ["none", "assignee", "priority", "type", "epic"];
+const boardSwimlanes: BoardSwimlane[] = ["none", "assignee", "priority", "type", "epic", "iteration"];
 const lanePriorities: WorkItemPriority[] = ["critical", "highest", "high", "medium", "low", "lowest"];
 
 export function WorkManagementPage({
@@ -112,6 +114,8 @@ export function WorkManagementPage({
   const [query, setQuery] = useState("");
   const [mine, setMine] = useState(searchParams.get("assignee") === "me");
   const [bugsOnly, setBugsOnly] = useState(searchParams.get("type") === "bug");
+  const [iterationFilter, setIterationFilter] = useState("");
+  const [releaseFilter, setReleaseFilter] = useState("");
   const filterSignature = `${searchParams.get("assignee") ?? ""}|${searchParams.get("type") ?? ""}`;
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -202,13 +206,25 @@ export function WorkManagementPage({
   if (tab !== "dashboard" && query.trim()) params.set("q", query.trim());
   if (tab !== "dashboard" && mine) params.set("assigneeId", "me");
   if (tab !== "dashboard" && bugsOnly) params.set("type", "bug");
+  if (tab !== "dashboard" && iterationFilter) params.set("iterationId", iterationFilter);
+  if (tab !== "dashboard" && releaseFilter) params.set("releaseId", releaseFilter);
   const items = useQuery({
-    queryKey: ["work-items", workspaceId, activeProjectId, tab, query, mine, bugsOnly],
+    queryKey: ["work-items", workspaceId, activeProjectId, tab, query, mine, bugsOnly, iterationFilter, releaseFilter],
     queryFn: () =>
       api<WorkItemSummary[]>(
         `/workspaces/${workspaceId}/work-items?${params.toString()}`,
       ),
     enabled: activeProjectId !== null,
+  });
+  const releases = useQuery({
+    queryKey: ["project-releases", activeProjectId],
+    queryFn: () => api<ProjectRelease[]>(`/projects/${activeProjectId}/releases`),
+    enabled: Boolean(activeProjectId),
+  });
+  const iterations = useQuery({
+    queryKey: ["project-iterations", activeProjectId],
+    queryFn: () => api<ProjectIteration[]>(`/projects/${activeProjectId}/iterations`),
+    enabled: Boolean(activeProjectId),
   });
   const plans = useQuery({
     queryKey: ["test-plans", activeProjectId],
@@ -412,7 +428,7 @@ export function WorkManagementPage({
             <button
               type="button"
               aria-pressed={bugsOnly}
-              className={`rounded-lg border px-3 py-2 text-sm ${bugsOnly ? "border-danger bg-destructive/10 text-destructive" : "border-border"}`}
+              className={`rounded-lg border px-3 py-2 text-sm ${bugsOnly ? "border-destructive bg-destructive/10 text-destructive" : "border-border"}`}
               onClick={() => {
                 setBugsOnly((value) => !value);
                 setActiveViewId("");
@@ -421,6 +437,36 @@ export function WorkManagementPage({
               <Bug size={14} className="mr-1.5 inline" />
               {t("workHub.bugs")}
             </button>
+            {(iterations.data ?? []).length > 0 && (
+              <select
+                data-testid="filter-iteration"
+                aria-label={t("planning.iteration")}
+                className="rounded-lg border border-border bg-editorBackground px-2 py-2 text-sm outline-none"
+                value={iterationFilter}
+                onChange={(event) => { setIterationFilter(event.target.value); setActiveViewId(""); }}
+              >
+                <option value="">{t("planning.allIterations")}</option>
+                <option value="none">{t("planning.noIteration")}</option>
+                {(iterations.data ?? []).map((iteration) => (
+                  <option key={iteration.id} value={iteration.id}>{iteration.name}</option>
+                ))}
+              </select>
+            )}
+            {(releases.data ?? []).length > 0 && (
+              <select
+                data-testid="filter-release"
+                aria-label={t("planning.release")}
+                className="rounded-lg border border-border bg-editorBackground px-2 py-2 text-sm outline-none"
+                value={releaseFilter}
+                onChange={(event) => { setReleaseFilter(event.target.value); setActiveViewId(""); }}
+              >
+                <option value="">{t("planning.allReleases")}</option>
+                <option value="none">{t("planning.noRelease")}</option>
+                {(releases.data ?? []).map((release) => (
+                  <option key={release.id} value={release.id}>{release.name}</option>
+                ))}
+              </select>
+            )}
             <label className="flex min-w-44 items-center gap-2 rounded-lg border border-border bg-editorBackground px-2">
               <Bookmark size={14} className="text-mutedForeground" />
               <span className="sr-only">{t("workHub.savedViews")}</span>
@@ -1025,9 +1071,25 @@ function resolveEpic(item: WorkItemSummary, byId: Map<string, WorkItemSummary>) 
 function boardLanes(
   items: WorkItemSummary[],
   swimlane: BoardSwimlane,
-  label: (key: "unassigned" | "noEpic" | WorkItemType | WorkItemPriority) => string,
+  label: (key: "unassigned" | "noEpic" | "noIteration" | WorkItemType | WorkItemPriority) => string,
 ): BoardLane[] {
   if (swimlane === "none") return [{ id: "all", label: "", items }];
+  if (swimlane === "iteration") {
+    const grouped = new Map<string, BoardLane>();
+    const unplanned: WorkItemSummary[] = [];
+    for (const item of items) {
+      if (!item.iteration) {
+        unplanned.push(item);
+        continue;
+      }
+      const lane = grouped.get(item.iteration.id) ?? { id: item.iteration.id, label: item.iteration.name, items: [] };
+      lane.items.push(item);
+      grouped.set(item.iteration.id, lane);
+    }
+    const lanes = [...grouped.values()].sort((a, b) => a.label.localeCompare(b.label));
+    if (unplanned.length) lanes.push({ id: "no-iteration", label: label("noIteration"), items: unplanned });
+    return lanes;
+  }
   if (swimlane === "type") {
     return workTypes
       .map((type) => ({ id: type, label: label(type), items: items.filter((item) => item.type === type) }))
@@ -1095,9 +1157,10 @@ function Board({
   const swimlane = boardSwimlane ?? workflow?.board?.defaultSwimlane ?? "none";
   const wipLimits = workflow?.board?.wipLimits ?? {};
   const laneLabel = useCallback(
-    (key: "unassigned" | "noEpic" | WorkItemType | WorkItemPriority) => {
+    (key: "unassigned" | "noEpic" | "noIteration" | WorkItemType | WorkItemPriority) => {
       if (key === "unassigned") return t("workHub.unassigned");
       if (key === "noEpic") return t("workHub.boardNoEpic");
+      if (key === "noIteration") return t("planning.noIteration");
       if (workTypes.includes(key as WorkItemType)) return t(`workHub.types.${key}`);
       return t(`workHub.priorities.${key}`);
     },
@@ -1839,10 +1902,20 @@ function CreateItemDialog({
   const [environment, setEnvironment] = useState("");
   const [affectedVersion, setAffectedVersion] = useState("");
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [releaseId, setReleaseId] = useState("");
+  const [iterationId, setIterationId] = useState("");
   const [section, setSection] = useState<"details" | "qa" | "relations">("details");
   const users = useQuery({
     queryKey: ["work-users", workspaceId],
     queryFn: () => api<WorkUser[]>(`/workspaces/${workspaceId}/work-users`),
+  });
+  const releases = useQuery({
+    queryKey: ["project-releases", projectId],
+    queryFn: () => api<ProjectRelease[]>(`/projects/${projectId}/releases`),
+  });
+  const iterations = useQuery({
+    queryKey: ["project-iterations", projectId],
+    queryFn: () => api<ProjectIteration[]>(`/projects/${projectId}/iterations`),
   });
   const documents = useQuery({
     queryKey: ["work-documents", workspaceId],
@@ -1887,6 +1960,8 @@ function CreateItemDialog({
             .split(",")
             .map((label) => label.trim())
             .filter(Boolean),
+          releaseId: releaseId || null,
+          iterationId: iterationId || null,
           artifacts,
         }),
       }),
@@ -2186,6 +2261,24 @@ function CreateItemDialog({
                   placeholder={t("workHub.labelsHelp")}
                 />
               </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t("planning.release")}>
+                  <select data-testid="work-item-release" className="input" value={releaseId} onChange={(event) => setReleaseId(event.target.value)}>
+                    <option value="">{t("planning.noRelease")}</option>
+                    {(releases.data ?? []).map((release) => (
+                      <option key={release.id} value={release.id}>{release.name}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label={t("planning.iteration")}>
+                  <select data-testid="work-item-iteration" className="input" value={iterationId} onChange={(event) => setIterationId(event.target.value)}>
+                    <option value="">{t("planning.noIteration")}</option>
+                    {(iterations.data ?? []).map((iteration) => (
+                      <option key={iteration.id} value={iteration.id}>{iteration.name}</option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
               <DocumentPicker
                 documents={documents.data ?? []}
                 selectedIds={selectedDocumentIds}
@@ -2363,8 +2456,21 @@ function WorkItemView({
   const [environment, setEnvironment] = useState("");
   const [affectedVersion, setAffectedVersion] = useState("");
   const [documentIdsToLink, setDocumentIdsToLink] = useState<string[]>([]);
+  const [releaseId, setReleaseId] = useState("");
+  const [iterationId, setIterationId] = useState("");
   const [comment, setComment] = useState("");
   const [mentionIds, setMentionIds] = useState<string[]>([]);
+  const projectId = detail.data?.project.id ?? "";
+  const releases = useQuery({
+    queryKey: ["project-releases", projectId],
+    queryFn: () => api<ProjectRelease[]>(`/projects/${projectId}/releases`),
+    enabled: Boolean(projectId),
+  });
+  const iterations = useQuery({
+    queryKey: ["project-iterations", projectId],
+    queryFn: () => api<ProjectIteration[]>(`/projects/${projectId}/iterations`),
+    enabled: Boolean(projectId),
+  });
   useEffect(() => {
     if (!detail.data) return;
     setType(detail.data.type);
@@ -2375,6 +2481,8 @@ function WorkItemView({
     setReporterId(detail.data.reporter.id);
     setAssigneeId(detail.data.assignee?.id ?? "");
     setLabels(detail.data.labels.join(", "));
+    setReleaseId(detail.data.release?.id ?? "");
+    setIterationId(detail.data.iteration?.id ?? "");
     setStepsToReproduce(detail.data.stepsToReproduce ?? "");
     setExpectedResult(detail.data.expectedResult ?? "");
     setActualResult(detail.data.actualResult ?? "");
@@ -2406,6 +2514,8 @@ function WorkItemView({
           priority,
           reporterId,
           assigneeId: assigneeId || null,
+          releaseId: releaseId || null,
+          iterationId: iterationId || null,
           labels: labels
             .split(",")
             .map((label) => label.trim())
@@ -2566,6 +2676,22 @@ function WorkItemView({
                     <option key={user.id} value={user.id}>
                       {user.displayName}
                     </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t("planning.release")}>
+                <select data-testid="detail-release" value={releaseId} onChange={(event) => setReleaseId(event.target.value)} className="input">
+                  <option value="">{t("planning.noRelease")}</option>
+                  {(releases.data ?? []).map((release) => (
+                    <option key={release.id} value={release.id}>{release.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t("planning.iteration")}>
+                <select data-testid="detail-iteration" value={iterationId} onChange={(event) => setIterationId(event.target.value)} className="input">
+                  <option value="">{t("planning.noIteration")}</option>
+                  {(iterations.data ?? []).map((iteration) => (
+                    <option key={iteration.id} value={iteration.id}>{iteration.name}</option>
                   ))}
                 </select>
               </Field>

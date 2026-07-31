@@ -7,6 +7,7 @@ import { WorkManagementService } from "./work-management.service";
 import { WorkItemSchemaService } from "./work-item-schema.service";
 import { ExecutionStatus } from "@docsys/database";
 import { EXECUTION_STATUSES, TestExecutionReportService } from "./test-execution-report.service";
+import { ProjectPlanningService } from "./project-planning.service";
 
 const workItemType = z.enum(["epic", "story", "task", "bug", "risk"]);
 const workItemStatus = z.enum(["backlog", "ready", "in_progress", "in_review", "done", "canceled"]);
@@ -56,6 +57,8 @@ const createWorkItem = z.object({
   assigneeId: z.string().uuid().nullable().optional(),
   parentId: z.string().uuid().nullable().optional(),
   labels: z.array(z.string().trim().min(1).max(50)).max(30).default([]),
+  releaseId: z.string().uuid().nullable().optional(),
+  iterationId: z.string().uuid().nullable().optional(),
   dueAt: z.string().datetime().nullable().optional(),
   artifact: artifact.optional(),
   artifacts: z.array(artifact).max(50).default([]),
@@ -76,6 +79,8 @@ const updateWorkItem = z.object({
   assigneeId: z.string().uuid().nullable().optional(),
   parentId: z.string().uuid().nullable().optional(),
   labels: z.array(z.string().trim().min(1).max(50)).max(30).optional(),
+  releaseId: z.string().uuid().nullable().optional(),
+  iterationId: z.string().uuid().nullable().optional(),
   dueAt: z.string().datetime().nullable().optional(),
 });
 const comment = z.object({ body: z.string().trim().min(1).max(20000), mentionUserIds: z.array(z.string().uuid()).max(100).default([]) });
@@ -96,7 +101,7 @@ const updateTestPlan = z.object({
   environment: z.string().max(200).nullable().optional(),
   buildReference: z.string().max(300).nullable().optional(),
 });
-const planItem = z.object({ testCaseRowId: z.string().uuid(), assigneeId: z.string().uuid().nullable().optional(), environment: z.string().max(200).optional(), iteration: z.string().max(100).optional() });
+const planItem = z.object({ testCaseRowId: z.string().uuid(), assigneeId: z.string().uuid().nullable().optional(), environment: z.string().max(200).optional(), iteration: z.string().max(100).optional(), iterationId: z.string().uuid().nullable().optional() });
 const internalDefect = z.object({
   projectId: z.string().uuid(),
   title: z.string().trim().min(1).max(300),
@@ -154,13 +159,29 @@ const boardWipLimits = z.object({
 }).strict();
 const boardConfiguration = z.object({
   wipLimits: boardWipLimits.default({}),
-  defaultSwimlane: z.enum(["none", "assignee", "priority", "type", "epic"]).default("none"),
+  defaultSwimlane: z.enum(["none", "assignee", "priority", "type", "epic", "iteration"]).default("none"),
 }).strict();
 const workflowConfiguration = z.object({
   expectedVersion: z.number().int().positive(),
   schemes: z.object({ epic: workflowScheme, story: workflowScheme, task: workflowScheme, bug: workflowScheme, risk: workflowScheme }).strict(),
   board: boardConfiguration.default({ wipLimits: {}, defaultSwimlane: "none" }),
 });
+const isoDate = z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).nullable();
+const createRelease = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(2000).nullable().optional(),
+  status: z.enum(["planned", "active", "released"]).optional(),
+  releaseDate: isoDate.optional(),
+}).strict();
+const updateRelease = createRelease.partial().strict().refine((value) => Object.keys(value).length > 0);
+const createIteration = z.object({
+  name: z.string().trim().min(1).max(120),
+  goal: z.string().trim().max(2000).nullable().optional(),
+  status: z.enum(["planned", "active", "completed"]).optional(),
+  startDate: isoDate.optional(),
+  endDate: isoDate.optional(),
+}).strict();
+const updateIteration = createIteration.partial().strict().refine((value) => Object.keys(value).length > 0);
 const moveWorkItem = z.object({
   expectedVersion: z.number().int().positive(),
   targetStatus: workItemStatus,
@@ -174,7 +195,48 @@ export class WorkManagementController {
     private readonly service: WorkManagementService,
     private readonly schema: WorkItemSchemaService,
     private readonly reports: TestExecutionReportService,
+    private readonly planning: ProjectPlanningService,
   ) {}
+
+  @Get("projects/:projectId/releases")
+  listReleases(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
+    return this.planning.listReleases(user.userId, projectId);
+  }
+
+  @Post("projects/:projectId/releases")
+  createRelease(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string, @Body(new ZodBodyPipe(createRelease)) body: z.infer<typeof createRelease>) {
+    return this.planning.createRelease(user.userId, projectId, body);
+  }
+
+  @Patch("releases/:releaseId")
+  updateRelease(@CurrentUser() user: SessionUser, @Param("releaseId", ParseUUIDPipe) releaseId: string, @Body(new ZodBodyPipe(updateRelease)) body: z.infer<typeof updateRelease>) {
+    return this.planning.updateRelease(user.userId, releaseId, body);
+  }
+
+  @Delete("releases/:releaseId")
+  archiveRelease(@CurrentUser() user: SessionUser, @Param("releaseId", ParseUUIDPipe) releaseId: string) {
+    return this.planning.archiveRelease(user.userId, releaseId);
+  }
+
+  @Get("projects/:projectId/iterations")
+  listIterations(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string) {
+    return this.planning.listIterations(user.userId, projectId);
+  }
+
+  @Post("projects/:projectId/iterations")
+  createIteration(@CurrentUser() user: SessionUser, @Param("projectId", ParseUUIDPipe) projectId: string, @Body(new ZodBodyPipe(createIteration)) body: z.infer<typeof createIteration>) {
+    return this.planning.createIteration(user.userId, projectId, body);
+  }
+
+  @Patch("iterations/:iterationId")
+  updateIteration(@CurrentUser() user: SessionUser, @Param("iterationId", ParseUUIDPipe) iterationId: string, @Body(new ZodBodyPipe(updateIteration)) body: z.infer<typeof updateIteration>) {
+    return this.planning.updateIteration(user.userId, iterationId, body);
+  }
+
+  @Delete("iterations/:iterationId")
+  archiveIteration(@CurrentUser() user: SessionUser, @Param("iterationId", ParseUUIDPipe) iterationId: string) {
+    return this.planning.archiveIteration(user.userId, iterationId);
+  }
 
   @Get("workspaces/:workspaceId/work-items")
   listWorkItems(@CurrentUser() user: SessionUser, @Param("workspaceId", ParseUUIDPipe) workspaceId: string, @Query() query: Record<string, string | undefined>) {

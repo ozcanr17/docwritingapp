@@ -174,6 +174,18 @@ Jira seviyesinde planlama yeteneklerinin ilk parcasi olarak panonun kulvarlara a
 - [x] Is akisi duzenleyicisine Pano ayarlari bolumu eklendi: varsayilan kulvar secimi ve kolon basina sinir alanlari, mevcut iyimser surum kontrolu ile kaydedilir.
 - [x] Hazir sablonlar pano ayarlarini da tasir: Kontrollu Teslim 5/3, Dogrulama Programi 3/2 sinirlari ve atanan kisi kulvari.
 
+## Asama 15 - Surumler ve yinelemeler birinci sinif kayit oldu
+
+Yineleme bilgisi daha once yalnizca test plani ogesi ve kosum uzerinde serbest metindi; bu nedenle plana gore raporlama, is kayitlariyla iliski ve filtreleme kurulamiyordu. Bu asamada surum ve yineleme gercek kayit haline getirildi.
+
+- [x] `project_releases` ve `project_iterations` tablolari eklendi; is kayitlari surum ve yinelemeye, test plani ogeleri ile kosumlar yinelemeye baglandi.
+- [x] Gecis, mevcut serbest metin yineleme degerlerini proje bazinda gercek yinelemelere donusturur ve satirlari bu kayitlara baglar. Eski metin sutunu korunur; hicbir veri kaybolmaz.
+- [x] Surum ve yineleme yonetimi `/admin/projects` altinda: ad, durum, tarih araligi, ilerleme cubugu ve arsivleme. Yetkisi olmayan uyeler tablolari salt okunur gorur.
+- [x] Ayni proje icinde ayni adla iki canli surum veya yineleme olusturulamaz; arsivlenen bir ad yeniden kullanilabilir. Bitis tarihi baslangictan once olamaz.
+- [x] Arsivleme geri alinabilir yumusak silmedir: bagli is kayitlari, plan ogeleri ve kosumlar silinmez, yalnizca baglantilari birakilir.
+- [x] Is kaydi olusturma ve ayrinti ekraninda surum ve yineleme secilebilir; liste alaninda her ikisi icin filtre, panoda yineleme kulvari eklendi.
+- [x] Test plani kosum raporu artik yineleme kaydina gore gruplar; kaydi olmayan eski satirlar icin serbest metne geri duser.
+
 ## Asama tamamlanma olcutu
 
 Bir asama ancak ilgili maddeler isaretlendiginde, regresyon testleri gectiginde, Mac uzerinde `pnpm dev` ile gorsel olarak dogrulandiginda ve degisiklikler `main` dalina gonderildiginde tamamlanmis sayilir.

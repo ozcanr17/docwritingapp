@@ -200,6 +200,67 @@ enum ProjectKeyStrategy {
   per_type
 }
 
+enum ReleaseStatus {
+  planned
+  active
+  released
+}
+
+enum IterationStatus {
+  planned
+  active
+  completed
+}
+
+model ProjectRelease {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String        @db.Uuid
+  projectId      String        @db.Uuid
+  name           String
+  description    String?
+  status         ReleaseStatus @default(planned)
+  releaseDate    DateTime?     @db.Timestamptz(6)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
+  createdById    String?       @db.Uuid
+  deletedAt      DateTime?     @db.Timestamptz(6)
+  deletedById    String?       @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  workItems WorkItem[]
+
+  @@index([projectId, deletedAt])
+  @@map("project_releases")
+}
+
+model ProjectIteration {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String          @db.Uuid
+  projectId      String          @db.Uuid
+  name           String
+  goal           String?
+  status         IterationStatus @default(planned)
+  startDate      DateTime?       @db.Timestamptz(6)
+  endDate        DateTime?       @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+  createdById    String?         @db.Uuid
+  deletedAt      DateTime?       @db.Timestamptz(6)
+  deletedById    String?         @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  workItems     WorkItem[]
+  testPlanItems TestPlanItem[]
+  executions    TestExecution[]
+
+  @@index([projectId, deletedAt])
+  @@map("project_iterations")
+}
+
 model WorkItemTypeDefinition {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   projectId    String       @db.Uuid
@@ -342,6 +403,8 @@ model Organization {
   workItems            WorkItem[]
   workItemComments     WorkItemComment[]
   testPlans            TestPlan[]
+  projectReleases      ProjectRelease[]
+  projectIterations    ProjectIteration[]
 
   @@map("organizations")
 }
@@ -507,6 +570,8 @@ model Project {
   executions  TestExecution[]
   itemTypes   WorkItemTypeDefinition[]
   itemFields  WorkItemFieldDefinition[]
+  releases    ProjectRelease[]
+  iterations  ProjectIteration[]
 
   @@unique([workspaceId, code])
   @@index([organizationId, deletedAt])
@@ -1062,7 +1127,8 @@ model TestExecution {
   status              ExecutionStatus @default(not_run)
   environment         String?
   buildReference      String?
-  iteration           String?
+  iterationLabel      String?         @map("iteration")
+  iterationId         String?         @db.Uuid
   notes               String?
   startedAt           DateTime?       @db.Timestamptz(6)
   completedAt         DateTime?       @db.Timestamptz(6)
@@ -1075,6 +1141,7 @@ model TestExecution {
   executedBy        User                   @relation("ExecutionUser", fields: [executedById], references: [id], onDelete: Restrict)
   retestPackageItem RetestPackageItem?     @relation(fields: [retestPackageItemId], references: [id], onDelete: Restrict)
   testPlanItem      TestPlanItem?          @relation(fields: [testPlanItemId], references: [id], onDelete: Restrict)
+  iteration         ProjectIteration?      @relation(fields: [iterationId], references: [id], onDelete: Restrict)
   steps             TestStepExecution[]
   workItemLinks     WorkItemArtifactLink[]
 
@@ -1108,6 +1175,8 @@ model WorkItem {
   parentId         String?          @db.Uuid
   labels           String[]         @default([])
   typeDefinitionId String?          @db.Uuid
+  releaseId        String?          @db.Uuid
+  iterationId      String?          @db.Uuid
   customFields     Json             @default("{}")
   dueAt            DateTime?        @db.Timestamptz(6)
   resolvedAt       DateTime?        @db.Timestamptz(6)
@@ -1126,6 +1195,8 @@ model WorkItem {
   assignee       User?                   @relation("WorkItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   parent         WorkItem?               @relation("WorkItemChildren", fields: [parentId], references: [id], onDelete: Restrict)
   children       WorkItem[]              @relation("WorkItemChildren")
+  release        ProjectRelease?         @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  iteration      ProjectIteration?       @relation(fields: [iterationId], references: [id], onDelete: Restrict)
 
   outgoingRelations WorkItemRelation[]     @relation("WorkItemRelationSource")
   incomingRelations WorkItemRelation[]     @relation("WorkItemRelationTarget")
@@ -1234,21 +1305,23 @@ model TestPlan {
 }
 
 model TestPlanItem {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  testPlanId    String    @db.Uuid
-  testCaseRowId String    @db.Uuid
-  assigneeId    String?   @db.Uuid
-  environment   String?
-  iteration     String?
-  rank          Int
-  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
-  deletedAt     DateTime? @db.Timestamptz(6)
-  deletedById   String?   @db.Uuid
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  testPlanId     String    @db.Uuid
+  testCaseRowId  String    @db.Uuid
+  assigneeId     String?   @db.Uuid
+  environment    String?
+  iterationLabel String?   @map("iteration")
+  iterationId    String?   @db.Uuid
+  rank           Int
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+  deletedById    String?   @db.Uuid
 
-  testPlan    TestPlan        @relation(fields: [testPlanId], references: [id], onDelete: Restrict)
-  testCaseRow DocumentRow     @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
-  assignee    User?           @relation("TestPlanItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  testPlan    TestPlan          @relation(fields: [testPlanId], references: [id], onDelete: Restrict)
+  testCaseRow DocumentRow       @relation(fields: [testCaseRowId], references: [id], onDelete: Restrict)
+  assignee    User?             @relation("TestPlanItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  iteration   ProjectIteration? @relation(fields: [iterationId], references: [id], onDelete: Restrict)
   executions  TestExecution[]
 
   @@index([testPlanId, rank, deletedAt])

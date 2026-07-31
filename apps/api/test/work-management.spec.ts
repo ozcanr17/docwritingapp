@@ -215,6 +215,68 @@ describe("work management", () => {
     expect(secondMove.statusCode).toBe(200);
   });
 
+  it("manages releases and iterations as project entities", async () => {
+    const owner = await registerActor(app, "planning-owner");
+    const viewer = await registerActor(app, "planning-viewer");
+    const { org, workspace } = await createOrgWorkspaceDocument(app, owner);
+    await app.inject({ method: "POST", url: `/organizations/${org.id}/members`, headers: { cookie: owner.cookie }, payload: { userId: viewer.userId, roleKey: "viewer" } });
+    const projectResponse = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/projects`, headers: { cookie: owner.cookie }, payload: { name: "Planning", code: "PLN" } });
+    const project = JSON.parse(projectResponse.body) as { id: string };
+
+    const releaseResponse = await app.inject({ method: "POST", url: `/projects/${project.id}/releases`, headers: { cookie: owner.cookie }, payload: { name: "1.0", releaseDate: "2026-09-01" } });
+    expect(releaseResponse.statusCode).toBe(201);
+    const release = JSON.parse(releaseResponse.body) as { id: string; status: string };
+    expect(release.status).toBe("planned");
+    const iterationResponse = await app.inject({ method: "POST", url: `/projects/${project.id}/iterations`, headers: { cookie: owner.cookie }, payload: { name: "Sprint 1", startDate: "2026-08-01", endDate: "2026-08-14" } });
+    expect(iterationResponse.statusCode).toBe(201);
+    const iteration = JSON.parse(iterationResponse.body) as { id: string };
+
+    const duplicate = await app.inject({ method: "POST", url: `/projects/${project.id}/iterations`, headers: { cookie: owner.cookie }, payload: { name: "Sprint 1" } });
+    expect(duplicate.statusCode).toBe(409);
+    const invalidRange = await app.inject({ method: "POST", url: `/projects/${project.id}/iterations`, headers: { cookie: owner.cookie }, payload: { name: "Sprint 2", startDate: "2026-08-20", endDate: "2026-08-10" } });
+    expect(invalidRange.statusCode).toBe(409);
+
+    const viewerRead = await app.inject({ method: "GET", url: `/projects/${project.id}/iterations`, headers: { cookie: viewer.cookie } });
+    expect(viewerRead.statusCode).toBe(200);
+    const viewerWrite = await app.inject({ method: "POST", url: `/projects/${project.id}/iterations`, headers: { cookie: viewer.cookie }, payload: { name: "Sprint 9" } });
+    expect(viewerWrite.statusCode).toBe(403);
+
+    const itemResponse = await app.inject({ method: "POST", url: `/projects/${project.id}/work-items`, headers: { cookie: owner.cookie }, payload: { type: "task", title: "Planned task", releaseId: release.id, iterationId: iteration.id } });
+    expect(itemResponse.statusCode).toBe(201);
+    const item = JSON.parse(itemResponse.body) as { id: string; version: number; release: { name: string }; iteration: { name: string } };
+    expect(item.release.name).toBe("1.0");
+    expect(item.iteration.name).toBe("Sprint 1");
+
+    const otherProjectResponse = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/projects`, headers: { cookie: owner.cookie }, payload: { name: "Other", code: "OTH" } });
+    const otherProject = JSON.parse(otherProjectResponse.body) as { id: string };
+    const foreign = await app.inject({ method: "POST", url: `/projects/${otherProject.id}/work-items`, headers: { cookie: owner.cookie }, payload: { type: "task", title: "Foreign", iterationId: iteration.id } });
+    expect(foreign.statusCode).toBe(404);
+
+    const filtered = await app.inject({ method: "GET", url: `/workspaces/${workspace.id}/work-items?projectId=${project.id}&iterationId=${iteration.id}`, headers: { cookie: owner.cookie } });
+    expect((JSON.parse(filtered.body) as Array<{ id: string }>).map((entry) => entry.id)).toEqual([item.id]);
+    const unplanned = await app.inject({ method: "GET", url: `/workspaces/${workspace.id}/work-items?projectId=${project.id}&iterationId=none`, headers: { cookie: owner.cookie } });
+    expect(JSON.parse(unplanned.body)).toEqual([]);
+
+    const listed = await app.inject({ method: "GET", url: `/projects/${project.id}/iterations`, headers: { cookie: owner.cookie } });
+    expect(JSON.parse(listed.body)).toEqual([expect.objectContaining({ name: "Sprint 1", workItemCount: 1, completedCount: 0 })]);
+
+    // Archiving is a reversible soft delete that releases its work items rather
+    // than deleting them.
+    const archived = await app.inject({ method: "DELETE", url: `/iterations/${iteration.id}`, headers: { cookie: owner.cookie } });
+    expect(archived.statusCode).toBe(200);
+    const afterArchive = await app.inject({ method: "GET", url: `/projects/${project.id}/iterations`, headers: { cookie: owner.cookie } });
+    expect(JSON.parse(afterArchive.body)).toEqual([]);
+    const keptItem = await app.inject({ method: "GET", url: `/work-items/${item.id}`, headers: { cookie: owner.cookie } });
+    expect(keptItem.statusCode).toBe(200);
+    expect(JSON.parse(keptItem.body)).toEqual(expect.objectContaining({ iteration: null, release: expect.objectContaining({ name: "1.0" }) }));
+
+    const reusedName = await app.inject({ method: "POST", url: `/projects/${project.id}/iterations`, headers: { cookie: owner.cookie }, payload: { name: "Sprint 1" } });
+    expect(reusedName.statusCode).toBe(201);
+
+    const events = await prisma.auditEvent.findMany({ where: { entityType: { in: ["project_release", "project_iteration"] } } });
+    expect(events.map((event) => event.action)).toEqual(expect.arrayContaining(["release.created", "iteration.created", "iteration.archived"]));
+  });
+
   it("creates a test plan and starts a linked real execution", async () => {
     const owner = await registerActor(app, "plan-owner");
     const { workspace } = await createOrgWorkspaceDocument(app, owner);

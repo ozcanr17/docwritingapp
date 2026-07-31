@@ -7,6 +7,7 @@ import { ConfirmDialog, ModalSurface } from "./TransientSurface";
 import { AdminSection } from "../lib/appSections";
 import { Card, CardBody, CardHeader, EmptyState, Lozenge, Metric, MetricStrip } from "./ui";
 import { ProjectSchemaAdmin } from "./ProjectSchemaAdmin";
+import { ProjectPlanningAdmin } from "./ProjectPlanningAdmin";
 import { CreateProjectDialog } from "./WorkManagementPage";
 import { Button } from "./ui";
 
@@ -138,10 +139,16 @@ export function AdminPanel({ organizationId, workspaceId, currentUserId, onClose
                 </CardBody>
               </Card>
               {(selectedProjectId ?? projects.data?.[0]?.id) && (
-                <ProjectSchemaAdmin
-                  projectId={(selectedProjectId ?? projects.data?.[0]?.id) as string}
-                  canManage={Boolean(projectAccess.data?.canManage)}
-                />
+                <>
+                  <ProjectPlanningAdmin
+                    projectId={(selectedProjectId ?? projects.data?.[0]?.id) as string}
+                    canManage={Boolean(projectAccess.data?.canManage)}
+                  />
+                  <ProjectSchemaAdmin
+                    projectId={(selectedProjectId ?? projects.data?.[0]?.id) as string}
+                    canManage={Boolean(projectAccess.data?.canManage)}
+                  />
+                </>
               )}
             </>
           )}

@@ -5,6 +5,7 @@ import { AccessService } from "../access/access.service";
 import { AuditService } from "../audit/audit.service";
 import { ProjectKeyService } from "../tenancy/project-key.service";
 import { WorkItemSchemaService } from "./work-item-schema.service";
+import { ProjectPlanningService } from "./project-planning.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { resolveTestScenario } from "../common/test-scenarios";
 
@@ -25,6 +26,8 @@ type WorkItemCreate = {
   assigneeId?: string | null;
   parentId?: string | null;
   labels: string[];
+  releaseId?: string | null;
+  iterationId?: string | null;
   dueAt?: string | null;
   artifact?: ArtifactInput;
   artifacts: ArtifactInput[];
@@ -45,6 +48,8 @@ type WorkItemUpdate = {
   assigneeId?: string | null;
   parentId?: string | null;
   labels?: string[];
+  releaseId?: string | null;
+  iterationId?: string | null;
   dueAt?: string | null;
 };
 type InternalDefectInput = { projectId: string; title: string; description?: string; priority: WorkItemCreate["priority"]; assigneeId?: string | null };
@@ -58,7 +63,7 @@ type WorkflowScheme = {
   requiredFields: Record<WorkStatus, WorkflowRequiredField[]>;
   transitionRoles: WorkflowTransitionRoles;
 };
-type BoardSwimlane = "none" | "assignee" | "priority" | "type" | "epic";
+type BoardSwimlane = "none" | "assignee" | "priority" | "type" | "epic" | "iteration";
 type BoardConfiguration = {
   wipLimits: Partial<Record<WorkStatus, number>>;
   defaultSwimlane: BoardSwimlane;
@@ -76,7 +81,7 @@ type BoardConfigurationInput = {
 
 const workStatuses: WorkStatus[] = ["backlog", "ready", "in_progress", "in_review", "done", "canceled"];
 const workTypes: WorkType[] = ["epic", "story", "task", "bug", "risk"];
-const boardSwimlanes: BoardSwimlane[] = ["none", "assignee", "priority", "type", "epic"];
+const boardSwimlanes: BoardSwimlane[] = ["none", "assignee", "priority", "type", "epic", "iteration"];
 const maxWipLimit = 99;
 const defaultTransitions: Record<WorkStatus, WorkStatus[]> = {
   backlog: ["ready", "in_progress", "canceled"],
@@ -139,6 +144,8 @@ const detailInclude = {
   reporter: { select: { id: true, displayName: true, email: true } },
   assignee: { select: { id: true, displayName: true, email: true } },
   project: { select: { id: true, name: true, code: true } },
+  release: { select: { id: true, name: true, status: true } },
+  iteration: { select: { id: true, name: true, status: true } },
   artifactLinks: {
     include: {
       document: { select: { id: true, title: true, documentType: true } },
@@ -158,6 +165,8 @@ const summaryInclude = {
   assignee: { select: { id: true, displayName: true } },
   project: { select: { id: true, name: true, code: true } },
   parent: { select: { id: true, key: true, title: true, type: true } },
+  release: { select: { id: true, name: true, status: true } },
+  iteration: { select: { id: true, name: true, status: true } },
   _count: { select: { artifactLinks: true, comments: true } },
 } satisfies Prisma.WorkItemInclude;
 
@@ -169,6 +178,7 @@ export class WorkManagementService {
     private readonly audit: AuditService,
     private readonly projectKeys: ProjectKeyService,
     private readonly schema: WorkItemSchemaService,
+    private readonly planning: ProjectPlanningService,
   ) {}
 
   async listWorkItems(actorId: string, workspaceId: string, query: Record<string, string | undefined>) {
@@ -183,6 +193,8 @@ export class WorkManagementService {
         workspaceId,
         deletedAt: null,
         ...(query.projectId ? { projectId: query.projectId } : {}),
+        ...(query.releaseId ? { releaseId: query.releaseId === "none" ? null : query.releaseId } : {}),
+        ...(query.iterationId ? { iterationId: query.iterationId === "none" ? null : query.iterationId } : {}),
         ...(types.length ? { type: { in: types } } : {}),
         ...(statuses.length ? { status: { in: statuses } } : {}),
         ...(priorities.length ? { priority: { in: priorities } } : {}),
@@ -330,6 +342,8 @@ export class WorkManagementService {
     await this.assertUserInOrganization(input.assigneeId, project.organizationId);
     await this.assertUserInOrganization(input.reporterId, project.organizationId);
     if (input.parentId) await this.assertParent(input.parentId, projectId);
+    if (input.releaseId) await this.planning.assertReleaseInProject(input.releaseId, projectId);
+    if (input.iterationId) await this.planning.assertIterationInProject(input.iterationId, projectId);
     const artifacts = [...input.artifacts, ...(input.artifact ? [input.artifact] : [])];
     await Promise.all(artifacts.map((entry) => this.assertArtifact(actorId, entry, project.workspaceId)));
     const item = await this.prisma.$transaction(async (tx) => {
@@ -367,6 +381,8 @@ export class WorkManagementService {
           assigneeId: input.assigneeId ?? null,
           parentId: input.parentId ?? null,
           labels: [...new Set(input.labels)],
+          releaseId: input.releaseId ?? null,
+          iterationId: input.iterationId ?? null,
           dueAt: input.dueAt ? new Date(input.dueAt) : null,
           rank: sequence,
           artifactLinks: artifacts.length ? { create: artifacts.map((entry) => ({ ...entry, createdById: actorId })) } : undefined,
@@ -406,6 +422,8 @@ export class WorkManagementService {
     await this.assertUserInOrganization(input.reporterId, current.organizationId);
     if (input.parentId === workItemId) throw new BadRequestException("A work item cannot be its own parent");
     if (input.parentId) await this.assertParent(input.parentId, current.projectId);
+    if (input.releaseId) await this.planning.assertReleaseInProject(input.releaseId, current.projectId);
+    if (input.iterationId) await this.planning.assertIterationInProject(input.iterationId, current.projectId);
     const { expectedVersion, ...fields } = input;
     if (fields.status && fields.status !== current.status) await this.assertWorkflowTransition(actorId, current, fields.status, fields);
     const data: Prisma.WorkItemUncheckedUpdateManyInput = {
@@ -572,7 +590,7 @@ export class WorkManagementService {
     return this.getTestPlan(actorId, testPlanId);
   }
 
-  async addTestPlanItem(actorId: string, testPlanId: string, input: { testCaseRowId: string; assigneeId?: string | null; environment?: string; iteration?: string }) {
+  async addTestPlanItem(actorId: string, testPlanId: string, input: { testCaseRowId: string; assigneeId?: string | null; environment?: string; iteration?: string; iterationId?: string | null }) {
     const plan = await this.requireTestPlan(testPlanId);
     await this.access.assertPermission(actorId, "test_plan.write", this.itemScope(plan));
     await this.assertUserInOrganization(input.assigneeId, plan.organizationId);
@@ -581,7 +599,7 @@ export class WorkManagementService {
     await this.access.assertRowAccess(actorId, row.id, "read");
     const rank = await this.prisma.testPlanItem.count({ where: { testPlanId, deletedAt: null } }) + 1;
     return this.prisma.$transaction(async (tx) => {
-      const item = await tx.testPlanItem.create({ data: { testPlanId, testCaseRowId: row.id, assigneeId: input.assigneeId ?? null, environment: input.environment, iteration: input.iteration, rank } });
+      const item = await tx.testPlanItem.create({ data: { testPlanId, testCaseRowId: row.id, assigneeId: input.assigneeId ?? null, environment: input.environment, iterationLabel: input.iteration, iterationId: input.iterationId ?? null, rank } });
       await this.audit.record(tx, { organizationId: plan.organizationId, workspaceId: plan.workspaceId, actorId, action: "test_plan.item_added", entityType: "test_plan", entityId: testPlanId, metadata: { itemId: item.id, testCaseRowId: row.id } });
       return item;
     });
@@ -635,7 +653,7 @@ export class WorkManagementService {
     if (!steps.length) throw new BadRequestException("The planned test does not contain test steps");
     return this.prisma.$transaction(async (tx) => {
       const issued = await this.projectKeys.allocate(tx, item.testPlan.projectId, "test_execution");
-      const execution = await tx.testExecution.create({ data: { organizationId: item.testPlan.organizationId, projectId: item.testPlan.projectId, sequence: issued.sequence, key: issued.key, testCaseRowId: item.testCaseRowId, executedById: actorId, testPlanItemId: item.id, status: "running", environment: item.environment ?? item.testPlan.environment, buildReference: item.testPlan.buildReference, iteration: item.iteration, startedAt: new Date(), steps: { create: steps.map((step) => ({ testStepRowId: step.id })) } }, include: { steps: true } });
+      const execution = await tx.testExecution.create({ data: { organizationId: item.testPlan.organizationId, projectId: item.testPlan.projectId, sequence: issued.sequence, key: issued.key, testCaseRowId: item.testCaseRowId, executedById: actorId, testPlanItemId: item.id, status: "running", environment: item.environment ?? item.testPlan.environment, buildReference: item.testPlan.buildReference, iterationLabel: item.iterationLabel, iterationId: item.iterationId, startedAt: new Date(), steps: { create: steps.map((step) => ({ testStepRowId: step.id })) } }, include: { steps: true } });
       if (item.testPlan.status === "draft") await tx.testPlan.update({ where: { id: item.testPlanId }, data: { status: "active", version: { increment: 1 } } });
       await this.audit.record(tx, { organizationId: item.testPlan.organizationId, workspaceId: item.testPlan.workspaceId, actorId, action: "test_plan.execution_started", entityType: "test_execution", entityId: execution.id, metadata: { testPlanId: item.testPlanId, testPlanItemId: item.id } });
       return execution;

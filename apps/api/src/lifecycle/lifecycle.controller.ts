@@ -47,6 +47,7 @@ const executionSchema = z.object({
   environment: z.string().max(200).optional(),
   buildReference: z.string().max(300).optional(),
   iteration: z.string().max(200).optional(),
+  iterationId: z.string().uuid().nullable().optional(),
   notes: z.string().max(20000).optional(),
   retestPackageItemId: z.string().uuid().optional(),
 });

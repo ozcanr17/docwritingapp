@@ -1316,7 +1316,8 @@
       "assignee": "Assignee",
       "priority": "Priority",
       "type": "Type",
-      "epic": "Epic"
+      "epic": "Epic",
+      "iteration": "Iteration"
     },
     "boardNoEpic": "No epic",
     "boardSettings": "Board settings",
@@ -1448,5 +1449,41 @@
   "testExecutionsHelp": "Every test run in this workspace, newest first.",
   "testExecutionReportHelp": "Pass, fail and open status of a test plan with its defects.",
   "stepCount": "{{count}} step",
-  "stepCount_other": "{{count}} steps"
+  "stepCount_other": "{{count}} steps",
+  "planning": {
+    "releases": "Releases",
+    "releasesHelp": "Project releases record which delivery a work item belongs to.",
+    "iterations": "Iterations",
+    "iterationsHelp": "Iterations group work items, planned tests and executions into one time box.",
+    "name": "Name",
+    "status": "Status",
+    "statusFor": "Status for {{name}}",
+    "releaseDate": "Release date",
+    "startDate": "Start",
+    "endDate": "End",
+    "dates": "Dates",
+    "progress": "Progress",
+    "addRelease": "Add release",
+    "addIteration": "Add iteration",
+    "archiveRelease": "Archive release {{name}}",
+    "archiveIteration": "Archive iteration {{name}}",
+    "noReleases": "This project has no releases yet.",
+    "noIterations": "This project has no iterations yet.",
+    "release": "Release",
+    "iteration": "Iteration",
+    "noRelease": "No release",
+    "noIteration": "No iteration",
+    "allReleases": "All releases",
+    "allIterations": "All iterations",
+    "releaseStatuses": {
+      "planned": "Planned",
+      "active": "Active",
+      "released": "Released"
+    },
+    "iterationStatuses": {
+      "planned": "Planned",
+      "active": "Active",
+      "completed": "Completed"
+    }
+  }
 }

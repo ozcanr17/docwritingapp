@@ -29,8 +29,18 @@ const EXECUTION_INCLUDE = {
   testCaseRow: { select: { id: true, title: true, objectNumber: true, document: { select: { id: true, title: true, key: true } } } },
   project: { select: { id: true, code: true, name: true } },
   testPlanItem: { select: { id: true, testPlan: { select: { id: true, key: true, name: true } } } },
+  iteration: { select: { id: true, name: true, status: true } },
   steps: { select: { id: true, status: true } },
 } satisfies Prisma.TestExecutionInclude;
+
+/**
+ * An iteration is an entity now, but rows created before it existed still carry
+ * only their free text. Reports read the entity first and fall back to the text
+ * so historical plans keep grouping correctly.
+ */
+function iterationName(source: { iteration?: { name: string } | null; iterationLabel?: string | null } | null) {
+  return source?.iteration?.name ?? source?.iterationLabel ?? null;
+}
 
 function emptyTotals(): StatusTotals {
   return { planned: 0, executed: 0, passed: 0, failed: 0, blocked: 0, skipped: 0, running: 0, notRun: 0, passRate: 0, completionRate: 0 };
@@ -143,6 +153,7 @@ export class TestExecutionReportService {
           include: {
             assignee: { select: { id: true, displayName: true } },
             testCaseRow: { select: { id: true, title: true, objectNumber: true, document: { select: { id: true, title: true, key: true } } } },
+            iteration: { select: { id: true, name: true, status: true } },
             executions: { orderBy: { createdAt: "desc" }, include: EXECUTION_INCLUDE },
           },
         },
@@ -172,7 +183,7 @@ export class TestExecutionReportService {
       const status = latest?.status ?? null;
       countStatus(totals, status);
 
-      const iterationKey = item.iteration ?? latest?.iteration ?? "";
+      const iterationKey = iterationName(item) ?? iterationName(latest) ?? "";
       const iterationTotals = iterations.get(iterationKey) ?? emptyTotals();
       countStatus(iterationTotals, status);
       iterations.set(iterationKey, iterationTotals);
@@ -185,7 +196,8 @@ export class TestExecutionReportService {
       const itemDefects = item.executions.flatMap((execution) => defects.get(execution.id) ?? []);
       return {
         id: item.id,
-        iteration: item.iteration,
+        iteration: iterationName(item),
+        iterationId: item.iterationId,
         environment: item.environment ?? plan.environment,
         assignee: item.assignee,
         testCaseRow: item.testCaseRow,
@@ -257,7 +269,8 @@ export class TestExecutionReportService {
       status: execution.status,
       environment: execution.environment,
       buildReference: execution.buildReference,
-      iteration: execution.iteration,
+      iteration: iterationName(execution),
+      iterationId: execution.iterationId,
       notes: execution.notes,
       startedAt: execution.startedAt,
       completedAt: execution.completedAt,

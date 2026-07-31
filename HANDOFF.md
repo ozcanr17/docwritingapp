@@ -2,7 +2,24 @@
 
 Written for a brand-new session with zero prior context. Read this top to bottom before touching anything.
 
-## 0. Session handover snapshot (2026-07-30)
+## 0. Session handover snapshot (2026-07-31)
+
+### What was completed in Stage 15 (releases and iterations as first-class entities)
+
+This closes the gap that several half-features were waiting on: iteration existed only as free text on test plan items and executions, so it could not be planned against, filtered by, or related to work items.
+
+1. **Migration `20260731090000_releases_and_iterations`** adds `project_releases` and `project_iterations`, `releaseId`/`iterationId` on `work_items`, and `iterationId` on `test_plan_items` and `test_executions`. Both entities carry status, dates and the standard audit/soft-delete columns.
+2. **The backfill converts existing data rather than stranding it.** It collects every distinct non-empty iteration string per project from both plan items and executions, creates a real iteration for each, then repoints the rows. Verified on the dev database: **22 iterations across 18 projects, and all 35 executions that had iteration text ended up with an entity link.** The legacy text column is kept (mapped as `iterationLabel`) so nothing is lost.
+3. **Backfilled iterations are created `active`,** not `completed`: their real state is not recorded anywhere and claiming they finished would be inventing information. An administrator can complete them.
+4. **A partial unique index per project** (`(projectId, name) WHERE deletedAt IS NULL`) prevents two live releases or iterations sharing a name while still allowing an archived name to be reused. Prisma cannot express this, so it lives in raw SQL and must be preserved — the same pattern as the `test_plan_items` index.
+5. **`ProjectPlanningService`** owns CRUD. Reads need `project.read`, every mutation needs `project.manage`, and each mutation writes its audit event in the same transaction. **Archive is a reversible soft delete that releases its references** (work items, plan items and executions are set back to null) rather than cascading a delete — the project's standing invariant.
+6. **Work items** accept and validate `releaseId`/`iterationId` against their own project (a foreign id returns 404), expose both on the summary and detail payloads, and the list gains `releaseId`/`iterationId` filters where `none` means unassigned.
+7. **Reports read the entity first and fall back to the legacy text** (`iterationName`), so historical plans keep grouping correctly while new ones group by a real record. Verified live: a plan whose items carry only `iterationId` reports per-iteration rows for Sprint 8 and Sprint 9 with no free text involved.
+8. **UI:** a planning section in `/admin/projects` (name, status, dates, progress bar, archive, read-only for members who cannot manage), release and iteration selectors on work-item create and detail, both filters on the work list, and an `iteration` board swimlane reusing the Stage 14 grouping.
+9. The complete `pnpm verify` gate passes: **174 web + 74 API + 13 worker = 261/261 tests**, production build and bundle budget. The browser suite passes **14/14** with no visual baseline regeneration. All 25 migrations apply cleanly to an empty database.
+10. Drive-by fix: `border-danger` survived in the work-list bug filter from the earlier `danger`-is-not-a-Tailwind-colour cleanup and silently did nothing; it now uses `destructive`.
+
+**Pitfall worth keeping:** renaming a Prisma field property while keeping the column (`iterationLabel @map("iteration")`) is a good way to force the compiler to find every reader of a field whose meaning changed — but it stops the API compiling until all of them are updated, and the dev watcher then leaves the service **stopped**, not stale. `curl` returning nothing on 3001 mid-refactor is the watcher behaving correctly, not a broken machine.
 
 ### What was completed in Stage 14 (Jira-grade board: swimlanes and WIP limits)
 
@@ -360,7 +377,7 @@ There is **no active code blocker**. All five redesign phases are complete and v
 
 ### Next plan
 
-1. Continue the Jira-grade planning work now that Stage 14 has landed the board slice. The remaining items are: releases/iterations as first-class entities (the execution report currently derives iterations from a free-text field), shared saved work queries, bulk planning operations on the work list, watchers, automation and external synchronization. Changing the swimlane grouping field by drag is a natural follow-up to Stage 14.
+1. Continue the Jira-grade planning work. Stage 14 landed the board slice and Stage 15 landed releases/iterations. The remaining items are: shared saved work queries, bulk planning operations on the work list, watchers, automation and external synchronization. Two natural follow-ups to what has just shipped: changing the swimlane grouping field by drag, and a release/iteration burndown built on the entities now that the data exists.
 5. After each phase: run the complete `pnpm verify` gate and the browser suite, regenerate intentionally changed visual baselines, verify Turkish and English locale coverage, update `HANDOFF.md` and `docs/UI-UX-DONUSUM-PLANI.md`, then commit and push to `origin/main` with a Conventional Commit message.
 6. Keep every increment server-authoritative: the redesign is presentation and information architecture only; permissions, audit, soft-delete and concurrency rules must not change.
 

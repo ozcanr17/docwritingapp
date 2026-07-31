@@ -34,6 +34,7 @@ interface ExecutionInput {
   environment?: string;
   buildReference?: string;
   iteration?: string;
+  iterationId?: string | null;
   notes?: string;
   retestPackageItemId?: string;
 }
@@ -1257,7 +1258,8 @@ export class LifecycleService {
           status: "running",
           environment: input.environment,
           buildReference: input.buildReference,
-          iteration: input.iteration,
+          iterationLabel: input.iteration,
+          iterationId: input.iterationId ?? null,
           notes: input.notes,
           startedAt: new Date(),
           steps: { create: steps.map((step) => ({ testStepRowId: step.id })) },

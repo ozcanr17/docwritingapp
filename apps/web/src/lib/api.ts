@@ -110,8 +110,33 @@ export type WorkItemType = "epic" | "story" | "task" | "bug" | "risk";
 export type WorkItemStatus = "backlog" | "ready" | "in_progress" | "in_review" | "done" | "canceled";
 export type WorkItemPriority = "lowest" | "low" | "medium" | "high" | "highest" | "critical";
 export type WorkflowRequiredField = "description" | "assignee" | "dueAt";
+export type ReleaseStatus = "planned" | "active" | "released";
+export type IterationStatus = "planned" | "active" | "completed";
+
+export interface ProjectRelease {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string | null;
+  status: ReleaseStatus;
+  releaseDate: string | null;
+  workItemCount: number;
+  completedCount: number;
+}
+
+export interface ProjectIteration {
+  id: string;
+  projectId: string;
+  name: string;
+  goal: string | null;
+  status: IterationStatus;
+  startDate: string | null;
+  endDate: string | null;
+  workItemCount: number;
+  completedCount: number;
+}
 export type WorkflowRole = "project_manager" | "editor";
-export type BoardSwimlane = "none" | "assignee" | "priority" | "type" | "epic";
+export type BoardSwimlane = "none" | "assignee" | "priority" | "type" | "epic" | "iteration";
 
 export interface BoardConfiguration {
   wipLimits: Partial<Record<WorkItemStatus, number>>;
@@ -160,6 +185,10 @@ export interface WorkItemSummary {
   assignee: { id: string; displayName: string } | null;
   parentId: string | null;
   parent: { id: string; key: string; title: string; type: WorkItemType } | null;
+  releaseId: string | null;
+  iterationId: string | null;
+  release: { id: string; name: string; status: ReleaseStatus } | null;
+  iteration: { id: string; name: string; status: IterationStatus } | null;
   _count: { artifactLinks: number; comments: number };
 }
 

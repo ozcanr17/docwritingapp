@@ -1315,7 +1315,8 @@
       "assignee": "Atanan kişi",
       "priority": "Öncelik",
       "type": "Tür",
-      "epic": "Epik"
+      "epic": "Epik",
+      "iteration": "Yineleme"
     },
     "boardNoEpic": "Epik yok",
     "boardSettings": "Pano ayarları",
@@ -1447,5 +1448,41 @@
   "testExecutionsHelp": "Bu çalışma alanındaki tüm test koşumları, en yeni önce.",
   "testExecutionReportHelp": "Bir test planının geçen, başarısız ve açık durumu ile hataları.",
   "stepCount": "{{count}} adım",
-  "stepCount_other": "{{count}} adım"
+  "stepCount_other": "{{count}} adım",
+  "planning": {
+    "releases": "Sürümler",
+    "releasesHelp": "Proje sürümleri, iş kayıtlarının hangi teslimatta yer aldığını gösterir.",
+    "iterations": "Yinelemeler",
+    "iterationsHelp": "Yinelemeler; iş kayıtlarını, planlanan testleri ve koşumları ortak bir zaman kutusunda toplar.",
+    "name": "Ad",
+    "status": "Durum",
+    "statusFor": "{{name}} durumu",
+    "releaseDate": "Sürüm tarihi",
+    "startDate": "Başlangıç",
+    "endDate": "Bitiş",
+    "dates": "Tarihler",
+    "progress": "İlerleme",
+    "addRelease": "Sürüm ekle",
+    "addIteration": "Yineleme ekle",
+    "archiveRelease": "{{name}} sürümünü arşivle",
+    "archiveIteration": "{{name}} yinelemesini arşivle",
+    "noReleases": "Bu projede henüz sürüm yok.",
+    "noIterations": "Bu projede henüz yineleme yok.",
+    "release": "Sürüm",
+    "iteration": "Yineleme",
+    "noRelease": "Sürüm yok",
+    "noIteration": "Yineleme yok",
+    "allReleases": "Tüm sürümler",
+    "allIterations": "Tüm yinelemeler",
+    "releaseStatuses": {
+      "planned": "Planlandı",
+      "active": "Aktif",
+      "released": "Yayınlandı"
+    },
+    "iterationStatuses": {
+      "planned": "Planlandı",
+      "active": "Aktif",
+      "completed": "Tamamlandı"
+    }
+  }
 }
